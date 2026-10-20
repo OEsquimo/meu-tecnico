@@ -1,0 +1,20 @@
+{
+  "name": "meu-tecnico",
+  "version": "1.0.0",
+  "description": "Aplicativo (PWA) para técnicos de ar-condicionado: clientes, aparelhos, serviços, retornos e financeiro.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "servir": "node scripts/servir-local.mjs",
+    "teste": "node --test testes/unitarios/*.test.mjs",
+    "teste:telas": "python3 testes/telas/fumaca.py && python3 testes/telas/fluxos.py",
+    "teste:regras": "firebase emulators:exec --only firestore,auth \"node --test testes/regras/*.test.mjs\"",
+    "verificar": "node scripts/verificar-projeto.mjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.14.1",
+    "firebase-tools": "^13.35.1"
+  },
+  "engines": { "node": ">=20" }
+}

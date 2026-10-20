@@ -1,0 +1,119 @@
+/* =============================================================================
+   TELAS.CSS — ajustes específicos de telas (o resto está em componentes.css)
+   ========================================================================== */
+
+/* Login e cadastro: bloco central estreito */
+.tela-entrada {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 24px;
+}
+
+.tela-entrada__marca {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--cor-primaria);
+}
+
+.tela-entrada__lema {
+  color: var(--cor-texto-suave);
+}
+
+/* Acesso rápido do modo demonstração */
+.demo-contas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Linha de ação de cartão de serviço (Ir até o cliente / Concluir) */
+.acoes-cartao {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.acoes-cartao > * {
+  flex: 1;
+}
+
+/* Painel do dono usa a tela mais larga */
+.painel-numeros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.painel-numeros > * {
+  flex: 1 1 150px;
+}
+
+.painel-numeros__destaque {
+  flex: 2 1 300px;
+}
+
+.numero-grande {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.numero-medio {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.duas-colunas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.duas-colunas > .coluna-principal {
+  flex: 3 1 480px;
+  min-width: 0;
+}
+
+.duas-colunas > .coluna-lateral {
+  flex: 2 1 300px;
+  min-width: 0;
+}
+
+/* Texto de documentos legais (termos, privacidade) */
+.documento h2 {
+  margin-top: 20px;
+  margin-bottom: 6px;
+}
+
+.documento p,
+.documento li {
+  margin-bottom: 8px;
+  line-height: 1.55;
+}
+
+.documento ul {
+  list-style: disc;
+  padding-left: 22px;
+}
+
+/* Prévia da mensagem de WhatsApp */
+.mensagem-previa {
+  padding: 12px 14px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--cor-sucesso-fundo);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.codigo-copiavel {
+  padding: 12px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-neutra-fundo);
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}

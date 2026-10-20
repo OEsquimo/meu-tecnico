@@ -1,0 +1,178 @@
+/* =============================================================================
+   TELAS-ADMIN.CSS — estilos das telas de administração e do painel do dono
+   =============================================================================
+   Carregado sob demanda por js/telas/_auxiliar-admin.js (carregarEstilosAdmin),
+   pois o index.html não o declara. Só classes novas: o resto já existe em
+   componentes.css e telas.css. Nada de estilo inline (CSP): valores dinâmicos
+   chegam por --altura / --largura (data-altura / data-largura).
+   ========================================================================== */
+
+/* ---------- Meu plano: lista de recursos de cada plano ---------- */
+.lista-recursos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.lista-recursos li::before {
+  content: '✓';
+  margin-right: 8px;
+  font-weight: 800;
+  color: var(--cor-sucesso);
+}
+
+/* ---------- Financeiro ---------- */
+.financeiro-numero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.financeiro-numero__rotulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cor-texto-suave);
+}
+
+.valor-recebido {
+  color: var(--cor-sucesso);
+}
+
+.valor-a-receber {
+  color: var(--cor-aviso);
+}
+
+/* Gráfico: deixa folga no topo para a barra mais alta não encostar no limite */
+.grafico--financeiro {
+  height: 160px;
+}
+
+.grafico__coluna--vazia .grafico__barra {
+  background: var(--cor-neutra-fundo);
+}
+
+/* Linha de "por tipo" / "por técnico": nome, números e barra */
+.linha-resumo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linha-resumo__topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.linha-resumo__nome {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.linha-resumo__valor {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Serviço concluído sem valor: nome + campo de valor + botão na mesma linha */
+.sem-valor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--cor-cartao);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+}
+
+.sem-valor__form {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sem-valor__form .campo {
+  flex: 1;
+  min-width: 0;
+}
+
+.sem-valor__form .botao {
+  flex: none;
+}
+
+/* ---------- Equipe e convite ---------- */
+.link-convite {
+  user-select: all;
+}
+
+.acoes-empilhadas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- Conta ---------- */
+.zona-perigo {
+  border-color: var(--cor-erro);
+  background: var(--cor-erro-fundo);
+}
+
+.lista-simples {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+  font-size: 14px;
+}
+
+/* ---------- Painel do dono ---------- */
+.dono-plano {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--cor-cartao);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+}
+
+.dono-plano--selecionado,
+.dono-conta--selecionada {
+  border-color: var(--cor-primaria);
+  box-shadow: 0 0 0 2px var(--cor-primaria-clara);
+}
+
+.dono-conta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--cor-cartao);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+}
+
+.dono-conta__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rotulo-secao {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--cor-texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.grade-acoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}

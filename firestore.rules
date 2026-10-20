@@ -1,0 +1,460 @@
+rules_version = '2';
+
+// =============================================================================
+// REGRAS DE SEGURANÇA DO FIRESTORE — Meu Técnico
+// =============================================================================
+// Estas regras são a "porta do banco de dados". Como o app roda no celular do
+// usuário (frontend), NADA que está no JavaScript é confiável: quem decide o que
+// pode ser lido/gravado são estas regras, executadas nos servidores do Google.
+//
+// MODELO (resumo — detalhes em docs/MODELO-DE-DADOS.md):
+//   donosApp/{uid}                      -> quem é o DONO do aplicativo (criado à mão no console)
+//   config/regras                       -> regras globais editáveis pelo dono (dias de teste...)
+//   planos/{planoId}                    -> planos (preço, limite de clientes...) editáveis pelo dono
+//   usuarios/{uid}                      -> a quem cada login pertence (empresa + papel)
+//   empresas/{empresaId}                -> uma empresa/técnico autônomo (o "inquilino")
+//     equipe/{id}                       -> funcionários (técnicos) e convites
+//     tiposServico/{id}                 -> tipos de serviço (limpeza, instalação...)
+//     clientes/{id}                     -> clientes (nome, WhatsApp, endereços)
+//     aparelhos/{id}                    -> aparelhos de ar-condicionado
+//     servicos/{id}                     -> agendamentos e serviços feitos (SEM valores)
+//     valores/{servicoId}               -> valores em dinheiro (SÓ o administrador lê)
+//
+// PAPÉIS: dono do app (separado), administrador (dono da empresa) e técnico.
+//
+// IMPORTANTE: o Firestore NÃO consegue esconder campos dentro de um documento.
+// Por isso os valores em dinheiro ficam em outra coleção (valores), que o técnico
+// não consegue ler de jeito nenhum.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // FUNÇÕES AUXILIARES (identidade e papéis)
+    // -------------------------------------------------------------------------
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    // Caminho do documento "usuarios/{uid}" de quem está fazendo o pedido.
+    function refUsuario() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+
+    function temUsuario() {
+      return logado() && exists(refUsuario());
+    }
+
+    function dadosUsuario() {
+      return get(refUsuario()).data;
+    }
+
+    // Dono do aplicativo (você). O documento donosApp/{uid} só pode ser criado
+    // manualmente no console do Firebase (nenhum cliente consegue gravar nele).
+    function ehDonoApp() {
+      return logado() && exists(/databases/$(database)/documents/donosApp/$(request.auth.uid));
+    }
+
+    // Membro ATIVO da empresa informada (administrador ou técnico).
+    function ehMembro(emp) {
+      return temUsuario() && dadosUsuario().empresaId == emp && dadosUsuario().ativo == true;
+    }
+
+    function ehAdmin(emp) {
+      return ehMembro(emp) && dadosUsuario().papel == 'admin';
+    }
+
+    function ehTecnico(emp) {
+      return ehMembro(emp) && dadosUsuario().papel == 'tecnico';
+    }
+
+    // -------------------------------------------------------------------------
+    // FUNÇÕES AUXILIARES (empresa, plano e limite de clientes)
+    // -------------------------------------------------------------------------
+
+    function refEmpresa(emp) {
+      return /databases/$(database)/documents/empresas/$(emp);
+    }
+
+    // Documento da empresa ANTES da gravação em andamento.
+    function empresaAntes(emp) {
+      return get(refEmpresa(emp)).data;
+    }
+
+    // Documento da empresa DEPOIS da gravação em andamento (usado em lotes/batch).
+    function empresaDepois(emp) {
+      return getAfter(refEmpresa(emp)).data;
+    }
+
+    // Dias de teste grátis (config/regras). Se o dono ainda não criou o
+    // documento, assume 7 — assim o cadastro de contas nunca trava.
+    function diasTeste() {
+      return exists(/databases/$(database)/documents/config/regras)
+        ? get(/databases/$(database)/documents/config/regras).data.diasTeste
+        : 7;
+    }
+
+    // Limite de clientes de um plano. Se o documento do plano não existir,
+    // o plano grátis vale 10 e qualquer outro vale 0 (fail-safe).
+    function limiteDoPlano(planoId) {
+      return exists(/databases/$(database)/documents/planos/$(planoId))
+        ? get(/databases/$(database)/documents/planos/$(planoId)).data.limiteClientes
+        : (planoId == 'gratis' ? 10 : 0);
+    }
+
+    // O período de teste = data de criação + dias de teste, ou uma extensão
+    // dada pelo dono do app (testeEstendidoAte).
+    function emTeste(e) {
+      return (e.criadoEm + duration.value(diasTeste(), 'd') > request.time)
+        || (e.testeEstendidoAte != null && e.testeEstendidoAte > request.time);
+    }
+
+    // Plano pago e ainda dentro da validade.
+    function pagoVigente(e) {
+      return e.planoId != 'gratis' && e.planoAte != null && e.planoAte > request.time;
+    }
+
+    // A conta pode cadastrar clientes novos? (não bloqueada, e plano grátis,
+    // teste ou plano pago vigente — plano pago vencido NÃO pode).
+    function contaAtiva(e) {
+      return e.bloqueada != true
+        && (pagoVigente(e) || emTeste(e) || e.planoId == 'gratis');
+    }
+
+    // Limite de clientes que vale agora.
+    function limiteEfetivo(e) {
+      return pagoVigente(e)
+        ? limiteDoPlano(e.planoId)
+        : (emTeste(e) ? 999999 : limiteDoPlano('gratis'));
+    }
+
+    function dentroDoLimite(emp) {
+      let e = empresaAntes(emp);
+      return contaAtiva(e) && e.contadorClientes < limiteEfetivo(e);
+    }
+
+    // O técnico só mexe em clientes se o administrador liberou nas configurações.
+    function podeGerirClientes(emp) {
+      return ehAdmin(emp)
+        || (ehTecnico(emp) && empresaAntes(emp).permiteTecnicoCliente == true);
+    }
+
+    // -------------------------------------------------------------------------
+    // DONO DO APLICATIVO, REGRAS GLOBAIS E PLANOS
+    // -------------------------------------------------------------------------
+
+    match /donosApp/{uid} {
+      // Cada usuário só consegue saber se ELE MESMO é dono. Ninguém grava aqui.
+      allow read: if logado() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /config/regras {
+      allow read: if logado();
+      allow write: if ehDonoApp()
+        && request.resource.data.keys().hasOnly(['diasTeste', 'descontoLancamentoAtivo', 'descontoLancamentoPercentual', 'whatsappVendas', 'instrucoesPagamento', 'atualizadoEm'])
+        && request.resource.data.diasTeste is int
+        && request.resource.data.diasTeste >= 0
+        && request.resource.data.diasTeste <= 90
+        && request.resource.data.descontoLancamentoAtivo is bool
+        && request.resource.data.descontoLancamentoPercentual is int
+        && request.resource.data.descontoLancamentoPercentual >= 0
+        && request.resource.data.descontoLancamentoPercentual <= 100
+        && (!('whatsappVendas' in request.resource.data) || (request.resource.data.whatsappVendas is string && request.resource.data.whatsappVendas.size() <= 20))
+        && (!('instrucoesPagamento' in request.resource.data) || (request.resource.data.instrucoesPagamento is string && request.resource.data.instrucoesPagamento.size() <= 500));
+    }
+
+    match /planos/{planoId} {
+      allow read: if logado();
+      allow create, update: if ehDonoApp()
+        && request.resource.data.keys().hasOnly(['nome', 'precoCentavos', 'limiteClientes', 'financeiroCompleto', 'ativo', 'ordem', 'descricao', 'atualizadoEm'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 40
+        && request.resource.data.precoCentavos is int
+        && request.resource.data.precoCentavos >= 0
+        && request.resource.data.limiteClientes is int
+        && request.resource.data.limiteClientes >= 0
+        && request.resource.data.financeiroCompleto is bool
+        && request.resource.data.ativo is bool;
+      // O plano grátis não pode ser apagado (o limite dele é usado pelas regras).
+      allow delete: if ehDonoApp() && planoId != 'gratis';
+    }
+
+    // -------------------------------------------------------------------------
+    // USUÁRIOS (a quem cada login pertence)
+    // -------------------------------------------------------------------------
+
+    match /usuarios/{u} {
+      allow read: if logado() && request.auth.uid == u;
+
+      // Criar o próprio vínculo: ou como ADMIN (criando a empresa no mesmo lote),
+      // ou como TÉCNICO (aceitando um convite válido no mesmo lote).
+      allow create: if logado() && request.auth.uid == u && !exists(refUsuario())
+        && (criaAdmin(u) || criaTecnico(u));
+
+      // O administrador pode bloquear/reativar e renomear técnicos da própria empresa.
+      allow update: if ehAdmin(resource.data.empresaId)
+        && resource.data.papel == 'tecnico'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ativo', 'nome'])
+        && request.resource.data.ativo is bool
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100;
+
+      // Administrador remove técnico; ou o próprio usuário limpa o vínculo
+      // depois que a empresa não existe mais (exclusão de conta).
+      allow delete: if (ehAdmin(resource.data.empresaId) && resource.data.papel == 'tecnico')
+        || (logado() && request.auth.uid == u && !exists(refEmpresa(resource.data.empresaId)));
+    }
+
+    function criaAdmin(u) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['empresaId', 'papel', 'ativo', 'nome', 'criadoEm'])
+        && d.papel == 'admin'
+        && d.ativo == true
+        && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
+        && !exists(refEmpresa(d.empresaId))
+        && existsAfter(refEmpresa(d.empresaId))
+        && getAfter(refEmpresa(d.empresaId)).data.donoUid == u;
+    }
+
+    function criaTecnico(u) {
+      let d = request.resource.data;
+      let refConvite = /databases/$(database)/documents/empresas/$(d.empresaId)/equipe/$(d.equipeId);
+      return d.keys().hasOnly(['empresaId', 'papel', 'ativo', 'nome', 'equipeId', 'criadoEm'])
+        && d.papel == 'tecnico'
+        && d.ativo == true
+        && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
+        && exists(refConvite)
+        && get(refConvite).data.status == 'convite'
+        && getAfter(refConvite).data.uid == u
+        && getAfter(refConvite).data.status == 'ativo';
+    }
+
+    // -------------------------------------------------------------------------
+    // EMPRESA (inquilino)
+    // -------------------------------------------------------------------------
+
+    function configEmpresaValida(d) {
+      return d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
+        && d.permiteTecnicoCliente is bool
+        && d.diasAvisoRetorno is int && d.diasAvisoRetorno >= 0 && d.diasAvisoRetorno <= 90
+        && d.mensagemWhatsapp is string && d.mensagemWhatsapp.size() <= 600;
+    }
+
+    // Atualização do contador de clientes: só é aceita junto com a criação
+    // (ou exclusão) do cliente indicado em "ultimoClienteId", no MESMO lote.
+    // Isso impede "trapacear" no limite: não dá para criar cliente sem subir o
+    // contador, nem baixar o contador sem apagar um cliente.
+    function contadorValido(emp) {
+      let antes = resource.data;
+      let depois = request.resource.data;
+      let refCli = /databases/$(database)/documents/empresas/$(emp)/clientes/$(depois.ultimoClienteId);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contadorClientes', 'ultimoClienteId'])
+        && depois.ultimoClienteId is string
+        && depois.contadorClientes is int
+        && (
+          (depois.contadorClientes == antes.contadorClientes + 1
+            && !exists(refCli) && existsAfter(refCli)
+            && (ehAdmin(emp) || (ehTecnico(emp) && antes.permiteTecnicoCliente == true)))
+          ||
+          (depois.contadorClientes == antes.contadorClientes - 1
+            && exists(refCli) && !existsAfter(refCli)
+            && ehAdmin(emp))
+        );
+    }
+
+    match /empresas/{emp} {
+      allow read: if ehMembro(emp) || ehDonoApp();
+
+      // Criação da empresa no cadastro: o novo administrador cria a própria
+      // empresa (e o seu vínculo "usuarios/{uid}" no mesmo lote). Plano, limites
+      // e bloqueio NÃO podem ser escolhidos pelo cliente: valores fixos.
+      allow create: if logado()
+        && !exists(refUsuario())
+        && request.resource.data.keys().hasOnly(['nome', 'donoUid', 'emailAdmin', 'nomeAdmin', 'planoId', 'planoAte', 'testeEstendidoAte', 'bloqueada', 'contadorClientes', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'criadoEm'])
+        && request.resource.data.donoUid == request.auth.uid
+        && request.resource.data.planoId == 'gratis'
+        && request.resource.data.planoAte == null
+        && request.resource.data.testeEstendidoAte == null
+        && request.resource.data.bloqueada == false
+        && request.resource.data.contadorClientes == 0
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.emailAdmin is string
+        && request.resource.data.nomeAdmin is string
+        && configEmpresaValida(request.resource.data)
+        && existsAfter(refUsuario())
+        && getAfter(refUsuario()).data.empresaId == emp
+        && getAfter(refUsuario()).data.papel == 'admin';
+
+      allow update:
+        // (1) o administrador ajusta as configurações da própria empresa
+        if (ehAdmin(emp)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp'])
+              && configEmpresaValida(request.resource.data))
+        // (2) contador de clientes (acoplado à criação/exclusão do cliente)
+        || contadorValido(emp)
+        // (3) o dono do app muda plano, validade, extensão de teste e bloqueio
+        || (ehDonoApp()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['planoId', 'planoAte', 'testeEstendidoAte', 'bloqueada']));
+
+      // Só dá para apagar a empresa depois de apagar todos os clientes
+      // (contador zerado). Usado na exclusão de conta (LGPD).
+      allow delete: if ehAdmin(emp) && resource.data.contadorClientes == 0;
+
+      // --- Equipe (funcionários e convites) ---------------------------------
+      match /equipe/{eid} {
+        // O convite é lido pelo próprio técnico que recebeu o link (ele precisa
+        // do código, que é longo e aleatório). A listagem é só do administrador.
+        allow get: if ehAdmin(emp) || (logado() && resource.data.status == 'convite');
+        allow list: if ehAdmin(emp);
+
+        allow create: if ehAdmin(emp)
+          && request.resource.data.keys().hasOnly(['nome', 'telefone', 'status', 'uid', 'criadoEm'])
+          && request.resource.data.status == 'convite'
+          && request.resource.data.uid == null
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 100
+          && request.resource.data.telefone is string && request.resource.data.telefone.size() <= 20;
+
+        allow update:
+          // administrador edita nome/telefone e bloqueia/reativa quem já entrou
+          if (ehAdmin(emp)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'status'])
+                && request.resource.data.nome is string
+                && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 100
+                && request.resource.data.telefone is string && request.resource.data.telefone.size() <= 20
+                && request.resource.data.status in ['convite', 'ativo', 'bloqueado']
+                && (request.resource.data.status == resource.data.status
+                    || (resource.data.uid != null && request.resource.data.status in ['ativo', 'bloqueado'])))
+          // o técnico aceita o convite (no mesmo lote em que cria o seu "usuarios/{uid}")
+          || (logado()
+                && resource.data.status == 'convite'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'status'])
+                && request.resource.data.uid == request.auth.uid
+                && request.resource.data.status == 'ativo'
+                && existsAfter(refUsuario())
+                && getAfter(refUsuario()).data.empresaId == emp
+                && getAfter(refUsuario()).data.equipeId == eid);
+
+        allow delete: if ehAdmin(emp);
+      }
+
+      // --- Tipos de serviço ---------------------------------------------------
+      match /tiposServico/{tid} {
+        allow read: if ehMembro(emp);
+        allow create, update: if ehAdmin(emp)
+          && request.resource.data.keys().hasOnly(['nome', 'geraRetorno', 'retornoPadraoMeses', 'ativo', 'ordem'])
+          && request.resource.data.nome is string
+          && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 60
+          && request.resource.data.geraRetorno is bool
+          && request.resource.data.retornoPadraoMeses in [0, 3, 4, 6, 12]
+          && request.resource.data.ativo is bool
+          && request.resource.data.ordem is int;
+        allow delete: if ehAdmin(emp);
+      }
+
+      // --- Clientes -------------------------------------------------------------
+      match /clientes/{cid} {
+        allow read: if podeGerirClientes(emp);
+
+        // Criar cliente = dentro do limite do plano + contador sobe 1 no mesmo lote.
+        allow create: if podeGerirClientes(emp)
+          && clienteValido(request.resource.data)
+          && dentroDoLimite(emp)
+          && empresaDepois(emp).contadorClientes == empresaAntes(emp).contadorClientes + 1
+          && empresaDepois(emp).ultimoClienteId == cid;
+
+        allow update: if podeGerirClientes(emp) && clienteValido(request.resource.data);
+
+        // Excluir cliente = só administrador + contador desce 1 no mesmo lote.
+        allow delete: if ehAdmin(emp)
+          && empresaDepois(emp).contadorClientes == empresaAntes(emp).contadorClientes - 1
+          && empresaDepois(emp).ultimoClienteId == cid;
+      }
+
+      // --- Aparelhos ------------------------------------------------------------
+      match /aparelhos/{aid} {
+        // Não contêm telefone nem endereço: o técnico pode ler/criar.
+        allow read: if ehMembro(emp);
+        allow create, update: if ehMembro(emp) && aparelhoValido(request.resource.data);
+        allow delete: if ehAdmin(emp);
+      }
+
+      // --- Serviços e agendamentos (SEM valores) --------------------------------
+      match /servicos/{sid} {
+        // Técnico só enxerga serviços atribuídos a ele (a consulta do app já
+        // filtra por tecnicoUid; sem o filtro, o Firestore recusa).
+        allow read: if ehAdmin(emp)
+          || (ehTecnico(emp) && resource.data.tecnicoUid == request.auth.uid);
+        allow create: if ehAdmin(emp) && servicoValido(request.resource.data);
+        allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
+          || tecnicoConcluiServico(emp);
+        allow delete: if ehAdmin(emp);
+      }
+
+      // --- Valores em dinheiro (SÓ administrador) -------------------------------
+      match /valores/{sid} {
+        allow read: if ehAdmin(emp);
+        allow create, update: if ehAdmin(emp)
+          && request.resource.data.keys().hasOnly(['valorCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'])
+          && request.resource.data.valorCentavos is int
+          && request.resource.data.valorCentavos >= 0
+          && request.resource.data.valorCentavos <= 100000000
+          && request.resource.data.tipoNome is string;
+        allow delete: if ehAdmin(emp);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // VALIDAÇÕES DE FORMATO (defesa em profundidade: o app também valida)
+    // -------------------------------------------------------------------------
+
+    function clienteValido(d) {
+      return d.keys().hasOnly(['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor'])
+        && d.keys().hasAll(['nome', 'whatsapp', 'enderecos'])
+        && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 120
+        && d.whatsapp is string && d.whatsapp.size() <= 20
+        && (!('observacoes' in d) || (d.observacoes is string && d.observacoes.size() <= 1000))
+        && d.enderecos is list && d.enderecos.size() <= 2;
+    }
+
+    function aparelhoValido(d) {
+      return d.keys().hasOnly(['clienteId', 'enderecoId', 'tipo', 'btus', 'nome', 'descricao', 'ativo', 'criadoEm', 'atualizadoEm'])
+        && d.keys().hasAll(['clienteId', 'tipo'])
+        && d.clienteId is string
+        && d.tipo in ['split', 'janela', 'piso-teto', 'cassete', 'multi-split', 'portatil', 'outro']
+        && (!('btus' in d) || d.btus == null || (d.btus is int && d.btus >= 0 && d.btus <= 200000))
+        && (!('nome' in d) || (d.nome is string && d.nome.size() <= 80))
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 500));
+    }
+
+    function servicoValido(d) {
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm'])
+        && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
+        && d.status in ['agendado', 'concluido', 'cancelado']
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
+        && (!('pago' in d) || d.pago is bool)
+        && (!('valorDefinido' in d) || d.valorDefinido is bool)
+        && (!('retornoSituacao' in d) || d.retornoSituacao == null || d.retornoSituacao in ['pendente', 'agendado', 'recusado', 'feito']);
+    }
+
+    // O técnico só pode concluir/preencher um serviço SEU que ainda está agendado,
+    // e nunca mexe em valor, cliente, tipo, data agendada ou outro técnico.
+    function tecnicoConcluiServico(emp) {
+      let d = request.resource.data;
+      return ehTecnico(emp)
+        && resource.data.tecnicoUid == request.auth.uid
+        && resource.data.status == 'agendado'
+        && d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm'])
+        && d.status == 'concluido'
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
+        && (!('pago' in d) || d.pago is bool);
+    }
+
+    // Tudo que não foi liberado acima é negado automaticamente pelo Firestore.
+  }
+}

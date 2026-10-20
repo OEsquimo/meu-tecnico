@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  PÁGINA ÚNICA DO APLICATIVO (PWA / "single page app")
+  Todas as telas são desenhadas por JavaScript dentro de <main id="conteudo">.
+  Regras de segurança (firebase.json): nada de <script> ou style="" dentro do
+  HTML — tudo vem de arquivos externos (js/ e css/).
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b6e99" />
+    <meta name="description" content="Gestão de clientes, aparelhos, serviços e retornos para técnicos de ar-condicionado." />
+    <title>Meu Técnico</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icones/favicon-32.png" />
+    <link rel="apple-touch-icon" href="icones/icone-apple-180.png" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/componentes.css" />
+    <link rel="stylesheet" href="css/telas.css" />
+    <link rel="stylesheet" href="css/telas-clientes.css" />
+    <link rel="stylesheet" href="css/telas-servicos.css" />
+    <link rel="stylesheet" href="css/telas-admin.css" />
+  </head>
+  <body>
+    <!-- Barra fina de progresso no topo (aparece em toda operação demorada) -->
+    <div id="barra-progresso" class="barra-progresso" role="progressbar" aria-label="Carregando" aria-hidden="true">
+      <div class="barra-progresso__faixa"></div>
+    </div>
+
+    <!-- Tela de abertura: só some quando os dados do banco já chegaram,
+         para o usuário nunca ver o app "vazio" e achar que perdeu os dados. -->
+    <div id="abertura" class="abertura" role="status" aria-live="polite">
+      <div class="abertura__marca">Meu Técnico</div>
+      <div class="abertura__trilho"><div class="abertura__preenchimento"></div></div>
+      <p id="abertura-texto" class="abertura__texto">Carregando seus dados…</p>
+      <button id="abertura-tentar" class="botao botao--secundario" type="button" hidden>Tentar de novo</button>
+    </div>
+
+    <div id="app" class="app" hidden>
+      <nav id="menu-topo" class="menu-topo" aria-label="Menu principal" hidden></nav>
+      <main id="conteudo" class="conteudo" tabindex="-1"></main>
+    </div>
+
+    <div id="avisos-rapidos" class="avisos-rapidos" aria-live="polite"></div>
+
+    <noscript>
+      <p class="conteudo">Este aplicativo precisa do JavaScript ligado no navegador para funcionar.</p>
+    </noscript>
+
+    <script type="module" src="js/principal.js"></script>
+  </body>
+</html>

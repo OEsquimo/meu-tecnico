@@ -1,0 +1,35 @@
+/* =============================================================================
+   TELAS DE CLIENTES (cliente, aparelho-form)
+   Carregado sob demanda por js/telas/clientes-comum.js (carregarEstilosClientes).
+   Só classes novas; o resto vem de componentes.css e telas.css.
+   ============================================================================= */
+
+/* Botões Ligar / WhatsApp lado a lado */
+.contato-acoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* Bloco de um endereço dentro da ficha do cliente */
+.endereco-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cor-borda, #e2e8f0);
+}
+.endereco-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.endereco-item__apelido {
+  font-weight: 700;
+}
+
+/* Botões de ação no fim da ficha (editar / excluir) */
+.ficha-acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

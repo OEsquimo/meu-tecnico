@@ -1,0 +1,29 @@
+# Dependências instaladas (são recriadas com "npm install")
+node_modules/
+
+# Configuração real do Firebase do seu projeto (copie de firebase-config.exemplo.js).
+# A chave web do Firebase NÃO é secreta, mas mantemos fora do repositório para
+# cada ambiente (desenvolvimento/produção) ter a sua.
+public/js/configuracao/firebase-config.js
+
+# Credenciais PRIVADAS — jamais versionar
+.env
+.env.*
+*.pem
+*.key
+serviceAccount*.json
+*-adminsdk-*.json
+
+# Estado local do Firebase CLI
+.firebase/
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Relatórios e temporários
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store
