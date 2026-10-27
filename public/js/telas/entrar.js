@@ -21,7 +21,7 @@ export default async function montar({ raiz }) {
     <div class="tela-entrada">
       <div>
         <div class="tela-entrada__marca">${NOME_APP}</div>
-        <p class="tela-entrada__lema">Clientes, serviços e lembretes de retorno para técnicos de ar-condicionado.</p>
+       <p class="tela-entrada__lema">Tudo que o técnico precisa.</p>
       </div>
 
       <form id="form-entrar" class="formulario" novalidate>
