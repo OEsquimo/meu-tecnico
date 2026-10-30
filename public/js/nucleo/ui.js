@@ -65,21 +65,36 @@ export function aoEnviar(formulario, manipulador) {
 // AVISOS RÁPIDOS (toast)
 // -----------------------------------------------------------------------------
 
-/** Mensagem curta que some sozinha. tipo: 'info' | 'sucesso' | 'erro' */
-export function toast(mensagem, tipo = 'info', duracaoMs = 4500) {
+/**
+ * Quanto tempo o aviso fica na tela: dá tempo de ler. Erro fica mais (exige ação);
+ * textos longos ficam um pouco mais. Entre 3 e 10 segundos.
+ */
+export function duracaoDoAviso(mensagem, tipo = 'info') {
+  const base = tipo === 'erro' ? 6000 : 3000;
+  const extra = Math.max(0, String(mensagem).length - 40) * 45;
+  return Math.min(10000, base + extra);
+}
+
+/**
+ * Mensagem curta que some sozinha (sem botão de fechar; um toque nela também a fecha).
+ * Fica FIXA na parte de baixo da tela, então aparece onde o usuário está, mesmo no meio de uma página longa.
+ * tipo: 'info' | 'sucesso' | 'erro'. duracaoMs é opcional (o padrão depende do tipo e do tamanho do texto).
+ */
+export function toast(mensagem, tipo = 'info', duracaoMs = null) {
   const area = document.getElementById('avisos-rapidos');
   if (!area) return;
   const item = document.createElement('div');
   item.className = `aviso-rapido${tipo === 'erro' ? ' aviso-rapido--erro' : tipo === 'sucesso' ? ' aviso-rapido--sucesso' : ''}`;
   item.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
   item.textContent = mensagem;
+  item.addEventListener('click', () => item.remove());
   area.appendChild(item);
-  setTimeout(() => item.remove(), duracaoMs);
+  setTimeout(() => item.remove(), duracaoMs ?? duracaoDoAviso(mensagem, tipo));
 }
 
 /** Mostra a mensagem de um erro qualquer (já traduzida). */
 export function mostrarErro(erro) {
-  toast(traduzirErro(erro), 'erro', 6000);
+  toast(traduzirErro(erro), 'erro');
 }
 
 // -----------------------------------------------------------------------------
@@ -221,16 +236,34 @@ export function limparErros(formulario) {
 }
 
 /**
- * Mostra cada erro embaixo do seu campo e leva o foco ao primeiro.
+ * Leva a tela até o elemento (com folga no topo) e, se for um campo, coloca o cursor nele.
+ * Usado quando algo falta ou está errado: o usuário nunca fica olhando uma tela sem saber o que fazer.
+ */
+export function levarAte(elemento, { focar = true } = {}) {
+  if (!elemento) return;
+  try {
+    elemento.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } catch {
+    elemento.scrollIntoView();
+  }
+  if (focar && typeof elemento.focus === 'function') elemento.focus({ preventScroll: true });
+}
+
+/**
+ * Mostra cada erro embaixo do seu campo, leva a tela ao primeiro e coloca o cursor nele.
  * erros = { nomeDoCampo: 'mensagem' }. Erros sem campo correspondente vão para
- * o aviso do topo do formulário ([data-erros-gerais]) ou para um toast.
+ * o aviso do topo do formulário ([data-erros-gerais]) ou para um aviso rápido.
+ * Sempre aparece também um aviso rápido fixo na tela com o primeiro erro.
  */
 export function mostrarErrosNosCampos(formulario, erros) {
   limparErros(formulario);
-  let primeiro = null;
+  let primeiro = null; // campo (input/select/textarea) com o primeiro erro
+  let primeiroBloco = null; // bloco do campo, para quando não há input dentro
+  let primeiraMensagem = '';
   const semCampo = [];
   for (const [nome, mensagem] of Object.entries(erros)) {
     const campo = formulario.querySelector(`[data-campo="${nome}"]`);
+    if (!primeiraMensagem) primeiraMensagem = mensagem;
     if (!campo) {
       semCampo.push(mensagem);
       continue;
@@ -244,21 +277,27 @@ export function mostrarErrosNosCampos(formulario, erros) {
     p.setAttribute('role', 'alert');
     p.textContent = mensagem;
     campo.appendChild(p);
+    if (!primeiroBloco) primeiroBloco = campo;
     if (entrada) {
       entrada.setAttribute('aria-invalid', 'true');
       entrada.setAttribute('aria-describedby', idErro);
       if (!primeiro) primeiro = entrada;
     }
   }
+  let areaGeral = null;
   if (semCampo.length) {
-    const area = formulario.querySelector('[data-erros-gerais]');
-    if (area) {
-      area.innerHTML = String(html`<div class="aviso aviso--vermelho" role="alert">${semCampo.join(' ')}</div>`);
+    areaGeral = formulario.querySelector('[data-erros-gerais]');
+    if (areaGeral) {
+      areaGeral.innerHTML = String(html`<div class="aviso aviso--vermelho" role="alert">${semCampo.join(' ')}</div>`);
     } else {
-      toast(semCampo.join(' '), 'erro', 6000);
+      toast(semCampo.join(' '), 'erro');
+      primeiraMensagem = ''; // já avisado acima
     }
   }
-  if (primeiro) primeiro.focus();
+  if (primeiraMensagem) toast(primeiraMensagem, 'erro');
+  if (primeiro) levarAte(primeiro);
+  else if (primeiroBloco) levarAte(primeiroBloco, { focar: false });
+  else if (areaGeral) levarAte(areaGeral, { focar: false });
 }
 
 /** Limpa o aviso geral do formulário (chamado antes de enviar de novo). */
