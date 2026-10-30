@@ -17,7 +17,7 @@ export const FORMATO_BACKUP = 'meu-tecnico-backup';
 
 /** Campos que cada coleção aceita (iguais aos permitidos em firestore.rules). */
 export const CAMPOS_PERMITIDOS = {
-  tiposServico: ['nome', 'geraRetorno', 'retornoPadraoMeses', 'ativo', 'ordem'],
+  tiposServico: ['nome', 'geraRetorno', 'retornoPadraoMeses', 'duracaoMin', 'ativo', 'ordem'],
   clientes: ['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor'],
   aparelhos: ['clienteId', 'enderecoId', 'tipo', 'btus', 'nome', 'descricao', 'ativo', 'criadoEm', 'atualizadoEm'],
   servicos: [
@@ -25,6 +25,7 @@ export const CAMPOS_PERMITIDOS = {
     'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid',
     'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
+    'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
   ],
   valores: ['valorCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
 };
