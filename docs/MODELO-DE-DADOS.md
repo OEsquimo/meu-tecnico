@@ -10,10 +10,10 @@ Datas "de dia" são texto `AAAA-MM-DD`; momentos são `Timestamp`; dinheiro é *
 | `usuarios/{uid}` | o próprio | cria o próprio (cadastro/convite); admin bloqueia técnico | empresaId, papel `admin`\|`tecnico`, ativo, nome, equipeId? |
 | `empresas/{empresaId}` (id = uid do admin) | membros ativos e dono | admin (config), contador (acoplado ao cliente), dono (plano/validade/bloqueio) | nome, donoUid, emailAdmin, nomeAdmin, planoId, planoAte, testeEstendidoAte, bloqueada, contadorClientes, ultimoClienteId, permiteTecnicoCliente, diasAvisoRetorno, mensagemWhatsapp, criadoEm |
 | `…/equipe/{id}` | admin (lista); convite por link | admin; técnico aceita convite | nome, telefone, status `convite`\|`ativo`\|`bloqueado`, uid |
-| `…/tiposServico/{id}` | membros | admin | nome, geraRetorno, retornoPadraoMeses (0/3/4/6/12), ativo, ordem |
+| `…/tiposServico/{id}` | membros | admin | nome, geraRetorno, retornoPadraoMeses (0/3/4/6/12), duracaoMin (15–720, padrão 60; tipos antigos sem o campo usam 60), ativo, ordem |
 | `…/clientes/{id}` | admin (e técnico se liberado) | idem; criar/excluir só junto do contador | nome, whatsapp, observacoes, enderecos[≤2], criadoPor |
 | `…/aparelhos/{id}` | membros | membros (criar/editar); admin exclui | clienteId, enderecoId, tipo, btus, nome, descricao, ativo |
-| `…/servicos/{id}` | admin; técnico só os dele | admin; técnico só conclui o próprio | dados copiados (clienteNome, clienteWhatsapp, local, aparelhoResumo, tipoServicoNome, tecnicoNome…), status `agendado`\|`concluido`\|`cancelado`, dataAgendada, descricao, pago, valorDefinido, dataConclusao, garantiaAte, retornoMeses, dataRetorno, retornoSituacao, ultimoAvisoEm, origemRetornoId |
+| `…/servicos/{id}` | admin; técnico só os dele | admin; técnico só conclui o próprio | dados copiados (clienteNome, clienteWhatsapp, local, aparelhoResumo, tipoServicoNome, tecnicoNome…), status `agendado`\|`concluido`\|`cancelado`, dataAgendada, descricao, pago, valorDefinido, dataConclusao, garantiaAte, retornoMeses, dataRetorno, retornoSituacao, ultimoAvisoEm, origemRetornoId, **agendamentoId** (liga as linhas da mesma visita; serviço antigo = ele mesmo), **obsAgendamento / obsAparelho / obsServico** (observações), **duracaoMin**, **ocupacaoMin** (tempo total do técnico na visita; usado na checagem de horário), **ordem**. Cada linha = 1 serviço de 1 aparelho; `tipoServicoId` vazio = "Serviço a definir" |
 | `…/valores/{servicoId}` | **só admin** | admin | valorCentavos, tipoNome, dataConclusao |
 
 ## Decisões importantes

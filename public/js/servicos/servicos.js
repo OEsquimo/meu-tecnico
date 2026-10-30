@@ -16,8 +16,9 @@
 import { ler, listar, gravar, operacao as op, novoId, AGORA } from '../nucleo/banco.js';
 import { invalidarCache } from '../nucleo/cache.js';
 import { ErroApp } from '../nucleo/erros.js';
-import { LIMITE_HISTORICO } from '../nucleo/constantes.js';
-import { camposDeConclusao, localDoServico, STATUS } from '../dominio/servicos.js';
+import { LIMITE_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
+import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico } from '../dominio/servicos.js';
+import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
@@ -41,9 +42,10 @@ function camposCopiados({ cliente, endereco, aparelho, tipo, tecnico }) {
     enderecoId: endereco?.id ?? null,
     aparelhoId: aparelho?.id ?? null,
     aparelhoResumo: aparelho ? resumoDoAparelho(aparelho) : '',
-    tipoServicoId: tipo.id,
-    tipoServicoNome: tipo.nome,
-    geraRetorno: tipo.geraRetorno === true,
+    tipoServicoId: tipo?.id ?? '',
+    tipoServicoNome: tipo?.nome ?? NOME_SERVICO_A_DEFINIR,
+    geraRetorno: tipo?.geraRetorno === true,
+    duracaoMin: tipo?.duracaoMin ?? DURACAO_PADRAO_MIN,
     tecnicoUid: tecnico?.uid ?? null,
     tecnicoNome: tecnico?.nome ?? '',
   };
@@ -104,6 +106,210 @@ export async function cancelarAgendamento(empresaId, servico) {
 export async function excluirServico(empresaId, servicoId) {
   await gravar([op.apagar(`${caminho(empresaId)}/${servicoId}`), op.apagar(`${caminhoValores(empresaId)}/${servicoId}`)]);
   invalidarCache(`${empresaId}:servicos`);
+}
+
+// -----------------------------------------------------------------------------
+// AGENDAMENTO COMPLETO (vários aparelhos, vários serviços, um técnico por serviço)
+// -----------------------------------------------------------------------------
+// Uma visita = um "agendamento" com data e hora únicas. Cada linha é um serviço
+// de um aparelho, com seu técnico. Linhas da mesma visita compartilham
+// `agendamentoId`, `dataAgendada` e `obsAgendamento`.
+// -----------------------------------------------------------------------------
+
+/** Confere, no banco, se cada técnico escolhido está livre. Lança ErroApp com o nome de quem não está. */
+function minutosPorTecnico(linhas) {
+  const minutos = new Map(); // tecnicoUid -> minutos ocupados nesta visita
+  for (const l of linhas) {
+    if (!l.tecnico?.uid) continue;
+    minutos.set(l.tecnico.uid, (minutos.get(l.tecnico.uid) || 0) + (l.duracaoMin || DURACAO_PADRAO_MIN));
+  }
+  return minutos;
+}
+
+export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null }) {
+  const minutos = minutosPorTecnico(linhas);
+  if (minutos.size === 0) return;
+  // Serviços agendados do dia anterior ao seguinte (cobre quem começou antes e passa do horário).
+  const de = new Date(inicio.getTime() - 24 * 3600000);
+  const ate = new Date(inicio.getTime() + 24 * 3600000);
+  const agendados = await listarAgendados({ empresaId, de, ate });
+  for (const [uid, total] of minutos) {
+    if (!tecnicoEstaLivre(uid, inicio, total, agendados, ignorarAgendamento)) {
+      const nome = linhas.find((l) => l.tecnico?.uid === uid)?.tecnico?.nome || 'O técnico';
+      throw new ErroApp(`${nome} já tem outro serviço nesse horário. Escolha outro técnico ou outro horário.`, 'tecnico-ocupado');
+    }
+  }
+}
+
+/**
+ * Cria OU edita um agendamento inteiro, de uma vez (tudo ou nada).
+ * @param {object} p
+ * @param {string|null} p.agendamentoId  null = novo
+ * @param {object[]} p.existentes        linhas já gravadas desse agendamento (ao editar)
+ * @param {object} p.cliente
+ * @param {object|null} p.endereco
+ * @param {object|null} p.tecnico        técnico do agendamento (usado quando não há linhas)
+ * @param {string} p.data  AAAA-MM-DD
+ * @param {string} p.hora  HH:MM
+ * @param {string} p.observacao
+ * @param {Array<{id?:string, aparelho:object|null, tipo:object|null, tecnico:object|null, duracaoMin?:number, obsAparelho?:string, obsServico?:string}>} p.linhas
+ * @param {string|null} p.origemRetornoId
+ * @param {string[]} p.preservar  ids de linhas abertas que a tela não consegue mostrar (aparelho ou tipo excluído):
+ *                                não são apagadas; só acompanham o novo dia/hora e a observação.
+ * @returns {Promise<string>} id do agendamento
+ */
+export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [] }) {
+  const inicio = combinarDataHora(data, hora);
+  const editando = Boolean(agendamentoId);
+  const fechadas = existentes.filter((l) => l.status !== STATUS.AGENDADO);
+  const abertas = existentes.filter((l) => l.status === STATUS.AGENDADO);
+  if (editando && abertas.length === 0) {
+    throw new ErroApp('Só dá para editar serviços que ainda estão agendados.', 'servico-fechado');
+  }
+  const id = agendamentoId || novoId(caminho(empresaId));
+
+  // Sem nenhum aparelho/serviço: uma linha "Serviço a definir" só com o técnico.
+  let todas = linhas.map((l) => ({ ...l, tecnico: l.tecnico ?? tecnico }));
+  if (todas.length === 0 && preservar.length === 0) todas = [{ aparelho: null, tipo: null, tecnico, duracaoMin: DURACAO_PADRAO_MIN }];
+  for (const l of todas) l.duracaoMin = l.duracaoMin || l.tipo?.duracaoMin || DURACAO_PADRAO_MIN;
+
+  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? id : null });
+  const minutos = minutosPorTecnico(todas);
+
+  const operacoes = [];
+  const mantidas = new Set();
+  todas.forEach((l, ordem) => {
+    const campos = {
+      ...camposCopiados({ cliente, endereco, aparelho: l.aparelho, tipo: l.tipo, tecnico: l.tecnico }),
+      duracaoMin: l.duracaoMin,
+      ocupacaoMin: minutos.get(l.tecnico?.uid) || l.duracaoMin,
+      agendamentoId: id,
+      obsAgendamento: observacao,
+      ordem,
+      dataAgendada: inicio,
+      obsAparelho: l.obsAparelho || '',
+      obsServico: l.obsServico || '',
+      descricao: '',
+      atualizadoEm: AGORA,
+    };
+    if (l.id && abertas.some((a) => a.id === l.id)) {
+      mantidas.add(l.id);
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, campos));
+    } else {
+      const novo = novoId(caminho(empresaId));
+      const documento = { ...campos, status: STATUS.AGENDADO, pago: false, valorDefinido: false, criadoEm: AGORA };
+      if (origemRetornoId && !editando && ordem === 0) documento.origemRetornoId = origemRetornoId;
+      operacoes.push(op.criar(`${caminho(empresaId)}/${novo}`, documento));
+    }
+  });
+  // Linhas abertas que o administrador tirou da tela são removidas.
+  for (const a of abertas) {
+    if (mantidas.has(a.id)) continue;
+    if (preservar.includes(a.id)) {
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.id}`, { agendamentoId: id, obsAgendamento: observacao, dataAgendada: inicio, atualizadoEm: AGORA }));
+      continue;
+    }
+    operacoes.push(op.apagar(`${caminho(empresaId)}/${a.id}`));
+    // Linha que veio de um lembrete de retorno: o lembrete volta para a lista de pendentes.
+    if (a.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
+  }
+  // Linhas já concluídas/canceladas continuam como estão (só acompanham a observação geral).
+  for (const f of fechadas) {
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${f.id}`, { obsAgendamento: observacao, atualizadoEm: AGORA }));
+  }
+  if (origemRetornoId && !editando) {
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${origemRetornoId}`, { retornoSituacao: 'agendado', atualizadoEm: AGORA }));
+  }
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return id;
+}
+
+/** Todas as linhas de um agendamento (inclui serviços antigos, que são um agendamento de uma linha). */
+export async function listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid = null } = {}) {
+  // Serviço antigo (sem agendamentoId): o grupo dele é ele mesmo + os serviços adicionados depois
+  // (que usam o id dele como agendamentoId).
+  const chave = chaveDoAgendamento(servico);
+  // O técnico só pode ler os serviços dele: a consulta precisa dizer isso (regra do Firestore).
+  const onde = [['agendamentoId', '==', chave]];
+  if (tecnicoUid) onde.unshift(['tecnicoUid', '==', tecnicoUid]);
+  const lista = await listar(caminho(empresaId), { onde });
+  if (servico.id && !lista.some((l) => l.id === servico.id)) lista.push(servico);
+  return lista.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+}
+
+/** Cancela todas as linhas ainda agendadas de um agendamento. */
+export async function cancelarAgendamentoCompleto(empresaId, linhas) {
+  const operacoes = [];
+  for (const l of linhas.filter((x) => x.status === STATUS.AGENDADO)) {
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, { status: STATUS.CANCELADO, atualizadoEm: AGORA }));
+    if (l.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
+  }
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+}
+
+/** Exclui um agendamento inteiro (e os valores de cada linha). Só administrador. */
+export async function excluirAgendamentoCompleto(empresaId, linhas) {
+  const operacoes = [];
+  for (const l of linhas) {
+    operacoes.push(op.apagar(`${caminho(empresaId)}/${l.id}`), op.apagar(`${caminhoValores(empresaId)}/${l.id}`));
+    if (l.status === STATUS.AGENDADO && l.origemRetornoId) {
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
+    }
+  }
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+}
+
+/**
+ * Na visita, adiciona mais um serviço (de um aparelho já escolhido). Usado pelo técnico
+ * (e pelo administrador) na hora do atendimento. A nova linha herda dia, hora, cliente e local.
+ */
+export async function adicionarServicoNaVisita({ empresaId, base, aparelho, tipo, tecnico, linhasDaVisita = [] }) {
+  if (!aparelho) throw new ErroApp('Escolha ou cadastre o aparelho antes de adicionar um serviço.', 'sem-aparelho');
+  if (!tipo) throw new ErroApp('Escolha o tipo de serviço.', 'sem-tipo');
+  const id = novoId(caminho(empresaId));
+  const agendamentoId = chaveDoAgendamento(base);
+  const operacoes = [];
+  const donoUid = tecnico?.uid ?? base.tecnicoUid ?? null;
+  const duracao = tipo.duracaoMin ?? DURACAO_PADRAO_MIN;
+  // Tempo total do técnico nesta visita (os serviços que ele já tinha + este).
+  const jaTinha = [base, ...linhasDaVisita].filter((l, i, a) => a.findIndex((x) => x.id === l.id) === i)
+    .filter((l) => l.status === STATUS.AGENDADO && l.tecnicoUid === donoUid)
+    .reduce((soma, l) => soma + duracaoDoServico(l), 0);
+  // Serviço antigo (sem agendamentoId) não é alterado: a nova linha usa o id dele como agendamentoId.
+  operacoes.push(op.criar(`${caminho(empresaId)}/${id}`, {
+    clienteId: base.clienteId,
+    clienteNome: base.clienteNome,
+    clienteWhatsapp: base.clienteWhatsapp ?? '',
+    local: base.local || '',
+    localLat: base.localLat ?? null,
+    localLng: base.localLng ?? null,
+    enderecoId: base.enderecoId ?? null,
+    aparelhoId: aparelho.id,
+    aparelhoResumo: resumoDoAparelho(aparelho),
+    tipoServicoId: tipo.id,
+    tipoServicoNome: tipo.nome,
+    geraRetorno: tipo.geraRetorno === true,
+    duracaoMin: duracao,
+    ocupacaoMin: jaTinha + duracao,
+    tecnicoUid: donoUid,
+    tecnicoNome: tecnico?.nome ?? base.tecnicoNome ?? '',
+    agendamentoId,
+    obsAgendamento: base.obsAgendamento || '',
+    ordem: 99,
+    status: STATUS.AGENDADO,
+    dataAgendada: base.dataAgendada,
+    descricao: '',
+    pago: false,
+    valorDefinido: false,
+    criadoEm: AGORA,
+    atualizadoEm: AGORA,
+  }));
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return id;
 }
 
 // -----------------------------------------------------------------------------
@@ -171,6 +377,13 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   if (servico.status !== STATUS.AGENDADO) {
     throw new ErroApp('Este serviço já foi concluído ou cancelado.', 'servico-fechado');
   }
+  if (dados.exigirAparelho && !dados.aparelho && !servico.aparelhoId) {
+    throw new ErroApp('Escolha ou cadastre o aparelho antes de concluir o serviço.', 'sem-aparelho');
+  }
+  const tipoFinal = dados.tipo || null; // só quando o serviço ainda estava "a definir"
+  if (!servico.tipoServicoId && !tipoFinal) {
+    throw new ErroApp('Escolha o tipo de serviço antes de concluir.', 'sem-tipo');
+  }
   const ehAdmin = papel === 'admin';
   const agora = new Date();
   const concluidoEm = ehAdmin && dados.dataConclusaoISO ? combinarDataHora(dados.dataConclusaoISO, `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`) : agora;
@@ -179,7 +392,11 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   }
 
   const campos = {
-    ...camposDeConclusao({ geraRetorno: servico.geraRetorno === true, retornoMeses: dados.retornoMeses ?? null, concluidoEm }),
+    ...(tipoFinal && !servico.tipoServicoId ? {
+      tipoServicoId: tipoFinal.id, tipoServicoNome: tipoFinal.nome, geraRetorno: tipoFinal.geraRetorno === true,
+      duracaoMin: tipoFinal.duracaoMin ?? DURACAO_PADRAO_MIN,
+    } : {}),
+    ...camposDeConclusao({ geraRetorno: (tipoFinal && !servico.tipoServicoId ? tipoFinal.geraRetorno : servico.geraRetorno) === true, retornoMeses: dados.retornoMeses ?? null, concluidoEm }),
     descricao: dados.descricao,
     pago: dados.pago === true,
     aparelhoId: dados.aparelho?.id ?? servico.aparelhoId ?? null,
@@ -193,7 +410,7 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
     campos.valorDefinido = true;
     operacoes.push(op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
       valorCentavos: dados.valorCentavos,
-      tipoNome: servico.tipoServicoNome,
+      tipoNome: tipoFinal && !servico.tipoServicoId ? tipoFinal.nome : servico.tipoServicoNome,
       dataConclusao: concluidoEm,
       atualizadoEm: AGORA,
     }));

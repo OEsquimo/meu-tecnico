@@ -161,3 +161,155 @@
 .retorno-cartao__acoes > .botao--destaque-largo {
   grid-column: 1 / -1;
 }
+
+/* ---------- Agendamento: cartões de aparelho e de serviço ---------- */
+.agenda-secao {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agenda-secao__resumo {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cor-texto-suave);
+}
+
+.agenda-aparelho {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Título à esquerda (pode quebrar de linha); Editar e Remover SEMPRE lado a lado, à direita. */
+.agenda-aparelho__topo,
+.agenda-servico__topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agenda-aparelho__topo > .expande,
+.agenda-servico__topo > .expande {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agenda-acoes {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.agenda-servico__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agenda-servico {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-primaria);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  scroll-margin-top: 96px;
+}
+
+/* Serviço com problema (ex.: falta o técnico): borda vermelha até o usuário corrigir. */
+.agenda-servico--erro {
+  border-color: var(--cor-erro);
+  border-left-color: var(--cor-erro);
+  background: var(--cor-erro-fundo);
+}
+
+.agenda-adicionar > * {
+  flex: 1 1 0;
+}
+
+/* Observação recolhida: um botão discreto que abre o campo. */
+.obs-recolhivel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.obs-recolhivel__botao {
+  align-self: flex-start;
+  min-height: var(--toque-minimo);
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--cor-primaria);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.obs-recolhivel__botao--preenchida::after {
+  content: ' ●';
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+/* ---------- Detalhe do agendamento: serviços da visita ---------- */
+.visita-servico {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--cor-borda);
+  border-left: 4px solid var(--cor-primaria);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-cartao);
+}
+
+.visita-servico--concluido {
+  border-left-color: var(--cor-sucesso);
+}
+
+.visita-servico--cancelado {
+  border-left-color: var(--cor-borda-campo);
+  opacity: 0.75;
+}
+
+.visita-servico__topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.visita-aparelho {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.visita-obs {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}
+
+/* Nome do serviço/aparelho ocupa a linha toda; selos e botões vêm abaixo quando falta espaço. */
+.agenda-servico__topo > .expande,
+.visita-servico__topo > .expande {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.agenda-aparelho__topo > .expande {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.agenda-secao__resumo {
+  white-space: nowrap;
+}

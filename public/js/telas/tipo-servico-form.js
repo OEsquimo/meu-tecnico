@@ -1,7 +1,7 @@
 // =============================================================================
 // TELA: Tipo de serviço (novo e editar) — rotas /tipos-servico/novo e /tipos-servico/:id
 // =============================================================================
-// Campos: nome, "gera retorno" (interruptor), prazo padrão (3/4/6/12 meses),
+// Campos: nome, duração padrão (minutos), "gera retorno" (interruptor), prazo padrão (3/4/6/12 meses),
 // ativo (só ao editar). O prazo só aparece quando "gera retorno" está ligado.
 // Excluir um tipo não altera o histórico: o nome fica copiado em cada serviço.
 // =============================================================================
@@ -12,7 +12,7 @@ import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { criarTipo, atualizarTipo, excluirTipo } from '../servicos/tiposServico.js';
 import { validarTipoServico } from '../dominio/validacoes.js';
-import { PRAZOS_RETORNO_MESES } from '../nucleo/constantes.js';
+import { PRAZOS_RETORNO_MESES, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export default async function montar({ raiz, params, sessao, ir }) {
   const novo = !params.id;
@@ -35,6 +35,10 @@ export default async function montar({ raiz, params, sessao, ir }) {
     <form id="form-tipo" class="formulario" novalidate>
       <div data-erros-gerais></div>
       ${campoTexto({ nome: 'nome', rotulo: 'Nome do serviço', valor: tipo?.nome ?? '', maximo: 60 })}
+      ${campoTexto({
+        nome: 'duracaoMin', rotulo: 'Duração padrão (minutos)', valor: tipo?.duracaoMin ?? DURACAO_PADRAO_MIN, modo: 'numeric', maximo: 3,
+        ajuda: 'Usada no agendamento para saber quando o técnico fica livre. Dá para mudar sempre que quiser.',
+      })}
       ${interruptor({
         nome: 'geraRetorno',
         titulo: 'Gera retorno',
