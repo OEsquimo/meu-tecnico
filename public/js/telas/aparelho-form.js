@@ -36,7 +36,7 @@ const OPCOES_BTUS = [
   { valor: 'outro', rotulo: 'Outro' },
 ];
 
-export default async function montar({ raiz, params, sessao, ir, voltar, recarregar, ativo }) {
+export default async function montar({ raiz, params, consulta, sessao, ir, voltar, recarregar, ativo }) {
   const empresaId = sessao.vinculo.empresaId;
   const editando = Boolean(params.id);
   const administrador = ehAdmin(sessao);
@@ -117,7 +117,7 @@ export default async function montar({ raiz, params, sessao, ir, voltar, recarre
   const areaOutro = raiz.querySelector('#area-btus-outro');
 
   /** Depois de gravar/excluir: vai para a ficha do cliente (ou volta, se o técnico não a enxerga). */
-  const terminar = () => (veClientes ? ir(`/cliente/${encodeURIComponent(clienteId)}`, { substituir: true }) : voltar('/'));
+  const terminar = () => (consulta?.get('voltar') === '1' ? voltar(administrador ? '/agendar' : '/') : veClientes ? ir(`/cliente/${encodeURIComponent(clienteId)}`, { substituir: true }) : voltar('/'));
 
   // Pílulas de BTUs: as comuns preenchem o campo escondido; "Outro" mostra o campo para digitar.
   form.addEventListener('change', (ev) => {
