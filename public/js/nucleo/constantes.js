@@ -50,13 +50,20 @@ export const TIPOS_APARELHO = [
 /** Opções de BTUs mais comuns (o campo também aceita outro valor digitado). */
 export const BTUS_COMUNS = [7000, 9000, 12000, 18000, 24000, 30000, 36000, 48000, 60000];
 
-/** Tipos de serviço criados automaticamente em toda conta nova. */
+/** Duração padrão (em minutos) de um serviço quando o tipo não define a sua. */
+export const DURACAO_PADRAO_MIN = 60;
+
+/** Limites aceitos para a duração de um serviço (minutos). */
+export const DURACAO_MIN_LIMITE = 15;
+export const DURACAO_MAX_LIMITE = 720;
+
+/** Tipos de serviço criados automaticamente em toda conta nova (duracaoMin = minutos). */
 export const TIPOS_SERVICO_PADRAO = [
-  { nome: 'Limpeza', geraRetorno: true, retornoPadraoMeses: 6, ativo: true, ordem: 1 },
-  { nome: 'Manutenção preventiva', geraRetorno: true, retornoPadraoMeses: 12, ativo: true, ordem: 2 },
-  { nome: 'Instalação', geraRetorno: false, retornoPadraoMeses: 0, ativo: true, ordem: 3 },
-  { nome: 'Retirada de ar-condicionado', geraRetorno: false, retornoPadraoMeses: 0, ativo: true, ordem: 4 },
-  { nome: 'Carga de gás', geraRetorno: false, retornoPadraoMeses: 0, ativo: true, ordem: 5 },
+  { nome: 'Limpeza', geraRetorno: true, retornoPadraoMeses: 6, duracaoMin: 60, ativo: true, ordem: 1 },
+  { nome: 'Manutenção preventiva', geraRetorno: true, retornoPadraoMeses: 12, duracaoMin: 90, ativo: true, ordem: 2 },
+  { nome: 'Instalação', geraRetorno: false, retornoPadraoMeses: 0, duracaoMin: 180, ativo: true, ordem: 3 },
+  { nome: 'Retirada de ar-condicionado', geraRetorno: false, retornoPadraoMeses: 0, duracaoMin: 90, ativo: true, ordem: 4 },
+  { nome: 'Carga de gás', geraRetorno: false, retornoPadraoMeses: 0, duracaoMin: 60, ativo: true, ordem: 5 },
 ];
 
 /** Texto padrão do lembrete de retorno enviado pelo WhatsApp. Variáveis entre chaves. */

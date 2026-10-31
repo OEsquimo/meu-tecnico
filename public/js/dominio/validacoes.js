@@ -11,7 +11,7 @@
 import { normalizarWhatsappBR } from './telefone.js';
 import { reaisParaCentavos } from './dinheiro.js';
 import { ehISOValido, ehHoraValida } from './datas.js';
-import { PRAZOS_RETORNO_MESES, TIPOS_APARELHO, MAXIMO_ENDERECOS } from '../nucleo/constantes.js';
+import { PRAZOS_RETORNO_MESES, TIPOS_APARELHO, MAXIMO_ENDERECOS, DURACAO_PADRAO_MIN, DURACAO_MIN_LIMITE, DURACAO_MAX_LIMITE } from '../nucleo/constantes.js';
 import { cepValido, somenteDigitosCEP } from './endereco.js';
 
 const texto = (v) => String(v ?? '').trim();
@@ -187,10 +187,10 @@ export function validarAparelho({ tipo, btus, nome, descricao, enderecoId }) {
 // AGENDAMENTO E CONCLUSÃO DE SERVIÇO
 // -----------------------------------------------------------------------------
 
-export function validarAgendamento({ clienteId, tipoServicoId, data, hora, enderecoId, descricao }, { hojeISO = null, exigirFuturo = false } = {}) {
+export function validarAgendamento({ clienteId, tipoServicoId, data, hora, enderecoId, descricao }, { hojeISO = null, exigirFuturo = false, exigirTipo = true } = {}) {
   const erros = {};
   if (!texto(clienteId)) erros.clienteId = 'Escolha o cliente.';
-  if (!texto(tipoServicoId)) erros.tipoServicoId = 'Escolha o tipo de serviço.';
+  if (exigirTipo && !texto(tipoServicoId)) erros.tipoServicoId = 'Escolha o tipo de serviço.';
   if (!ehISOValido(texto(data))) erros.data = 'Escolha uma data válida.';
   else if (exigirFuturo && hojeISO && texto(data) < hojeISO) erros.data = 'A data já passou. Escolha hoje ou uma data futura.';
   if (!ehHoraValida(texto(hora))) erros.hora = 'Escolha o horário (ex.: 14:30).';
@@ -206,8 +206,9 @@ export function validarAgendamento({ clienteId, tipoServicoId, data, hora, ender
  * Valida o preenchimento do serviço feito.
  * exigirValor=true para o administrador (o técnico não informa valor).
  */
-export function validarConclusao({ descricao, valor, pago, retornoMeses, aparelhoId }, { exigirValor, geraRetorno }) {
+export function validarConclusao({ descricao, valor, pago, retornoMeses, aparelhoId }, { exigirValor, geraRetorno, exigirAparelho = false }) {
   const erros = {};
+  if (exigirAparelho && !texto(aparelhoId)) erros.aparelhoId = 'Escolha ou cadastre o aparelho antes de concluir.';
   const desc = texto(descricao);
   if (desc.length < 3) erros.descricao = 'Descreva o que foi feito (mesmo que seja curto).';
   else if (desc.length > 2000) erros.descricao = 'A descrição está muito longa (máximo 2000 letras).';
@@ -256,7 +257,7 @@ export function validarFuncionario({ nome, telefone }) {
 // ADMINISTRATIVA / CONFIGURAÇÕES
 // -----------------------------------------------------------------------------
 
-export function validarTipoServico({ nome, geraRetorno, retornoPadraoMeses }) {
+export function validarTipoServico({ nome, geraRetorno, retornoPadraoMeses, duracaoMin }) {
   const erros = {};
   const n = texto(nome);
   if (n.length < 2) erros.nome = 'Digite o nome do serviço.';
@@ -267,7 +268,14 @@ export function validarTipoServico({ nome, geraRetorno, retornoPadraoMeses }) {
     meses = Number(retornoPadraoMeses);
     if (!PRAZOS_RETORNO_MESES.includes(meses)) erros.retornoPadraoMeses = 'Escolha o prazo padrão de retorno.';
   }
-  return resultado(erros, { nome: n, geraRetorno: gera, retornoPadraoMeses: gera ? meses : 0 });
+  let duracao = DURACAO_PADRAO_MIN;
+  if (texto(duracaoMin) !== '') {
+    duracao = Number(texto(duracaoMin));
+    if (!Number.isInteger(duracao) || duracao < DURACAO_MIN_LIMITE || duracao > DURACAO_MAX_LIMITE) {
+      erros.duracaoMin = `Use entre ${DURACAO_MIN_LIMITE} e ${DURACAO_MAX_LIMITE} minutos.`;
+    }
+  }
+  return resultado(erros, { nome: n, geraRetorno: gera, retornoPadraoMeses: gera ? meses : 0, duracaoMin: duracao });
 }
 
 export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente }) {

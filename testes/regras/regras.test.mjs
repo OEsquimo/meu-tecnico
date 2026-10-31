@@ -251,3 +251,53 @@ test('admin bloqueia técnico (usuarios.ativo) mas não muda o papel dele', asyn
   await assertFails(updateDoc(doc(db, `usuarios/${TEC}`), { papel: 'admin' }));
   await assertFails(updateDoc(doc(como(TEC), `usuarios/${TEC}`), { ativo: true, papel: 'admin' }));
 });
+
+// -----------------------------------------------------------------------------
+// AGENDAMENTO COM VÁRIOS APARELHOS/SERVIÇOS (campos novos e permissões do técnico)
+// STATUS: escritos mas NÃO executados (sem emulador no ambiente de desenvolvimento).
+// -----------------------------------------------------------------------------
+const linhaNova = (extra = {}) => ({
+  clienteId: 'c1', clienteNome: 'Ana', tipoServicoId: 't1', tipoServicoNome: 'Limpeza', geraRetorno: true, status: 'agendado',
+  dataAgendada: dia(1), tecnicoUid: TEC, tecnicoNome: 'Tec', pago: false, valorDefinido: false, descricao: '',
+  agendamentoId: 'v1', obsAgendamento: 'obs', obsAparelho: '', obsServico: '', duracaoMin: 60, ocupacaoMin: 60, ordem: 0, ...extra,
+});
+
+test('agendamento: administrador grava os campos novos e a linha "Serviço a definir"', async () => {
+  const db = como(ADMIN);
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/n1`), linhaNova()));
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/n2`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', geraRetorno: false, aparelhoId: null })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/n3`), linhaNova({ duracaoMin: 5 })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/n4`), linhaNova({ obsServico: 'x'.repeat(501) })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/n5`), linhaNova({ campoInventado: 1 })));
+});
+
+test('tipos de serviço: duração entre 15 e 720 minutos', async () => {
+  const db = como(ADMIN);
+  const tipo = { nome: 'Teste', geraRetorno: false, retornoPadraoMeses: 0, ativo: true, ordem: 1 };
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/tiposServico/x1`), { ...tipo, duracaoMin: 90 }));
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/tiposServico/x2`), tipo)); // tipos antigos sem duração continuam válidos
+  await assertFails(setDoc(doc(db, `empresas/${E}/tiposServico/x3`), { ...tipo, duracaoMin: 10 }));
+  await assertFails(setDoc(doc(db, `empresas/${E}/tiposServico/x4`), { ...tipo, duracaoMin: 721 }));
+});
+
+test('técnico adiciona serviço na própria visita, mas não para outro técnico nem já concluído nem com valor', async () => {
+  const db = como(TEC);
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/t1`), linhaNova()));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t2`), linhaNova({ tecnicoUid: 'outro-tecnico' })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t3`), linhaNova({ status: 'concluido' })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t4`), linhaNova({ valorDefinido: true })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t5`), linhaNova({ tipoServicoId: '' })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/t1`), { valorCentavos: 1, tipoNome: 'x' }));
+});
+
+test('técnico só escolhe o tipo ao concluir quando o serviço estava "a definir"', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/def`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', geraRetorno: false }));
+  });
+  const db = como(TEC);
+  const conclusao = { status: 'concluido', descricao: 'Feito', pago: false, dataConclusao: serverTimestamp(), aparelhoId: 'a1', aparelhoResumo: 'Split', concluidoPorNome: 'Tec', atualizadoEm: serverTimestamp() };
+  // Serviço com tipo definido: trocar o tipo é recusado.
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...conclusao, tipoServicoId: 'outro', tipoServicoNome: 'Outro' }));
+  // Serviço "a definir": escolher o tipo ao concluir é aceito.
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/def`), { ...conclusao, tipoServicoId: 't1', tipoServicoNome: 'Limpeza', geraRetorno: true, duracaoMin: 60 }));
+});

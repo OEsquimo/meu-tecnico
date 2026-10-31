@@ -11,7 +11,7 @@
    Para forçar todo mundo a baixar de novo, aumente VERSAO_CACHE.
    ========================================================================== */
 
-const VERSAO_CACHE = 'meu-tecnico-v1';
+const VERSAO_CACHE = 'meu-tecnico-v3';
 const CACHE_APP = `${VERSAO_CACHE}-app`;
 const CACHE_SDK = `${VERSAO_CACHE}-sdk`;
 

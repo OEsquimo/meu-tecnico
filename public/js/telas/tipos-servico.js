@@ -9,6 +9,7 @@
 import { html, mostrar } from '../nucleo/ui.js';
 import { cabecalho, itemLista, estadoVazio, botao, selo } from '../nucleo/componentes.js';
 import { seta } from './_auxiliar-admin.js';
+import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export default async function montar({ raiz, sessao }) {
   const tipos = sessao.tipos;
@@ -16,7 +17,7 @@ export default async function montar({ raiz, sessao }) {
   /** Texto que explica o retorno de cada tipo. */
   const descricao = (t) => (t.geraRetorno
     ? `Gera retorno · prazo padrão ${t.retornoPadraoMeses} meses`
-    : 'Não gera retorno');
+    : 'Não gera retorno') + ` · ${t.duracaoMin || DURACAO_PADRAO_MIN} min`;
 
   mostrar(raiz, html`
     ${cabecalho({
