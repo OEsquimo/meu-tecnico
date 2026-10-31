@@ -107,7 +107,7 @@ function blocoEndereco(n, e, modo) {
     </section>`;
 }
 
-export default async function montar({ raiz, params, sessao, ir, voltar, recarregar, ativo }) {
+export default async function montar({ raiz, params, consulta, sessao, ir, voltar, recarregar, ativo }) {
   const empresaId = sessao.vinculo.empresaId;
   const editando = Boolean(params.id);
   const administrador = ehAdmin(sessao);
@@ -348,7 +348,8 @@ export default async function montar({ raiz, params, sessao, ir, voltar, recarre
         if (editando) await atualizarCliente(empresaId, id, dados, { administrador });
         else id = await criarCliente(empresaId, dados, sessao.usuario.uid);
         toast(editando ? 'Cliente atualizado.' : 'Cliente cadastrado.', 'sucesso');
-        ir(`/cliente/${encodeURIComponent(id)}`, { substituir: true });
+        if (editando && consulta?.get('voltar') === '1') voltar('/agendar');
+        else ir(`/cliente/${encodeURIComponent(id)}`, { substituir: true });
       } catch (erro) {
         mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });
       }

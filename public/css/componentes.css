@@ -371,6 +371,10 @@ textarea.campo__entrada {
   outline: 3px solid var(--cor-primaria-clara);
 }
 
+.campo--erro {
+  scroll-margin-top: 96px; /* ao rolar até o erro, não fica escondido atrás do cabeçalho */
+}
+
 .campo--erro .campo__entrada {
   border-color: var(--cor-alerta-forte);
   background: #fff8f8;
@@ -824,7 +828,7 @@ textarea.campo__entrada {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 16px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   z-index: 120;
   display: flex;
   flex-direction: column;
@@ -844,6 +848,7 @@ textarea.campo__entrada {
   font-weight: 700;
   box-shadow: 0 6px 20px rgba(20, 35, 47, 0.3);
   pointer-events: auto;
+  cursor: pointer; /* um toque fecha antes da hora (não há botão de fechar) */
 }
 
 .aviso-rapido--erro {

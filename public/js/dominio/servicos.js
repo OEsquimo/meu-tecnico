@@ -9,6 +9,7 @@
 
 import { paraISO } from './datas.js';
 import { calcularDataRetorno, calcularGarantiaAte } from './retornos.js';
+import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export const STATUS = { AGENDADO: 'agendado', CONCLUIDO: 'concluido', CANCELADO: 'cancelado' };
 
@@ -59,4 +60,62 @@ export function localDoServico(endereco) {
   return [rua, endereco.complemento, endereco.bairro, [endereco.cidade, endereco.uf].filter(Boolean).join('/')]
     .filter(Boolean)
     .join(' · ');
+}
+
+// -----------------------------------------------------------------------------
+// AGENDAMENTO COM VÁRIOS APARELHOS E SERVIÇOS
+// -----------------------------------------------------------------------------
+// Cada "linha" (documento em servicos/) é UM serviço de UM aparelho. Linhas que
+// fazem parte da mesma visita compartilham o mesmo `agendamentoId`. Serviços
+// antigos (sem agendamentoId) formam um agendamento de uma linha só.
+// Linha "vazia" = agendamento feito só com cliente, dia, hora e técnico (sem
+// serviço ainda): tem tipoServicoId '' e tipoServicoNome 'Serviço a definir'.
+// -----------------------------------------------------------------------------
+
+export const NOME_SERVICO_A_DEFINIR = 'Serviço a definir';
+
+/** Identificador do agendamento a que a linha pertence (serviços antigos: o próprio id). */
+export function chaveDoAgendamento(servico) {
+  return servico.agendamentoId || servico.id;
+}
+
+/** A linha ainda não tem serviço escolhido (agendamento só com cliente/dia/hora/técnico)? */
+export function ehLinhaSemServico(servico) {
+  return !servico.tipoServicoId;
+}
+
+/** Duração em minutos (serviços antigos, sem duração: o padrão). */
+export function duracaoDoServico(servico) {
+  const n = Number(servico.duracaoMin);
+  return Number.isFinite(n) && n > 0 ? n : DURACAO_PADRAO_MIN;
+}
+
+/**
+ * Agrupa linhas em agendamentos. Devolve uma lista (ordenada pelo horário) de
+ * { chave, linhas, dataAgendada, status, clienteId, clienteNome, observacao }.
+ * O status do grupo: "agendado" se alguma linha ainda está agendada; senão
+ * "concluido" se alguma foi concluída; senão "cancelado".
+ */
+export function agruparAgendamentos(linhas) {
+  const mapa = new Map();
+  for (const l of linhas) {
+    const chave = chaveDoAgendamento(l);
+    if (!mapa.has(chave)) mapa.set(chave, []);
+    mapa.get(chave).push(l);
+  }
+  const grupos = [];
+  for (const [chave, lista] of mapa) {
+    lista.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.aparelhoResumo || '').localeCompare(String(b.aparelhoResumo || '')));
+    const status = lista.some((l) => l.status === STATUS.AGENDADO) ? STATUS.AGENDADO
+      : lista.some((l) => l.status === STATUS.CONCLUIDO) ? STATUS.CONCLUIDO : STATUS.CANCELADO;
+    const primeira = lista[0];
+    grupos.push({
+      chave, linhas: lista, status,
+      dataAgendada: primeira.dataAgendada,
+      clienteId: primeira.clienteId, clienteNome: primeira.clienteNome,
+      observacao: primeira.obsAgendamento || '',
+    });
+  }
+  grupos.sort((a, b) => (a.dataAgendada?.getTime?.() ?? 0) - (b.dataAgendada?.getTime?.() ?? 0));
+  return grupos;
 }

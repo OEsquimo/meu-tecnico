@@ -347,11 +347,12 @@ service cloud.firestore {
       match /tiposServico/{tid} {
         allow read: if ehMembro(emp);
         allow create, update: if ehAdmin(emp)
-          && request.resource.data.keys().hasOnly(['nome', 'geraRetorno', 'retornoPadraoMeses', 'ativo', 'ordem'])
+          && request.resource.data.keys().hasOnly(['nome', 'geraRetorno', 'retornoPadraoMeses', 'duracaoMin', 'ativo', 'ordem'])
           && request.resource.data.nome is string
           && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 60
           && request.resource.data.geraRetorno is bool
           && request.resource.data.retornoPadraoMeses in [0, 3, 4, 6, 12]
+          && (!('duracaoMin' in request.resource.data) || (request.resource.data.duracaoMin is int && request.resource.data.duracaoMin >= 15 && request.resource.data.duracaoMin <= 720))
           && request.resource.data.ativo is bool
           && request.resource.data.ordem is int;
         allow delete: if ehAdmin(emp);
@@ -390,7 +391,8 @@ service cloud.firestore {
         // filtra por tecnicoUid; sem o filtro, o Firestore recusa).
         allow read: if ehAdmin(emp)
           || (ehTecnico(emp) && resource.data.tecnicoUid == request.auth.uid);
-        allow create: if ehAdmin(emp) && servicoValido(request.resource.data);
+        allow create: if (ehAdmin(emp) && servicoValido(request.resource.data))
+          || tecnicoAdicionaServico(emp);
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoConcluiServico(emp);
         allow delete: if ehAdmin(emp);
@@ -433,12 +435,19 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool)
         && (!('valorDefinido' in d) || d.valorDefinido is bool)
+        && (!('agendamentoId' in d) || (d.agendamentoId is string && d.agendamentoId.size() <= 40))
+        && (!('obsAgendamento' in d) || (d.obsAgendamento is string && d.obsAgendamento.size() <= 2000))
+        && (!('obsAparelho' in d) || (d.obsAparelho is string && d.obsAparelho.size() <= 500))
+        && (!('obsServico' in d) || (d.obsServico is string && d.obsServico.size() <= 500))
+        && (!('duracaoMin' in d) || (d.duracaoMin is int && d.duracaoMin >= 15 && d.duracaoMin <= 720))
+        && (!('ocupacaoMin' in d) || (d.ocupacaoMin is int && d.ocupacaoMin >= 15 && d.ocupacaoMin <= 2880))
+        && (!('ordem' in d) || d.ordem is int)
         && (!('retornoSituacao' in d) || d.retornoSituacao == null || d.retornoSituacao in ['pendente', 'agendado', 'recusado', 'feito']);
     }
 
@@ -449,10 +458,28 @@ service cloud.firestore {
       return ehTecnico(emp)
         && resource.data.tecnicoUid == request.auth.uid
         && resource.data.status == 'agendado'
-        && d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm'])
+        && d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin'])
+        // O tipo do serviço só pode ser escolhido pelo técnico quando o agendamento
+        // foi feito sem serviço ("Serviço a definir": tipoServicoId vazio).
+        && (resource.data.tipoServicoId == '' || d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm']))
         && d.status == 'concluido'
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool);
+    }
+
+    // O técnico pode acrescentar um serviço NA SUA visita (para ele mesmo, ainda
+    // agendado, sem valor, sem conclusão). Foi pensado para o atendimento: o cliente
+    // pede mais um serviço no local. Não cria nada já concluído nem para outro técnico.
+    function tecnicoAdicionaServico(emp) {
+      let d = request.resource.data;
+      return ehTecnico(emp)
+        && servicoValido(d)
+        && d.tecnicoUid == request.auth.uid
+        && d.status == 'agendado'
+        && d.tipoServicoId is string && d.tipoServicoId.size() > 0
+        && d.pago == false
+        && d.valorDefinido == false
+        && !('dataConclusao' in d) && !('dataRetorno' in d) && !('retornoSituacao' in d) && !('garantiaAte' in d) && !('origemRetornoId' in d);
     }
 
     // Tudo que não foi liberado acima é negado automaticamente pelo Firestore.
