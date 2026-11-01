@@ -1,7 +1,7 @@
 // =============================================================================
 // CLIENTES — acesso a dados (CRUD) com controle do limite do plano
 // =============================================================================
-// Cada cliente tem até 2 endereços (guardados dentro do próprio documento).
+// Cada cliente pode ter vários endereços (até MAXIMO_ENDERECOS, guardados dentro do próprio documento).
 //
 // LIMITE DE CLIENTES: o plano define quantos clientes a empresa pode ter. Para
 // o servidor conseguir conferir isso (as regras do Firestore não sabem contar

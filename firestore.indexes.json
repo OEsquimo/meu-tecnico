@@ -4,67 +4,160 @@
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataAgendada", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataAgendada", "order": "ASCENDING" }
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataConclusao", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataConclusao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataConclusao", "order": "DESCENDING" }
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataConclusao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "valorDefinido", "order": "ASCENDING" },
-        { "fieldPath": "dataConclusao", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "valorDefinido",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataConclusao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "retornoSituacao", "order": "ASCENDING" },
-        { "fieldPath": "dataRetorno", "order": "ASCENDING" }
+        {
+          "fieldPath": "retornoSituacao",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataRetorno",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataAgendada", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "servicos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "aparelhoId", "order": "ASCENDING" },
-        { "fieldPath": "dataAgendada", "order": "DESCENDING" }
+        {
+          "fieldPath": "aparelhoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tecnicoUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tecnicoUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataConclusao",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],

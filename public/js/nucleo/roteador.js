@@ -10,7 +10,7 @@
 
 import { resolverRota, decidirAcesso, itensDoMenu } from './rotas.js';
 import { sessao, aoMudarSessao, recarregarSessao } from './sessao.js';
-import { mostrar, html, toast } from './ui.js';
+import { mostrar, html, toast, limparCliques } from './ui.js';
 import { esqueletos, menuSuperior, estadoVazio, botao } from './componentes.js';
 import { traduzirErro, ehErroDeRede } from './erros.js';
 import { NOME_APP } from './constantes.js';
@@ -84,6 +84,7 @@ async function navegar() {
     try { limparTelaAtual(); } catch (e) { console.error(e); }
     limparTelaAtual = null;
   }
+  limparCliques(elementos.raiz); // nenhum clique da tela anterior sobrevive
 
   const { caminho, consulta } = lerEndereco();
   const { rota, params } = resolverRota(caminho);

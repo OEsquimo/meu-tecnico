@@ -18,13 +18,15 @@ rules_version = '2';
 //     clientes/{id}                     -> clientes (nome, WhatsApp, endereços)
 //     aparelhos/{id}                    -> aparelhos de ar-condicionado
 //     servicos/{id}                     -> agendamentos e serviços feitos (SEM valores)
-//     valores/{servicoId}               -> valores em dinheiro (SÓ o administrador lê)
+//     valores/{servicoId}               -> valor, extras e desconto (administrador; técnico só se liberado)
+//     precos/{tipoId}                   -> valor padrão de cada tipo de serviço (idem)
 //
 // PAPÉIS: dono do app (separado), administrador (dono da empresa) e técnico.
 //
 // IMPORTANTE: o Firestore NÃO consegue esconder campos dentro de um documento.
-// Por isso os valores em dinheiro ficam em outra coleção (valores), que o técnico
-// não consegue ler de jeito nenhum.
+// Por isso os valores em dinheiro ficam em outras coleções (valores e precos). O técnico
+// só as lê se o administrador liberou ("Pode ver valores") no cadastro dele (equipe/{id})
+// e só grava o valor ao concluir se tiver "Pode alterar valor e extras".
 // =============================================================================
 
 service cloud.firestore {
@@ -68,6 +70,26 @@ service cloud.firestore {
 
     function ehTecnico(emp) {
       return ehMembro(emp) && dadosUsuario().papel == 'tecnico';
+    }
+
+    // Permissões de valores do técnico: ficam no cadastro dele (equipe/{equipeId}), que só o
+    // administrador grava. Campo ausente = não liberado. Quem altera também vê.
+    function cadastroDoTecnico(emp) {
+      return get(/databases/$(database)/documents/empresas/$(emp)/equipe/$(dadosUsuario().equipeId)).data;
+    }
+
+    function tecnicoAltera(emp) {
+      return ehTecnico(emp) && cadastroDoTecnico(emp).get('alterarValores', false) == true;
+    }
+
+    function tecnicoVe(emp) {
+      return ehTecnico(emp)
+        && (cadastroDoTecnico(emp).get('verValores', false) == true || cadastroDoTecnico(emp).get('alterarValores', false) == true);
+    }
+
+    // O técnico logado é um dos técnicos deste serviço? (serviços antigos têm só tecnicoUid)
+    function ehDoServico(d) {
+      return d.tecnicoUid == request.auth.uid || request.auth.uid in d.get('tecnicoUids', []);
     }
 
     // -------------------------------------------------------------------------
@@ -309,11 +331,15 @@ service cloud.firestore {
       match /equipe/{eid} {
         // O convite é lido pelo próprio técnico que recebeu o link (ele precisa
         // do código, que é longo e aleatório). A listagem é só do administrador.
-        allow get: if ehAdmin(emp) || (logado() && resource.data.status == 'convite');
+        allow get: if ehAdmin(emp) || (logado() && resource.data.status == 'convite')
+          // o técnico lê o próprio cadastro para saber o que foi liberado
+          || (ehTecnico(emp) && dadosUsuario().equipeId == eid);
         allow list: if ehAdmin(emp);
 
         allow create: if ehAdmin(emp)
-          && request.resource.data.keys().hasOnly(['nome', 'telefone', 'status', 'uid', 'criadoEm'])
+          && request.resource.data.keys().hasOnly(['nome', 'telefone', 'status', 'uid', 'criadoEm', 'verValores', 'alterarValores'])
+          && (!('verValores' in request.resource.data) || request.resource.data.verValores is bool)
+          && (!('alterarValores' in request.resource.data) || request.resource.data.alterarValores is bool)
           && request.resource.data.status == 'convite'
           && request.resource.data.uid == null
           && request.resource.data.nome is string
@@ -323,7 +349,9 @@ service cloud.firestore {
         allow update:
           // administrador edita nome/telefone e bloqueia/reativa quem já entrou
           if (ehAdmin(emp)
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'status'])
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'status', 'verValores', 'alterarValores'])
+                && (!('verValores' in request.resource.data) || request.resource.data.verValores is bool)
+                && (!('alterarValores' in request.resource.data) || request.resource.data.alterarValores is bool)
                 && request.resource.data.nome is string
                 && request.resource.data.nome.size() > 0 && request.resource.data.nome.size() <= 100
                 && request.resource.data.telefone is string && request.resource.data.telefone.size() <= 20
@@ -389,24 +417,42 @@ service cloud.firestore {
       match /servicos/{sid} {
         // Técnico só enxerga serviços atribuídos a ele (a consulta do app já
         // filtra por tecnicoUid; sem o filtro, o Firestore recusa).
+        // (serviços antigos têm só tecnicoUid; os novos também têm a lista tecnicoUids)
         allow read: if ehAdmin(emp)
-          || (ehTecnico(emp) && resource.data.tecnicoUid == request.auth.uid);
+          || (ehTecnico(emp) && (resource.data.tecnicoUid == request.auth.uid || request.auth.uid in resource.data.tecnicoUids));
         allow create: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoAdicionaServico(emp);
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
-          || tecnicoConcluiServico(emp);
+          || tecnicoConcluiServico(emp, sid);
         allow delete: if ehAdmin(emp);
       }
 
-      // --- Valores em dinheiro (SÓ administrador) -------------------------------
+      // --- Valores em dinheiro (administrador; técnico só se liberado) ---------------
       match /valores/{sid} {
-        allow read: if ehAdmin(emp);
+        // O técnico liberado lê só o valor de serviço dele, um por vez (nunca a lista).
+        allow get: if ehAdmin(emp)
+          || (tecnicoVe(emp) && ehDoServico(get(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data));
+        allow list: if ehAdmin(emp);
+        // O técnico com "alterar valor e extras" só CRIA o valor no mesmo lote em que conclui o
+        // próprio serviço (o serviço estava agendado e passa a concluído). Depois, só o administrador altera.
+        allow create: if (ehAdmin(emp)
+            || (tecnicoAltera(emp)
+                && get(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data.status == 'agendado'
+                && ehDoServico(get(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data)
+                && getAfter(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data.status == 'concluido'))
+          && valoresValidos(request.resource.data);
+        allow update: if ehAdmin(emp) && valoresValidos(request.resource.data);
+        allow delete: if ehAdmin(emp);
+      }
+
+      // --- Valor padrão de cada tipo de serviço ------------------------------------
+      match /precos/{tid} {
+        allow read: if ehAdmin(emp) || tecnicoVe(emp);
         allow create, update: if ehAdmin(emp)
-          && request.resource.data.keys().hasOnly(['valorCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'])
+          && request.resource.data.keys().hasOnly(['valorCentavos', 'atualizadoEm'])
           && request.resource.data.valorCentavos is int
           && request.resource.data.valorCentavos >= 0
-          && request.resource.data.valorCentavos <= 100000000
-          && request.resource.data.tipoNome is string;
+          && request.resource.data.valorCentavos <= 100000000;
         allow delete: if ehAdmin(emp);
       }
     }
@@ -421,7 +467,7 @@ service cloud.firestore {
         && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 120
         && d.whatsapp is string && d.whatsapp.size() <= 20
         && (!('observacoes' in d) || (d.observacoes is string && d.observacoes.size() <= 1000))
-        && d.enderecos is list && d.enderecos.size() <= 2;
+        && d.enderecos is list && d.enderecos.size() <= 20;
     }
 
     function aparelhoValido(d) {
@@ -431,11 +477,11 @@ service cloud.firestore {
         && d.tipo in ['split', 'janela', 'piso-teto', 'cassete', 'multi-split', 'portatil', 'outro']
         && (!('btus' in d) || d.btus == null || (d.btus is int && d.btus >= 0 && d.btus <= 200000))
         && (!('nome' in d) || (d.nome is string && d.nome.size() <= 80))
-        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 500));
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 600));
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
@@ -448,20 +494,41 @@ service cloud.firestore {
         && (!('duracaoMin' in d) || (d.duracaoMin is int && d.duracaoMin >= 15 && d.duracaoMin <= 720))
         && (!('ocupacaoMin' in d) || (d.ocupacaoMin is int && d.ocupacaoMin >= 15 && d.ocupacaoMin <= 2880))
         && (!('ordem' in d) || d.ordem is int)
+        && (!('tecnicoUids' in d) || (d.tecnicoUids is list && d.tecnicoUids.size() <= 20))
+        && (!('tecnicosNomes' in d) || (d.tecnicosNomes is list && d.tecnicosNomes.size() <= 20))
+        && (!('ocupacaoPorTecnico' in d) || d.ocupacaoPorTecnico is map)
         && (!('retornoSituacao' in d) || d.retornoSituacao == null || d.retornoSituacao in ['pendente', 'agendado', 'recusado', 'feito']);
     }
 
-    // O técnico só pode concluir/preencher um serviço SEU que ainda está agendado,
-    // e nunca mexe em valor, cliente, tipo, data agendada ou outro técnico.
-    function tecnicoConcluiServico(emp) {
+    // Valor do serviço (coleção valores): confere o formato. O total (valorCentavos) não dá para
+    // conferir aqui (as regras não somam listas); o app calcula e o administrador pode corrigir.
+    function valoresValidos(d) {
+      return d.keys().hasOnly(['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'])
+        && d.valorCentavos is int && d.valorCentavos >= 0 && d.valorCentavos <= 100000000
+        && d.tipoNome is string
+        && (!('baseCentavos' in d) || (d.baseCentavos is int && d.baseCentavos >= 0 && d.baseCentavos <= 100000000))
+        && (!('descontoCentavos' in d) || (d.descontoCentavos is int && d.descontoCentavos >= 0 && d.descontoCentavos <= 100000000))
+        && (!('extras' in d) || (d.extras is list && d.extras.size() <= 20));
+    }
+
+    // O técnico só pode concluir/preencher um serviço SEU (qualquer um dos técnicos do serviço)
+    // que ainda está agendado, e nunca mexe em cliente, tipo (salvo "a definir"), data agendada
+    // ou nos técnicos. A conclusão vale para o serviço inteiro. "valorDefinido" só muda se ele
+    // tem a permissão de alterar valores e grava o valor no mesmo lote.
+    function tecnicoConcluiServico(emp, sid) {
       let d = request.resource.data;
+      let mudou = d.diff(resource.data).affectedKeys();
+      let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm'];
+      let podeValor = tecnicoAltera(emp) && existsAfter(/databases/$(database)/documents/empresas/$(emp)/valores/$(sid));
+      let comValor = podeValor ? basicas + ['valorDefinido'] : basicas;
+      let comTipo = comValor + ['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin'];
       return ehTecnico(emp)
-        && resource.data.tecnicoUid == request.auth.uid
+        && ehDoServico(resource.data)
         && resource.data.status == 'agendado'
-        && d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin'])
         // O tipo do serviço só pode ser escolhido pelo técnico quando o agendamento
         // foi feito sem serviço ("Serviço a definir": tipoServicoId vazio).
-        && (resource.data.tipoServicoId == '' || d.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm']))
+        && mudou.hasOnly(resource.data.tipoServicoId == '' ? comTipo : comValor)
+        && (!('valorDefinido' in mudou) || d.valorDefinido == true)
         && d.status == 'concluido'
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool);
@@ -475,6 +542,7 @@ service cloud.firestore {
       return ehTecnico(emp)
         && servicoValido(d)
         && d.tecnicoUid == request.auth.uid
+        && (!('tecnicoUids' in d) || d.tecnicoUids == [request.auth.uid])
         && d.status == 'agendado'
         && d.tipoServicoId is string && d.tipoServicoId.size() > 0
         && d.pago == false

@@ -17,10 +17,10 @@ import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
 import { listarAgendados, listarAtrasados, contarRetornos } from '../servicos/servicos.js';
-import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarHora, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
+import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
-import { estaAtrasado } from '../dominio/servicos.js';
-import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDoServico, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento } from '../dominio/servicos.js';
+import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
 /** Quantos dias antes do fim do teste/plano o aviso aparece. */
 const DIAS_AVISO_PLANO = 7;
@@ -65,15 +65,21 @@ export default async function montar(ctx) {
       contarRetornos({ empresaId: usuario.empresaId, hojeISO: hojeISO(agora), diasAviso }).catch(() => 0),
     ]);
 
-    // Próximo serviço: o primeiro de hoje que ainda não passou; senão, o primeiro dos próximos dias.
-    let proximo = doDia.find((s) => s.dataAgendada.getTime() >= agora.getTime()) || null;
-    if (!proximo) {
-      const futuros = await listarAgendados({ empresaId: usuario.empresaId, de: inicioDoDiaSeguinte(agora) }).catch(() => []);
-      proximo = futuros[0] || null;
+    // Próxima visita: a primeira de hoje que ainda não passou; senão, a primeira dos próximos dias.
+    // (Todos os serviços da mesma visita vêm juntos no cartão.)
+    let origem = doDia;
+    let primeiro = doDia.find((s) => s.dataAgendada.getTime() >= agora.getTime()) || null;
+    if (!primeiro) {
+      origem = await listarAgendados({ empresaId: usuario.empresaId, de: inicioDoDiaSeguinte(agora) }).catch(() => []);
+      primeiro = origem[0] || null;
     }
     if (!ctx.ativo()) return;
+    const proximo = primeiro
+      ? agruparAgendamentos(origem.filter((l) => chaveDoAgendamento(l) === chaveDoAgendamento(primeiro)))[0]
+      : null;
+    const visitasHoje = agruparAgendamentos(doDia).length;
 
-    servicosNaTela = proximo ? [proximo] : [];
+    servicosNaTela = proximo ? proximo.linhas : [];
     // Atrasados = antes de hoje OU hoje com horário que já passou.
     const totalAtrasados = atrasados.length + doDia.filter((s) => estaAtrasado(s, agora)).length;
 
@@ -81,7 +87,7 @@ export default async function montar(ctx) {
       ${topo}
       <div class="pilha">
         ${avisosDoAdmin(totalAtrasados)}
-        ${blocoProximo(proximo, doDia.length)}
+        ${blocoProximo(proximo, visitasHoje)}
         <div class="atalhos">
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Calendário e serviços')}
           ${atalho('#/clientes', 'clientes', 'Clientes', 'Cadastro e aparelhos')}
@@ -119,9 +125,9 @@ export default async function montar(ctx) {
     return avisos;
   }
 
-  /** "Próximo serviço" em destaque (ou convite para agendar). */
-  function blocoProximo(s, totalHoje) {
-    if (!s) {
+  /** "Próxima visita" em destaque (ou convite para agendar). */
+  function blocoProximo(visita, totalHoje) {
+    if (!visita) {
       return html`<div class="cartao">
         ${estadoVazio({
           icone: 'agenda',
@@ -131,25 +137,14 @@ export default async function montar(ctx) {
         })}
       </div>`;
     }
-    const ehHoje = paraISO(s.dataAgendada) === hojeISO();
+    const dia = visita.linhas[0].dataAgendada;
+    const ehHoje = paraISO(dia) === hojeISO();
     return html`
-      <section class="cartao cartao--destaque pilha pilha--pequena" aria-label="Próximo serviço">
+      <section class="pilha pilha--pequena" aria-label="Próxima visita">
         <div class="texto-suave texto-pequeno negrito">
-          Próximo serviço · ${ehHoje ? 'hoje' : formatarDiaExtenso(s.dataAgendada)}${totalHoje > 1 && ehHoje ? ` (${totalHoje} hoje)` : ''}
+          Próxima visita · ${ehHoje ? 'hoje' : formatarDiaExtenso(dia)}${totalHoje > 1 && ehHoje ? ` (${totalHoje} hoje)` : ''}
         </div>
-        <a class="servico-cartao__corpo" href="#/servico/${s.id}">
-          <div class="servico-cartao__hora">${formatarHora(s.dataAgendada)}</div>
-          <div class="expande">
-            <div class="item-lista__titulo">${s.clienteNome}</div>
-            <div class="item-lista__sub">${s.tipoServicoNome}${s.aparelhoResumo ? ` · ${s.aparelhoResumo}` : ''}</div>
-            ${s.local && html`<div class="item-lista__sub">${s.local}</div>`}
-            ${s.tecnicoNome && html`<div class="item-lista__sub">Técnico: ${s.tecnicoNome}</div>`}
-          </div>
-        </a>
-        <div class="acoes-cartao">
-          ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: s.id }, pequeno: true })}
-          ${botao({ texto: 'Ver serviço', href: `#/servico/${s.id}`, pequeno: true })}
-        </div>
+        ${cartaoDaVisita(visita, { mostrarTecnico: true, acoes: true, editar: true })}
       </section>`;
   }
 
@@ -172,13 +167,13 @@ export default async function montar(ctx) {
         ${antigos.length > 0 && html`
           <section class="pilha pilha--pequena" aria-label="Serviços atrasados">
             ${tituloSecao('Atrasados')}
-            ${antigos.map((s) => cartaoDoServico(s, { mostrarData: true, acoes: true }))}
+            ${agruparAgendamentos(antigos).map((v) => cartaoDaVisita(v, { mostrarData: true, acoes: true }))}
           </section>`}
         <section class="pilha pilha--pequena" aria-label="Serviços de hoje">
           ${tituloSecao('Hoje')}
           ${hoje.length === 0
     ? html`<div class="cartao">${estadoVazio({ icone: 'agenda', titulo: 'Nada para hoje', texto: 'Você não tem serviços agendados para hoje. Veja a agenda para os próximos dias.', acao: botao({ texto: 'Abrir agenda', variante: 'secundario', href: '#/agenda' }) })}</div>`
-    : hoje.map((s) => cartaoDoServico(s, { acoes: true }))}
+    : agruparAgendamentos(hoje).map((v) => cartaoDaVisita(v, { acoes: true }))}
         </section>
         <div class="atalhos">
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Meus próximos serviços')}

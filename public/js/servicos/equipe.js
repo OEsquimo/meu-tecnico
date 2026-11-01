@@ -41,10 +41,16 @@ export async function tecnicosParaAtribuir(empresaId, administrador) {
   return lista;
 }
 
+/** Quem pode alterar valores também pode ver (alterar sem ver não faria sentido). */
+export function permissoesDeValores({ verValores, alterarValores }) {
+  const alterar = alterarValores === true;
+  return { verValores: alterar || verValores === true, alterarValores: alterar };
+}
+
 /** Cria o convite. Retorna o id (que vai no link). */
-export async function criarConvite(empresaId, { nome, telefone }) {
+export async function criarConvite(empresaId, { nome, telefone, verValores = false, alterarValores = false }) {
   const id = novoId(caminhoEquipe(empresaId));
-  await gravar([op.criar(`${caminhoEquipe(empresaId)}/${id}`, { nome, telefone, status: 'convite', uid: null, criadoEm: AGORA })]);
+  await gravar([op.criar(`${caminhoEquipe(empresaId)}/${id}`, { nome, telefone, ...permissoesDeValores({ verValores, alterarValores }), status: 'convite', uid: null, criadoEm: AGORA })]);
   invalidarCache(`${empresaId}:equipe`);
   return id;
 }
@@ -90,9 +96,12 @@ export async function aceitarConvite({ empresaId, equipeId, nome, uid }) {
   invalidarCache(`${empresaId}:equipe`);
 }
 
-/** Edita nome e telefone (e o nome no vínculo, se o técnico já entrou). */
-export async function editarFuncionario(empresaId, membro, { nome, telefone }) {
-  const operacoes = [op.atualizar(`${caminhoEquipe(empresaId)}/${membro.id}`, { nome, telefone, status: membro.status })];
+/** Edita nome, telefone e permissões de valores (e o nome no vínculo, se o técnico já entrou). */
+export async function editarFuncionario(empresaId, membro, { nome, telefone, verValores, alterarValores }) {
+  const operacoes = [op.atualizar(`${caminhoEquipe(empresaId)}/${membro.id}`, {
+    nome, telefone, status: membro.status,
+    ...permissoesDeValores({ verValores: verValores ?? membro.verValores, alterarValores: alterarValores ?? membro.alterarValores }),
+  })];
   if (membro.uid) operacoes.push(op.atualizar(`usuarios/${membro.uid}`, { nome, ativo: membro.status !== 'bloqueado' }));
   await gravar(operacoes);
   invalidarCache(`${empresaId}:equipe`);

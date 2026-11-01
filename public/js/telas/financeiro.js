@@ -10,14 +10,14 @@
 // período escolhido é carregado.
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, comCarregando, toast, escolher, mostrarErro } from '../nucleo/ui.js';
-import { cabecalho, botao, abas, estadoVazio, esqueletos, aviso, itemLista, campoTexto } from '../nucleo/componentes.js';
+import { html, mostrar, aoClicar } from '../nucleo/ui.js';
+import { cabecalho, botao, abas, estadoVazio, esqueletos, aviso, itemLista } from '../nucleo/componentes.js';
 import { resumoDoPlano } from '../nucleo/sessao.js';
 import { carregarFinanceiro } from '../servicos/valores.js';
-import { listarSemValor, definirValor } from '../servicos/servicos.js';
+import { listarSemValor } from '../servicos/servicos.js';
 import { formatarReais } from '../dominio/dinheiro.js';
-import { reaisParaCentavos } from '../dominio/dinheiro.js';
 import { formatarDataBR } from '../dominio/datas.js';
+import { nomesDosTecnicos, dividirCentavos } from '../dominio/servicos.js';
 import { mostrarFalha } from './_auxiliar-admin.js';
 
 const ABAS = [
@@ -26,59 +26,22 @@ const ABAS = [
 ];
 
 /**
- * Janela para digitar o valor de um serviço (no lugar do window.prompt do navegador).
- * Devolve o texto digitado ou null se a pessoa cancelar. Valida na hora: não fecha com valor inválido.
+ * Soma por técnico (visão do administrador) a partir dos serviços e valores do período.
+ * Serviço com mais de um técnico: o valor é dividido igualmente entre eles (os centavos
+ * que sobram vão para o primeiro) e o serviço conta para cada um.
  */
-function pedirValor(s) {
-  return new Promise((resolver) => {
-    const janela = document.createElement('dialog');
-    janela.className = 'janela';
-    janela.innerHTML = String(html`
-      <form method="dialog" class="formulario" novalidate>
-        <h2>Valor do serviço</h2>
-        <p class="texto-suave">${s.clienteNome} · ${s.tipoServicoNome}</p>
-        <div class="campo" data-campo="valor">
-          <label class="campo__rotulo" for="campo-valor-janela">Valor (R$)</label>
-          <input class="campo__entrada" id="campo-valor-janela" name="valor" inputmode="decimal" placeholder="150,00" autocomplete="off" />
-          <p class="campo__erro" role="alert" hidden></p>
-        </div>
-        <div class="janela__acoes">
-          ${botao({ texto: 'Salvar valor', tipo: 'submit', bloco: true })}
-          ${botao({ texto: 'Cancelar', variante: 'secundario', bloco: true, acao: 'cancelar-valor' })}
-        </div>
-      </form>`);
-    document.body.appendChild(janela);
-    let resultado = null;
-    const form = janela.querySelector('form');
-    const erro = janela.querySelector('.campo__erro');
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const texto = form.elements.valor.value.trim();
-      const centavos = reaisParaCentavos(texto);
-      if (centavos === null || centavos > 100000000) {
-        erro.textContent = 'Valor inválido. Exemplo: 150 ou 150,50';
-        erro.hidden = false;
-        return;
-      }
-      resultado = centavos;
-      janela.close();
-    });
-    janela.querySelector('[data-acao="cancelar-valor"]').addEventListener('click', () => janela.close());
-    janela.addEventListener('close', () => { janela.remove(); resolver(resultado); });
-    janela.showModal();
-    form.elements.valor.focus();
-  });
-}
-
-/** Soma por técnico (visão do administrador) a partir dos serviços e valores do período. */
 function totaisPorTecnico(servicos, valores) {
   const mapa = new Map();
   for (const s of servicos) {
-    const nome = s.concluidoPorNome || s.tecnicoNome || 'Sem nome';
-    const g = mapa.get(nome) || { nome, quantidade: 0, totalCentavos: 0 };
-    g.quantidade += 1;
-    if (Number.isInteger(valores[s.id])) g.totalCentavos += valores[s.id];
-    mapa.set(nome, g);
+    const nomes = nomesDosTecnicos(s).filter(Boolean);
+    const lista = nomes.length > 0 ? nomes : [s.concluidoPorNome || 'Sem nome'];
+    const partes = Number.isInteger(valores[s.id]) ? dividirCentavos(valores[s.id], lista.length) : null;
+    lista.forEach((nome, i) => {
+      const g = mapa.get(nome) || { nome, quantidade: 0, totalCentavos: 0 };
+      g.quantidade += 1;
+      if (partes) g.totalCentavos += partes[i];
+      mapa.set(nome, g);
+    });
   }
   return [...mapa.values()].sort((a, b) => b.totalCentavos - a.totalCentavos);
 }
@@ -176,17 +139,7 @@ export default async function montar(ctx) {
 
   aoClicar(raiz, {
     aba: (el) => { periodo = el.dataset.aba; carregar(); },
-    valor: async (el) => {
-      const s = semValor.find((x) => x.id === el.dataset.id);
-      if (!s) return;
-      const centavos = await pedirValor(s);
-      if (centavos === null) return;
-      try {
-        await definirValor(empresaId, s, centavos);
-        toast('Valor salvo.', 'sucesso');
-        carregar();
-      } catch (e) { mostrarErro(e); }
-    },
+    valor: (el) => { location.hash = `#/servico/${encodeURIComponent(el.dataset.id)}/valor`; },
   });
 
   await carregar();

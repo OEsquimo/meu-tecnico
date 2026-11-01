@@ -23,11 +23,12 @@ export const CAMPOS_PERMITIDOS = {
   servicos: [
     'clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId',
     'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid',
-    'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
+    'tecnicoNome', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
     'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
   ],
-  valores: ['valorCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
+  valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
+  precos: ['valorCentavos', 'atualizadoEm'],
 };
 
 export const COLECOES_DO_BACKUP = Object.keys(CAMPOS_PERMITIDOS);
@@ -62,7 +63,7 @@ export function filtrarCampos(colecao, doc) {
 
 /**
  * Monta o objeto do backup.
- * @param {object} dados { empresa, tiposServico, clientes, aparelhos, servicos, valores, equipe }
+ * @param {object} dados { empresa, tiposServico, clientes, aparelhos, servicos, valores, precos, equipe }
  * Cada lista tem itens { id, ...campos }.
  */
 export function montarBackup(dados, agora = new Date()) {

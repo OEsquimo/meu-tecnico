@@ -16,13 +16,13 @@ import { definirAdaptadorAuth } from '../../public/js/nucleo/autenticacao.js';
 import { sessao } from '../../public/js/nucleo/sessao.js';
 import { PLANOS_PADRAO, REGRAS_PADRAO, TIPOS_SERVICO_PADRAO } from '../../public/js/nucleo/constantes.js';
 import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../public/js/dominio/agenda.js';
-import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico } from '../../public/js/dominio/servicos.js';
+import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos } from '../../public/js/dominio/servicos.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
 import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
 import {
   estadoInicial, novoGrupo, novoServico, tecnicosLivresParaServico, limparTecnicosOcupados, pendenciasDoAgendamento,
-  montarLinhas, estadoDeLinhas, tecnicoSugerido, problemasDoAgendamento, duracaoDoServicoNaTela, textoDaDuracao,
+  montarLinhas, estadoDeLinhas, tecnicosSugeridos, problemasDoAgendamento, duracaoDoServicoNaTela, textoDaDuracao,
 } from '../../public/js/telas/agendamento-comum.js';
 
 const E = 'demo-admin';
@@ -310,7 +310,7 @@ const ocupado = (uid, h, min = 60, extra = {}) => ({ id: `o${uid}${h}`, status: 
 test('tela: só aparecem técnicos livres e o mesmo técnico soma os tempos', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
   const g = novoGrupo('a1'); e.grupos.push(g);
-  const s1 = novoServico({ tipoId: limpeza.id, tecnicoUid: 'tec-a' });
+  const s1 = novoServico({ tipoId: limpeza.id, tecnicoUids: ['tec-a'] });
   const s2 = novoServico({ tipoId: limpeza.id });
   g.servicos.push(s1, s2);
   assert.deepEqual(tecnicosLivresParaServico({ ...ctxTela(e), servico: s2 }).map((t) => t.uid), ['tec-a', 'tec-b']);
@@ -321,14 +321,14 @@ test('tela: só aparecem técnicos livres e o mesmo técnico soma os tempos', ()
 
 test('tela: mudar a hora tira o técnico que ficou ocupado e bloqueia o agendamento sem técnico livre', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
-  e.cliente = cliente; e.tecnicoUid = 'tec-a';
+  e.cliente = cliente; e.tecnicoUids = ['tec-a'];
   const g = novoGrupo('a1'); e.grupos.push(g);
-  g.servicos.push(novoServico({ tipoId: limpeza.id, tecnicoUid: 'tec-a' }));
+  g.servicos.push(novoServico({ tipoId: limpeza.id, tecnicoUids: ['tec-a'] }));
   assert.deepEqual(pendenciasDoAgendamento(e, ctxTela(e)), []);
   const agendados = [ocupado('tec-a', 9)];
   assert.equal(limparTecnicosOcupados(ctxTela(e, agendados)), 1);
-  assert.equal(g.servicos[0].tecnicoUid, '');
-  assert.equal(e.tecnicoUid, '');
+  assert.deepEqual(g.servicos[0].tecnicoUids, []);
+  assert.deepEqual(e.tecnicoUids, []);
   assert.ok(pendenciasDoAgendamento(e, ctxTela(e, agendados)).some((p) => /técnico deste serviço/.test(p)));
   const todos = [ocupado('tec-a', 9), ocupado('tec-b', 9)];
   assert.ok(pendenciasDoAgendamento(e, ctxTela(e, todos)).some((p) => /Nenhum técnico está livre/.test(p)));
@@ -340,26 +340,26 @@ test('tela: mudar a hora tira o técnico que ficou ocupado e bloqueia o agendame
 test('tela: sem cliente ou sem dia/hora não dá para agendar; sem aparelho/serviço dá (opção A)', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
   assert.ok(pendenciasDoAgendamento(e, ctxTela(e)).includes('Escolha o cliente.'));
-  e.cliente = cliente; e.tecnicoUid = 'tec-b';
+  e.cliente = cliente; e.tecnicoUids = ['tec-b'];
   assert.deepEqual(pendenciasDoAgendamento(e, ctxTela(e)), []);
   e.hora = '';
   assert.ok(pendenciasDoAgendamento(e, ctxTela(e)).includes('Escolha o dia e a hora.'));
 });
 
-test('tela: técnico sugerido para serviço novo é o do agendamento, se estiver livre', () => {
+test('tela: técnicos sugeridos para serviço novo são os do agendamento que estiverem livres', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
-  e.tecnicoUid = 'tec-b';
+  e.tecnicoUids = ['tec-b'];
   const s = novoServico({ tipoId: limpeza.id });
   e.grupos.push({ ...novoGrupo('a1'), servicos: [s] });
-  assert.equal(tecnicoSugerido({ ...ctxTela(e), servico: s }), 'tec-b');
-  assert.equal(tecnicoSugerido({ ...ctxTela(e, [ocupado('tec-b', 9)]), servico: s }), 'tec-a');
+  assert.deepEqual(tecnicosSugeridos({ ...ctxTela(e), servico: s }), ['tec-b']);
+  assert.deepEqual(tecnicosSugeridos({ ...ctxTela(e, [ocupado('tec-b', 9)]), servico: s }), ['tec-a']);
 });
 
 test('tela: estado -> linhas -> estado preserva aparelhos, serviços, técnicos e observações', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
-  e.cliente = cliente; e.tecnicoUid = 'tec-a'; e.observacao = 'geral';
+  e.cliente = cliente; e.tecnicoUids = ['tec-a']; e.observacao = 'geral';
   const g1 = novoGrupo('a1'); g1.obs = 'do aparelho';
-  g1.servicos.push(novoServico({ tipoId: limpeza.id, tecnicoUid: 'tec-a', obs: 'do serviço' }), novoServico({ tipoId: TIPOS[4].id, tecnicoUid: 'tec-b' }));
+  g1.servicos.push(novoServico({ tipoId: limpeza.id, tecnicoUids: ['tec-a'], obs: 'do serviço' }), novoServico({ tipoId: TIPOS[4].id, tecnicoUids: ['tec-b', 'tec-a'] }));
   const g2 = novoGrupo('a2'); // aparelho sem serviço ainda
   e.grupos.push(g1, g2);
   const linhas = montarLinhas(e, {
@@ -373,14 +373,14 @@ test('tela: estado -> linhas -> estado preserva aparelhos, serviços, técnicos 
   assert.equal(linhas[0].obsServico, 'do serviço');
   // Simula as linhas gravadas e volta para o estado.
   const gravadas = linhas.map((l, i) => ({
-    id: `l${i}`, status: 'agendado', aparelhoId: l.aparelho?.id || null, tipoServicoId: l.tipo?.id || '', tecnicoUid: l.tecnico?.uid || null,
+    id: `l${i}`, status: 'agendado', aparelhoId: l.aparelho?.id || null, tipoServicoId: l.tipo?.id || '', tecnicoUid: l.tecnicos[0]?.uid || null, tecnicoUids: l.tecnicos.map((t) => t.uid),
     obsAparelho: l.obsAparelho, obsServico: l.obsServico, obsAgendamento: 'geral', enderecoId: null,
   }));
   const volta = estadoDeLinhas(gravadas, { cliente, data: DIA, hora: '09:00' });
   assert.equal(volta.grupos.length, 2);
   assert.equal(volta.grupos[0].servicos.length, 2);
   assert.equal(volta.grupos[0].obs, 'do aparelho');
-  assert.equal(volta.grupos[0].servicos[1].tecnicoUid, 'tec-b');
+  assert.deepEqual(volta.grupos[0].servicos[1].tecnicoUids, ['tec-b', 'tec-a']);
   assert.equal(volta.grupos[1].servicos.length, 0);
   assert.equal(volta.observacao, 'geral');
 });
@@ -418,9 +418,9 @@ test('editar/excluir: lembrete de retorno de origem volta a "pendente" quando a 
 
 test('tela: duração ajustada só num serviço vale na disponibilidade, vai para as linhas e volta ao editar', () => {
   const e = estadoInicial({ data: DIA, hora: '09:00' });
-  e.cliente = cliente; e.tecnicoUid = 'tec-a';
+  e.cliente = cliente; e.tecnicoUids = ['tec-a'];
   const g = novoGrupo('a1'); e.grupos.push(g);
-  const s = novoServico({ tipoId: limpeza.id, tecnicoUid: 'tec-a' }); // limpeza = 60 min
+  const s = novoServico({ tipoId: limpeza.id, tecnicoUids: ['tec-a'] }); // limpeza = 60 min
   g.servicos.push(s);
   const tiposPorId = Object.fromEntries(TIPOS.map((t) => [t.id, t]));
   assert.equal(duracaoDoServicoNaTela(s, tiposPorId), 60);
@@ -452,7 +452,7 @@ test('tela: cada problema aponta o item para onde a tela deve rolar', () => {
   const g = novoGrupo('a1'); e.grupos.push(g);
   const s = novoServico({ tipoId: limpeza.id }); g.servicos.push(s);
   assert.deepEqual(problemasDoAgendamento(e, ctxTela(e))[0].alvo, { servico: s.chave });
-  s.tecnicoUid = 'tec-a';
+  s.tecnicoUids = ['tec-a'];
   assert.deepEqual(problemasDoAgendamento(e, ctxTela(e)), []);
   e.hora = '';
   assert.deepEqual(problemasDoAgendamento(e, ctxTela(e))[0].alvo, { campo: 'hora' });
@@ -468,4 +468,39 @@ test('tela: observação com texto abre sozinha ao editar; vazia fica recolhida'
   assert.equal(e.obsAberta, true);
   assert.equal(e.grupos[0].obsAberta, false);
   assert.equal(e.grupos[0].servicos[0].obsAberta, true);
+});
+
+// ---- Vários técnicos por serviço ----
+test('vários técnicos: o serviço guarda todos, o primeiro nos campos antigos, e cada um fica ocupado', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnicos: [TEC_A, TEC_B] }] }));
+  const [l] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.deepEqual(l.tecnicoUids, ['tec-a', 'tec-b']);
+  assert.equal(l.tecnicoUid, 'tec-a');
+  assert.deepEqual(l.tecnicosNomes, [TEC_A.nome, TEC_B.nome]);
+  // Os dois ficam ocupados no horário: um terceiro serviço com qualquer um deles conflita.
+  await assert.rejects(() => salvarAgendamento(base({ hora: '09:30', linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_B }] })), /já tem outro serviço/);
+});
+
+test('vários técnicos: agendar sem nenhum técnico na linha é recusado', async () => {
+  await novoBanco();
+  await assert.rejects(() => salvarAgendamento(base({ tecnico: null, linhas: [{ aparelho: ap1, tipo: limpeza, tecnicos: [] }] })), /pelo menos um técnico/);
+});
+
+test('vários técnicos: serviço antigo (só tecnicoUid) continua valendo para consultas e disponibilidade', () => {
+  const antigo = ocupado('tec-a', 9);
+  assert.deepEqual(tecnicosDoServico(antigo), ['tec-a']);
+  assert.ok(servicoTemTecnico(antigo, 'tec-a'));
+  assert.equal(servicoTemTecnico(antigo, 'tec-b'), false);
+  const novo = { ...ocupado('tec-a', 9), tecnicoUids: ['tec-a', 'tec-b'], tecnicosNomes: ['Ana', 'Bia'] };
+  assert.equal(tecnicoEstaLivre('tec-b', new Date(2031, 2, 10, 9), 60, [novo]), false);
+  assert.equal(tecnicoEstaLivre('tec-b', new Date(2031, 2, 10, 11), 60, [novo]), true);
+});
+
+test('vários técnicos: dividir valor igualmente, centavos que sobram vão para os primeiros', () => {
+  assert.deepEqual(dividirCentavos(1000, 3), [334, 333, 333]);
+  assert.deepEqual(dividirCentavos(10000, 2), [5000, 5000]);
+  assert.deepEqual(dividirCentavos(5, 3), [2, 2, 1]);
+  assert.deepEqual(dividirCentavos(777, 1), [777]);
+  for (const [t, n] of [[999, 4], [1, 5], [123457, 7]]) assert.equal(dividirCentavos(t, n).reduce((a, b) => a + b, 0), t);
 });

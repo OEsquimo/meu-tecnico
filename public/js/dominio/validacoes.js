@@ -178,7 +178,7 @@ export function validarAparelho({ tipo, btus, nome, descricao, enderecoId }) {
   const nomeLimpo = texto(nome);
   if (nomeLimpo.length > 80) erros.nome = 'O nome está muito longo (máximo 80 letras).';
   const desc = texto(descricao);
-  if (desc.length > 500) erros.descricao = 'A descrição está muito longa (máximo 500 letras).';
+  if (desc.length > 600) erros.descricao = 'A descrição está muito longa (máximo 600 letras).';
 
   return resultado(erros, { tipo: tipoLimpo, btus: btusLimpo, nome: nomeLimpo, descricao: desc, enderecoId: texto(enderecoId) || null });
 }
@@ -209,9 +209,8 @@ export function validarAgendamento({ clienteId, tipoServicoId, data, hora, ender
 export function validarConclusao({ descricao, valor, pago, retornoMeses, aparelhoId }, { exigirValor, geraRetorno, exigirAparelho = false }) {
   const erros = {};
   if (exigirAparelho && !texto(aparelhoId)) erros.aparelhoId = 'Escolha ou cadastre o aparelho antes de concluir.';
-  const desc = texto(descricao);
-  if (desc.length < 3) erros.descricao = 'Descreva o que foi feito (mesmo que seja curto).';
-  else if (desc.length > 2000) erros.descricao = 'A descrição está muito longa (máximo 2000 letras).';
+  const desc = texto(descricao); // opcional: pode concluir sem descrever
+  if (desc.length > 2000) erros.descricao = 'A descrição está muito longa (máximo 2000 letras).';
 
   let valorCentavos = null;
   if (exigirValor) {

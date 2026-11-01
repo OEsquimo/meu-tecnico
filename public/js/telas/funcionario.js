@@ -6,7 +6,7 @@
 // =============================================================================
 
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast, mostrarErro } from '../nucleo/ui.js';
-import { cabecalho, campoTexto, botao, esqueletos } from '../nucleo/componentes.js';
+import { cabecalho, campoTexto, interruptor, botao, esqueletos } from '../nucleo/componentes.js';
 import { buscarMembro, editarFuncionario, alterarBloqueio, removerFuncionario } from '../servicos/equipe.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { validarFuncionario } from '../dominio/validacoes.js';
@@ -32,6 +32,8 @@ export default async function montar(ctx) {
           <div data-erros-gerais></div>
           ${campoTexto({ nome: 'nome', rotulo: 'Nome', valor: m.nome, maximo: 100 })}
           ${campoTexto({ nome: 'telefone', rotulo: 'WhatsApp', tipo: 'tel', modo: 'tel', valor: formatarTelefone(m.telefone) })}
+      ${interruptor({ nome: 'verValores', titulo: 'Pode ver valores', descricao: 'Vê o valor do serviço (para responder quando o cliente perguntar). Não vê o Financeiro.', marcado: m.verValores === true || m.alterarValores === true })}
+      ${interruptor({ nome: 'alterarValores', titulo: 'Pode alterar valor e extras', descricao: 'Ao concluir, pode mudar o valor e acrescentar extras e desconto. Quem altera também vê.', marcado: m.alterarValores === true })}
           ${botao({ texto: 'Salvar', tipo: 'submit', bloco: true })}
         </form>
         ${botao({ texto: bloqueado ? 'Reativar acesso' : 'Bloquear acesso', variante: 'secundario', iconeNome: 'cadeado', acao: 'bloqueio', bloco: true })}
@@ -42,11 +44,12 @@ export default async function montar(ctx) {
     form.elements.telefone.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); });
     aoEnviar(form, async () => {
       limparErrosGerais(form);
-      const r = validarFuncionario(lerCampos(form));
+      const campos = lerCampos(form);
+      const r = validarFuncionario(campos);
       if (!r.valido) { mostrarErrosNosCampos(form, r.erros); return; }
       await comCarregando(form.querySelector('[type="submit"]'), async () => {
         try {
-          await editarFuncionario(empresaId(), m, r.dados);
+          await editarFuncionario(empresaId(), m, { ...r.dados, verValores: campos.verValores === true, alterarValores: campos.alterarValores === true });
           toast('Salvo.', 'sucesso');
           ir('/equipe');
         } catch (erro) { mostrarErrosNosCampos(form, { geral: traduzirErro(erro) }); }

@@ -25,6 +25,7 @@ import { TIPOS_APARELHO, BTUS_COMUNS } from '../nucleo/constantes.js';
 import { buscarCliente } from '../servicos/clientes.js';
 import { buscarAparelho, criarAparelho, atualizarAparelho, excluirAparelho } from '../servicos/aparelhos.js';
 import { validarAparelho } from '../dominio/validacoes.js';
+import { ehISOValido, hojeISO } from '../dominio/datas.js';
 import { telaDeErro, rotuloDoEndereco, montarDescricaoAparelho, lerDescricaoAparelho, carregarEstilosClientes } from './clientes-comum.js';
 
 const OPCOES_TIPO = TIPOS_APARELHO.map((t) => ({ valor: t.valor, rotulo: t.rotulo }));
@@ -77,7 +78,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   // ---- 2. Valores iniciais ----
   const enderecos = cliente?.enderecos || [];
   const perguntaEndereco = enderecos.length > 1;
-  const { marca, modelo, observacoes } = lerDescricaoAparelho(aparelho?.descricao);
+  const { marca, modelo, numeroSerie, dataInstalacao, observacoes } = lerDescricaoAparelho(aparelho?.descricao);
   const btusAtual = aparelho?.btus ? String(aparelho.btus) : '';
   const btusEhComum = BTUS_COMUNS.map(String).includes(btusAtual);
   const escolhaInicial = !btusAtual ? '' : btusEhComum ? btusAtual : 'outro';
@@ -98,6 +99,8 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         ${campoSelecao({ nome: 'tipo', rotulo: 'Tipo de aparelho', opcoes: OPCOES_TIPO, vazio: 'Escolha o tipo', valor: aparelho?.tipo ?? '' })}
         ${campoTexto({ nome: 'marca', rotulo: 'Marca', valor: marca, opcional: true, maximo: 40, placeholder: 'Samsung, LG, Midea...' })}
         ${campoTexto({ nome: 'modelo', rotulo: 'Modelo', valor: modelo, opcional: true, maximo: 60 })}
+        ${campoTexto({ nome: 'numeroSerie', rotulo: 'Número de série', valor: numeroSerie, opcional: true, maximo: 40, ajuda: 'Fica na etiqueta do aparelho. Ajuda na garantia.' })}
+        ${campoTexto({ nome: 'dataInstalacao', rotulo: 'Data da instalação', valor: dataInstalacao, opcional: true, tipo: 'date', maximo: 10 })}
         ${campoPilulas({ nome: 'btusEscolha', rotulo: 'Capacidade (BTUs)', opcoes: OPCOES_BTUS, valor: escolhaInicial })}
         <div id="area-btus-outro" ${escolhaInicial === 'outro' ? '' : 'hidden'}>
           ${campoTexto({ nome: 'btus', rotulo: 'Quantos BTUs?', valor: btusAtual, tipo: 'text', modo: 'numeric', maximo: 7, placeholder: 'Ex.: 15000' })}
@@ -153,7 +156,17 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   aoEnviar(form, async () => {
     limparErrosGerais(form);
     const c = lerCampos(form);
-    const descricao = montarDescricaoAparelho({ marca: c.marca, modelo: c.modelo, observacoes: c.observacoes });
+    if (c.dataInstalacao && !ehISOValido(c.dataInstalacao)) {
+      mostrarErrosNosCampos(form, { dataInstalacao: 'Data inválida. Escolha uma data pelo calendário.' });
+      return;
+    }
+    if (c.dataInstalacao && c.dataInstalacao > hojeISO()) {
+      mostrarErrosNosCampos(form, { dataInstalacao: 'A instalação não pode ser no futuro.' });
+      return;
+    }
+    const descricao = montarDescricaoAparelho({
+      marca: c.marca, modelo: c.modelo, numeroSerie: c.numeroSerie, dataInstalacao: c.dataInstalacao || '', observacoes: c.observacoes,
+    });
     const r = validarAparelho({
       tipo: c.tipo,
       btus: c.btusEscolha === '' ? '' : c.btus,

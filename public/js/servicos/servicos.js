@@ -10,18 +10,20 @@
 //   1. o técnico não tem acesso à ficha dos clientes, mas precisa saber onde ir;
 //   2. o histórico fica fiel ao que era na época, mesmo se o cliente mudar;
 //   3. economiza leituras do banco (plano grátis do Firebase tem limite diário).
-// VALORES EM DINHEIRO ficam em outra coleção (valores/), só o administrador lê.
+// VALORES EM DINHEIRO ficam em outra coleção (valores/): o administrador lê tudo; o técnico só
+// o que o administrador liberou (ver ./equipe.js e firestore.rules).
 // =============================================================================
 
 import { ler, listar, gravar, operacao as op, novoId, AGORA } from '../nucleo/banco.js';
 import { invalidarCache } from '../nucleo/cache.js';
 import { ErroApp } from '../nucleo/erros.js';
 import { LIMITE_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
-import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico } from '../dominio/servicos.js';
+import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos } from '../dominio/servicos.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
+import { documentoDeValores, lerDocumentoDeValores } from '../dominio/valores.js';
 
 const caminho = (empresaId) => `empresas/${empresaId}/servicos`;
 const caminhoValores = (empresaId) => `empresas/${empresaId}/valores`;
@@ -30,8 +32,11 @@ const caminhoValores = (empresaId) => `empresas/${empresaId}/valores`;
 // AGENDAR / EDITAR / CANCELAR / EXCLUIR  (administrador)
 // -----------------------------------------------------------------------------
 
-/** Campos copiados do cliente/aparelho/tipo/técnico para dentro do serviço. */
-function camposCopiados({ cliente, endereco, aparelho, tipo, tecnico }) {
+/** Técnicos de uma linha: lista nova (`tecnicos`) ou o técnico único das telas e dos serviços antigos. */
+const tecnicosDaLinha = (l) => l.tecnicos ?? (l.tecnico ? [l.tecnico] : []);
+
+/** Campos copiados do cliente/aparelho/tipo/técnicos para dentro do serviço. */
+function camposCopiados({ cliente, endereco, aparelho, tipo, tecnico, tecnicos }) {
   return {
     clienteId: cliente.id,
     clienteNome: cliente.nome,
@@ -46,8 +51,7 @@ function camposCopiados({ cliente, endereco, aparelho, tipo, tecnico }) {
     tipoServicoNome: tipo?.nome ?? NOME_SERVICO_A_DEFINIR,
     geraRetorno: tipo?.geraRetorno === true,
     duracaoMin: tipo?.duracaoMin ?? DURACAO_PADRAO_MIN,
-    tecnicoUid: tecnico?.uid ?? null,
-    tecnicoNome: tecnico?.nome ?? '',
+    ...camposDosTecnicos(tecnicos ?? (tecnico ? [tecnico] : [])),
   };
 }
 
@@ -116,16 +120,19 @@ export async function excluirServico(empresaId, servicoId) {
 // `agendamentoId`, `dataAgendada` e `obsAgendamento`.
 // -----------------------------------------------------------------------------
 
-/** Confere, no banco, se cada técnico escolhido está livre. Lança ErroApp com o nome de quem não está. */
+/** Minutos que cada técnico fica ocupado nesta visita (soma dos serviços em que ele está). */
 function minutosPorTecnico(linhas) {
   const minutos = new Map(); // tecnicoUid -> minutos ocupados nesta visita
   for (const l of linhas) {
-    if (!l.tecnico?.uid) continue;
-    minutos.set(l.tecnico.uid, (minutos.get(l.tecnico.uid) || 0) + (l.duracaoMin || DURACAO_PADRAO_MIN));
+    for (const t of tecnicosDaLinha(l)) {
+      if (!t?.uid) continue;
+      minutos.set(t.uid, (minutos.get(t.uid) || 0) + (l.duracaoMin || DURACAO_PADRAO_MIN));
+    }
   }
   return minutos;
 }
 
+/** Confere, no banco, se cada técnico escolhido está livre. Lança ErroApp com o nome de quem não está. */
 export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null }) {
   const minutos = minutosPorTecnico(linhas);
   if (minutos.size === 0) return;
@@ -135,7 +142,7 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
   const agendados = await listarAgendados({ empresaId, de, ate });
   for (const [uid, total] of minutos) {
     if (!tecnicoEstaLivre(uid, inicio, total, agendados, ignorarAgendamento)) {
-      const nome = linhas.find((l) => l.tecnico?.uid === uid)?.tecnico?.nome || 'O técnico';
+      const nome = linhas.flatMap(tecnicosDaLinha).find((t) => t?.uid === uid)?.nome || 'O técnico';
       throw new ErroApp(`${nome} já tem outro serviço nesse horário. Escolha outro técnico ou outro horário.`, 'tecnico-ocupado');
     }
   }
@@ -158,7 +165,7 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
  *                                não são apagadas; só acompanham o novo dia/hora e a observação.
  * @returns {Promise<string>} id do agendamento
  */
-export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [] }) {
+export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [] }) {
   const inicio = combinarDataHora(data, hora);
   const editando = Boolean(agendamentoId);
   const fechadas = existentes.filter((l) => l.status !== STATUS.AGENDADO);
@@ -169,9 +176,16 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   const id = agendamentoId || novoId(caminho(empresaId));
 
   // Sem nenhum aparelho/serviço: uma linha "Serviço a definir" só com o técnico.
-  let todas = linhas.map((l) => ({ ...l, tecnico: l.tecnico ?? tecnico }));
-  if (todas.length === 0 && preservar.length === 0) todas = [{ aparelho: null, tipo: null, tecnico, duracaoMin: DURACAO_PADRAO_MIN }];
-  for (const l of todas) l.duracaoMin = l.duracaoMin || l.tipo?.duracaoMin || DURACAO_PADRAO_MIN;
+  // Cada serviço tem uma lista de técnicos (pelo menos um); quem vier sem técnico usa os do agendamento.
+  const padrao = tecnicos ?? (tecnico ? [tecnico] : []);
+  let todas = linhas.map((l) => ({ ...l, tecnicos: tecnicosDaLinha(l).length > 0 ? tecnicosDaLinha(l) : padrao }));
+  if (todas.length === 0 && preservar.length === 0) todas = [{ aparelho: null, tipo: null, tecnicos: padrao, duracaoMin: DURACAO_PADRAO_MIN }];
+  for (const l of todas) {
+    l.duracaoMin = l.duracaoMin || l.tipo?.duracaoMin || DURACAO_PADRAO_MIN;
+    if (tecnicosDaLinha(l).filter((t) => t?.uid).length === 0) {
+      throw new ErroApp('Escolha pelo menos um técnico para cada serviço.', 'sem-tecnico');
+    }
+  }
 
   await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? id : null });
   const minutos = minutosPorTecnico(todas);
@@ -180,9 +194,9 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   const mantidas = new Set();
   todas.forEach((l, ordem) => {
     const campos = {
-      ...camposCopiados({ cliente, endereco, aparelho: l.aparelho, tipo: l.tipo, tecnico: l.tecnico }),
+      ...camposCopiados({ cliente, endereco, aparelho: l.aparelho, tipo: l.tipo, tecnicos: l.tecnicos }),
       duracaoMin: l.duracaoMin,
-      ocupacaoMin: minutos.get(l.tecnico?.uid) || l.duracaoMin,
+      ...ocupacaoDaLinha(l, minutos),
       agendamentoId: id,
       obsAgendamento: observacao,
       ordem,
@@ -225,6 +239,13 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   return id;
 }
 
+/** Tempo que cada técnico da linha fica ocupado (por técnico) e o maior deles (`ocupacaoMin`, usado por serviços antigos). */
+function ocupacaoDaLinha(l, minutos) {
+  const porTecnico = {};
+  for (const t of tecnicosDaLinha(l)) if (t?.uid) porTecnico[t.uid] = minutos.get(t.uid) || l.duracaoMin;
+  return { ocupacaoPorTecnico: porTecnico, ocupacaoMin: Math.max(l.duracaoMin, ...Object.values(porTecnico)) };
+}
+
 /** Todas as linhas de um agendamento (inclui serviços antigos, que são um agendamento de uma linha). */
 export async function listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid = null } = {}) {
   // Serviço antigo (sem agendamentoId): o grupo dele é ele mesmo + os serviços adicionados depois
@@ -232,8 +253,9 @@ export async function listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid
   const chave = chaveDoAgendamento(servico);
   // O técnico só pode ler os serviços dele: a consulta precisa dizer isso (regra do Firestore).
   const onde = [['agendamentoId', '==', chave]];
-  if (tecnicoUid) onde.unshift(['tecnicoUid', '==', tecnicoUid]);
-  const lista = await listar(caminho(empresaId), { onde });
+  const lista = tecnicoUid
+    ? await listarDoTecnico(empresaId, tecnicoUid, onde, {})
+    : await listar(caminho(empresaId), { onde });
   if (servico.id && !lista.some((l) => l.id === servico.id)) lista.push(servico);
   return lista.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 }
@@ -266,18 +288,25 @@ export async function excluirAgendamentoCompleto(empresaId, linhas) {
  * Na visita, adiciona mais um serviço (de um aparelho já escolhido). Usado pelo técnico
  * (e pelo administrador) na hora do atendimento. A nova linha herda dia, hora, cliente e local.
  */
-export async function adicionarServicoNaVisita({ empresaId, base, aparelho, tipo, tecnico, linhasDaVisita = [] }) {
+export async function adicionarServicoNaVisita({ empresaId, base, aparelho, tipo, tecnico = null, tecnicos = null, linhasDaVisita = [] }) {
   if (!aparelho) throw new ErroApp('Escolha ou cadastre o aparelho antes de adicionar um serviço.', 'sem-aparelho');
   if (!tipo) throw new ErroApp('Escolha o tipo de serviço.', 'sem-tipo');
   const id = novoId(caminho(empresaId));
   const agendamentoId = chaveDoAgendamento(base);
   const operacoes = [];
-  const donoUid = tecnico?.uid ?? base.tecnicoUid ?? null;
+  // Técnicos do novo serviço: os informados; senão os do serviço de origem.
+  const uidsBase = tecnicosDoServico(base);
+  const nomesBase = nomesDosTecnicos(base);
+  const escolhidos = tecnicos ?? (tecnico ? [tecnico] : uidsBase.map((uid, i) => ({ uid, nome: nomesBase[i] || '' })));
+  const donos = camposDosTecnicos(escolhidos);
   const duracao = tipo.duracaoMin ?? DURACAO_PADRAO_MIN;
-  // Tempo total do técnico nesta visita (os serviços que ele já tinha + este).
-  const jaTinha = [base, ...linhasDaVisita].filter((l, i, a) => a.findIndex((x) => x.id === l.id) === i)
-    .filter((l) => l.status === STATUS.AGENDADO && l.tecnicoUid === donoUid)
-    .reduce((soma, l) => soma + duracaoDoServico(l), 0);
+  // Tempo total de cada técnico nesta visita (os serviços que ele já tinha + este).
+  const abertas = [base, ...linhasDaVisita].filter((l, i, a) => a.findIndex((x) => x.id === l.id) === i)
+    .filter((l) => l.status === STATUS.AGENDADO);
+  const ocupacaoPorTecnico = {};
+  for (const uid of donos.tecnicoUids) {
+    ocupacaoPorTecnico[uid] = abertas.filter((l) => tecnicosDoServico(l).includes(uid)).reduce((soma, l) => soma + duracaoDoServico(l), 0) + duracao;
+  }
   // Serviço antigo (sem agendamentoId) não é alterado: a nova linha usa o id dele como agendamentoId.
   operacoes.push(op.criar(`${caminho(empresaId)}/${id}`, {
     clienteId: base.clienteId,
@@ -293,9 +322,9 @@ export async function adicionarServicoNaVisita({ empresaId, base, aparelho, tipo
     tipoServicoNome: tipo.nome,
     geraRetorno: tipo.geraRetorno === true,
     duracaoMin: duracao,
-    ocupacaoMin: jaTinha + duracao,
-    tecnicoUid: donoUid,
-    tecnicoNome: tecnico?.nome ?? base.tecnicoNome ?? '',
+    ocupacaoMin: Math.max(duracao, ...Object.values(ocupacaoPorTecnico)),
+    ocupacaoPorTecnico,
+    ...donos,
     agendamentoId,
     obsAgendamento: base.obsAgendamento || '',
     ordem: 99,
@@ -326,10 +355,31 @@ export function buscarServico(empresaId, id) {
  */
 export function listarAgendados({ empresaId, de = null, ate = null, tecnicoUid = null }) {
   const onde = [['status', '==', STATUS.AGENDADO]];
-  if (tecnicoUid) onde.unshift(['tecnicoUid', '==', tecnicoUid]);
   if (de) onde.push(['dataAgendada', '>=', de]);
   if (ate) onde.push(['dataAgendada', '<', ate]);
-  return listar(caminho(empresaId), { onde, ordenarPor: [['dataAgendada', 'asc']], limite: 300 });
+  const opcoes = { ordenarPor: [['dataAgendada', 'asc']], limite: 300 };
+  return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
+}
+
+/**
+ * Serviços em que o técnico trabalha. São DUAS consultas juntas (o servidor exige que a
+ * consulta diga que é "do técnico"): serviços novos, que guardam a lista `tecnicoUids`, e
+ * serviços antigos, que têm só `tecnicoUid`. Os resultados são unidos sem repetir.
+ */
+async function listarDoTecnico(empresaId, uid, onde, opcoes) {
+  const [novos, antigos] = await Promise.all([
+    listar(caminho(empresaId), { ...opcoes, onde: [['tecnicoUids', 'array-contains', uid], ...onde] }),
+    listar(caminho(empresaId), { ...opcoes, onde: [['tecnicoUid', '==', uid], ...onde] }),
+  ]);
+  const porId = new Map();
+  for (const s of [...novos, ...antigos]) porId.set(s.id, s);
+  const lista = [...porId.values()];
+  const [campo, sentido] = opcoes.ordenarPor?.[0] || [];
+  if (campo) {
+    const valor = (s) => { const v = s[campo]; return v instanceof Date ? v.getTime() : v; };
+    lista.sort((a, b) => (valor(a) > valor(b) ? 1 : valor(a) < valor(b) ? -1 : 0) * (sentido === 'desc' ? -1 : 1));
+  }
+  return opcoes.limite ? lista.slice(0, opcoes.limite) : lista;
 }
 
 /** Agendados que já passaram da data e ainda não foram concluídos. */
@@ -340,8 +390,8 @@ export function listarAtrasados({ empresaId, tecnicoUid = null, agora = new Date
 /** Histórico: serviços concluídos, do mais recente para o mais antigo. */
 export function listarHistorico({ empresaId, tecnicoUid = null, limite = LIMITE_HISTORICO }) {
   const onde = [['status', '==', STATUS.CONCLUIDO]];
-  if (tecnicoUid) onde.unshift(['tecnicoUid', '==', tecnicoUid]);
-  return listar(caminho(empresaId), { onde, ordenarPor: [['dataConclusao', 'desc']], limite });
+  const opcoes = { ordenarPor: [['dataConclusao', 'desc']], limite };
+  return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
 }
 
 /** Todos os serviços de um cliente (qualquer situação), mais recentes primeiro. Só administrador. */
@@ -385,6 +435,8 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
     throw new ErroApp('Escolha o tipo de serviço antes de concluir.', 'sem-tipo');
   }
   const ehAdmin = papel === 'admin';
+  // Quem define o valor ao concluir: o administrador, ou o técnico com a permissão "alterar valor e extras".
+  const defineValor = ehAdmin || dados.podeAlterarValores === true;
   const agora = new Date();
   const concluidoEm = ehAdmin && dados.dataConclusaoISO ? combinarDataHora(dados.dataConclusaoISO, `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`) : agora;
   if (concluidoEm.getTime() > agora.getTime() + 60000) {
@@ -406,14 +458,18 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   };
 
   const operacoes = [];
-  if (ehAdmin) {
+  // Valor: dados.valores = { baseCentavos, extras, descontoCentavos } (ou o antigo dados.valorCentavos).
+  const valores = dados.valores ?? (Number.isInteger(dados.valorCentavos) ? dados.valorCentavos : null);
+  if (defineValor && valores !== null) {
     campos.valorDefinido = true;
     operacoes.push(op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
-      valorCentavos: dados.valorCentavos,
+      ...documentoDeValores(valores),
       tipoNome: tipoFinal && !servico.tipoServicoId ? tipoFinal.nome : servico.tipoServicoNome,
       dataConclusao: concluidoEm,
       atualizadoEm: AGORA,
     }));
+  }
+  if (ehAdmin) {
     if (servico.origemRetornoId) {
       operacoes.push(op.atualizar(`${caminho(empresaId)}/${servico.origemRetornoId}`, { retornoSituacao: 'feito', atualizadoEm: AGORA }));
     }
@@ -424,11 +480,19 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   return campos;
 }
 
-/** O administrador informa (ou corrige) o valor de um serviço já concluído. */
-export async function definirValor(empresaId, servico, valorCentavos) {
+/** Lê o valor gravado de um serviço (formato novo ou antigo) ou null. */
+export async function buscarValores(empresaId, servicoId) {
+  return lerDocumentoDeValores(await ler(`${caminhoValores(empresaId)}/${servicoId}`));
+}
+
+/**
+ * O administrador informa (ou corrige) o valor de um serviço já concluído.
+ * `valores`: número em centavos (antigo) ou { baseCentavos, extras, descontoCentavos }.
+ */
+export async function definirValor(empresaId, servico, valores) {
   await gravar([
     op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
-      valorCentavos,
+      ...documentoDeValores(valores),
       tipoNome: servico.tipoServicoNome,
       dataConclusao: servico.dataConclusao,
       atualizadoEm: AGORA,

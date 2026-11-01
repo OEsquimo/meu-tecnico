@@ -101,7 +101,7 @@ export default async function montar({ raiz, sessao, recarregar, ativo }) {
           avatarNome: c.nome,
           titulo: c.nome,
           sub: [formatarTelefone(c.whatsapp), linhaCurtaDoEndereco(c.enderecos?.[0])].filter(Boolean).join(' · '),
-          direita: (c.enderecos?.length ?? 0) > 1 ? selo('2 endereços') : null,
+          direita: (c.enderecos?.length ?? 0) > 1 ? selo(`${c.enderecos.length} endereços`) : null,
         }))}
       </div>`);
   }

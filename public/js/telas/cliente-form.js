@@ -40,7 +40,9 @@ const MODOS = [
 ];
 
 /**
- * Desenha o bloco de um endereço. n = 1 ou 2 (vira o prefixo dos campos: "end1_rua").
+ * Desenha o bloco de um endereço. n = número único do bloco na tela (1, 2, 3...), que vira
+ * o prefixo dos campos: "end1_rua". O título ("Endereço", "Endereço 2"...) e o botão
+ * "Remover" são ajustados depois por atualizarBlocos().
  * modo: qual caminho já aparece aberto ('cep' para endereço novo, 'manual' ao editar).
  */
 function blocoEndereco(n, e, modo) {
@@ -48,8 +50,8 @@ function blocoEndereco(n, e, modo) {
   return html`
     <section class="cartao pilha" data-bloco-endereco="${n}">
       <div class="linha linha--entre">
-        <h2>${n === 1 ? 'Endereço' : 'Segundo endereço'}</h2>
-        ${n === 2 && botao({ texto: 'Remover', variante: 'perigo', pequeno: true, iconeNome: 'lixeira', acao: 'remover-endereco' })}
+        <h2 data-titulo-endereco>Endereço</h2>
+        <span data-remover-endereco>${botao({ texto: 'Remover', variante: 'perigo', pequeno: true, iconeNome: 'lixeira', acao: 'remover-endereco' })}</span>
       </div>
 
       <input type="hidden" name="${p}id" value="${e.id}" />
@@ -159,10 +161,9 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         ${contatosSuportados() && botao({ texto: 'Escolher dos contatos', variante: 'secundario', iconeNome: 'clientes', acao: 'contatos', bloco: true })}
       </section>
 
-      <div id="area-end1">${blocoEndereco(1, enderecosIniciais[0], modoInicial)}</div>
-      <div id="area-end2">${enderecosIniciais[1] ? blocoEndereco(2, enderecosIniciais[1], modoInicial) : ''}</div>
-      <div id="area-adicionar-end2" ${enderecosIniciais[1] ? 'hidden' : ''}>
-        ${botao({ texto: 'Adicionar segundo endereço', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-endereco', bloco: true })}
+      <div id="area-enderecos" class="pilha">${enderecosIniciais.map((e, i) => blocoEndereco(i + 1, e, modoInicial))}</div>
+      <div id="area-adicionar-endereco" ${enderecosIniciais.length >= MAXIMO_ENDERECOS ? 'hidden' : ''}>
+        ${botao({ texto: 'Adicionar outro endereço', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-endereco', bloco: true })}
       </div>
 
       <section class="cartao pilha">
@@ -173,11 +174,23 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     </form>`);
 
   const form = raiz.querySelector('#form-cliente');
-  const resultadosDaBusca = { 1: [], 2: [] }; // resultados da busca por rua (por endereço)
+  const resultadosDaBusca = {}; // resultados da busca por rua (por número de bloco)
+  let proximoBloco = enderecosIniciais.length + 1; // próximo número único de bloco
 
   // ---- 3. Ajudantes para mexer nos campos ----
   const campo = (n, nome) => form.elements[`end${n}_${nome}`];
   const bloco = (n) => form.querySelector(`[data-bloco-endereco="${n}"]`);
+  const blocos = () => [...form.querySelectorAll('[data-bloco-endereco]')];
+
+  /** Ajusta o título de cada endereço ("Endereço", "Endereço 2"...), o "Remover" e o botão de adicionar. */
+  function atualizarBlocos() {
+    const lista = blocos();
+    lista.forEach((b, i) => {
+      b.querySelector('[data-titulo-endereco]').textContent = i === 0 ? 'Endereço' : `Endereço ${i + 1}`;
+      b.querySelector('[data-remover-endereco]').hidden = lista.length === 1;
+    });
+    form.querySelector('#area-adicionar-endereco').hidden = lista.length >= MAXIMO_ENDERECOS;
+  }
 
   /** Mostra/esconde o aviso de "localização guardada" conforme houver coordenadas. */
   function atualizarAvisoGps(n) {
@@ -213,19 +226,19 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   // Ao editar a rua ou a cidade à mão, as coordenadas antigas deixam de valer.
   form.addEventListener('input', (ev) => {
     const nome = ev.target.name || '';
-    const m = /^end(\d)_(rua|cidade)$/.exec(nome);
+    const m = /^end(\d+)_(rua|cidade)$/.exec(nome);
     if (m) {
       campo(m[1], 'lat').value = '';
       campo(m[1], 'lng').value = '';
       atualizarAvisoGps(m[1]);
     }
     if (nome === 'whatsapp') ev.target.value = mascararTelefoneDigitando(ev.target.value);
-    if (/^end\d_cep$/.test(nome)) ev.target.value = formatarCEP(ev.target.value);
+    if (/^end\d+_cep$/.test(nome)) ev.target.value = formatarCEP(ev.target.value);
   });
 
   // Trocar a forma de preencher o endereço abre o painel certo.
   form.addEventListener('change', (ev) => {
-    const m = /^modo(\d)$/.exec(ev.target.name || '');
+    const m = /^modo(\d+)$/.exec(ev.target.name || '');
     if (m) abrirModo(m[1], ev.target.value);
   });
 
@@ -233,15 +246,16 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   form.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     const nome = ev.target.name || '';
-    const mCep = /^end(\d)_cep$/.exec(nome);
-    const mBusca = /^busca(\d)_/.exec(nome);
+    const mCep = /^end(\d+)_cep$/.exec(nome);
+    const mBusca = /^busca(\d+)_/.exec(nome);
     if (!mCep && !mBusca) return;
     ev.preventDefault();
     const alvo = form.querySelector(`[data-acao="${mCep ? 'buscar-cep' : 'buscar-rua'}"][data-end="${(mCep || mBusca)[1]}"]`);
     alvo?.click();
   });
 
-  for (const n of [1, 2]) if (bloco(n)) atualizarAvisoGps(n);
+  for (const b of blocos()) atualizarAvisoGps(b.dataset.blocoEndereco);
+  atualizarBlocos();
 
   // ---- 4. Botões ----
   const desligarCliques = aoClicar(raiz, {
@@ -312,16 +326,23 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
       }
     }),
 
-    // Segundo endereço (no máximo 2) — entra e sai da tela
+    // Outros endereços (até MAXIMO_ENDERECOS) — entram e saem da tela
     'adicionar-endereco': () => {
-      mostrar(raiz.querySelector('#area-end2'), blocoEndereco(2, novoEndereco(), 'cep'));
-      raiz.querySelector('#area-adicionar-end2').hidden = true;
-      campo(2, 'cep').focus();
+      if (blocos().length >= MAXIMO_ENDERECOS) return;
+      const n = proximoBloco;
+      proximoBloco += 1;
+      const area = document.createElement('div');
+      mostrar(area, blocoEndereco(n, novoEndereco(), 'cep'));
+      raiz.querySelector('#area-enderecos').append(...area.children);
+      atualizarBlocos();
+      campo(n, 'cep').focus();
     },
-    'remover-endereco': () => {
-      mostrar(raiz.querySelector('#area-end2'), '');
-      raiz.querySelector('#area-adicionar-end2').hidden = false;
-      resultadosDaBusca[2] = [];
+    'remover-endereco': (el) => {
+      const b = el.closest('[data-bloco-endereco]');
+      if (!b || blocos().length <= 1) return;
+      delete resultadosDaBusca[b.dataset.blocoEndereco];
+      b.remove();
+      atualizarBlocos();
     },
   });
 
@@ -329,7 +350,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   aoEnviar(form, async () => {
     limparErrosGerais(form);
     const c = lerCampos(form);
-    const enderecos = [1, 2].filter((n) => bloco(n)).map((n) => {
+    const enderecos = blocos().map((b) => Number(b.dataset.blocoEndereco)).map((n) => {
       const e = {};
       for (const nome of ['id', 'apelido', 'cep', 'rua', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'lat', 'lng']) e[nome] = c[`end${n}_${nome}`];
       return e;

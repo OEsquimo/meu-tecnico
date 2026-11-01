@@ -57,6 +57,57 @@
   font-weight: 700;
 }
 
+/* Cartão da visita: topo (hora, cliente, endereço + Editar) e, abaixo, aparelhos e serviços. */
+.visita-cartao__topo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.visita-cartao__corpo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.visita-cartao__topo > .botao {
+  flex: none;
+}
+
+.visita-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cor-borda);
+}
+
+.visita-bloco__titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cor-texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.visita-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.visita-linha > .expande {
+  min-width: 0;
+}
+
+.visita-linha > .botao {
+  flex: none;
+}
+
+.visita-linha__nome {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Agenda: calendário e lista do dia ---------- */
 .agenda-mes {
   display: flex;
@@ -313,3 +364,19 @@
 .agenda-secao__resumo {
   white-space: nowrap;
 }
+
+/* Técnicos do serviço: caixinhas (pode marcar mais de um) */
+.campo--tecnicos { border: 0; padding: 0; margin: 0; min-width: 0; }
+.tecnicos-caixas { display: flex; flex-wrap: wrap; gap: var(--espaco-2, 8px); }
+.tecnico-opcao {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--cor-borda, #d0d5dd); border-radius: 999px; background: var(--cor-superficie, #fff); cursor: pointer;
+}
+.tecnico-opcao input { width: 20px; height: 20px; }
+.tecnico-opcao:has(input:checked) { border-color: var(--cor-primaria, #0b6bcb); background: var(--cor-primaria-suave, #e8f1fc); }
+
+/* Editor de valores (concluir serviço / corrigir valor) */
+.editor-valores { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--cor-borda, #d0d5dd); border-radius: 12px; background: var(--cor-superficie, #fff); }
+.extra-linha { display: grid; grid-template-columns: 1fr 96px auto; gap: 8px; align-items: center; }
+.editor-valores__total { display: flex; justify-content: space-between; align-items: center; font-size: 1.15rem; padding-top: 8px; border-top: 1px dashed var(--cor-borda, #d0d5dd); }
+@media (max-width: 380px) { .extra-linha { grid-template-columns: 1fr 80px; } .extra-linha .botao { grid-column: 1 / -1; } }

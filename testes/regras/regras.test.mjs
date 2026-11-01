@@ -301,3 +301,109 @@ test('técnico só escolhe o tipo ao concluir quando o serviço estava "a defini
   // Serviço "a definir": escolher o tipo ao concluir é aceito.
   await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/def`), { ...conclusao, tipoServicoId: 't1', tipoServicoNome: 'Limpeza', geraRetorno: true, duracaoMin: 60 }));
 });
+
+// =============================================================================
+// VALORES, PERMISSÕES DO TÉCNICO E VÁRIOS TÉCNICOS POR SERVIÇO
+// =============================================================================
+/** Libera (ou não) valores para o técnico `eq1` (cadastro em equipe/eq1). */
+async function liberar({ verValores = false, alterarValores = false }) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), `empresas/${E}/equipe/eq1`), { verValores, alterarValores });
+  });
+}
+const conclusao = (extra = {}) => ({ status: 'concluido', descricao: '', pago: false, dataConclusao: serverTimestamp(), concluidoPorNome: 'Tec', atualizadoEm: serverTimestamp(), retornoMeses: 6, dataRetorno: '2027-04-18', retornoSituacao: 'pendente', garantiaAte: '2027-01-18', ...extra });
+const valorNovo = (extra = {}) => ({ valorCentavos: 18000, baseCentavos: 15000, extras: [{ descricao: 'Peça', valorCentavos: 5000 }], descontoCentavos: 2000, tipoNome: 'Limpeza', dataConclusao: serverTimestamp(), atualizadoEm: serverTimestamp(), ...extra });
+
+test('valores: técnico sem permissão não lê valor nem preço padrão', async () => {
+  const db = como(TEC);
+  await assertFails(getDoc(doc(db, `empresas/${E}/valores/s-tec`)));
+  await assertFails(getDocs(collection(db, `empresas/${E}/precos`)));
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `empresas/${E}/precos/t1`), { valorCentavos: 15000 }); });
+  await assertFails(getDoc(doc(db, `empresas/${E}/precos/t1`)));
+});
+
+test('valores: "pode ver" lê o valor do próprio serviço e os preços, mas não altera nada', async () => {
+  await liberar({ verValores: true });
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `empresas/${E}/precos/t1`), { valorCentavos: 15000 }); });
+  const db = como(TEC);
+  await assertSucceeds(getDoc(doc(db, `empresas/${E}/valores/s-tec`)));
+  await assertFails(getDoc(doc(db, `empresas/${E}/valores/s-outro`))); // serviço de outro técnico
+  await assertFails(getDocs(collection(db, `empresas/${E}/valores`))); // nunca a lista
+  await assertSucceeds(getDocs(collection(db, `empresas/${E}/precos`)));
+  await assertFails(setDoc(doc(db, `empresas/${E}/precos/t1`), { valorCentavos: 1 }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/valores/s-tec`), { valorCentavos: 1 }));
+  // Concluir sem valor continua permitido; valorDefinido e valor não.
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), conclusao({ valorDefinido: true })));
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), conclusao()));
+});
+
+test('valores: "pode alterar" grava valor + extras ao concluir, uma vez, e só do próprio serviço', async () => {
+  await liberar({ alterarValores: true });
+  await env.withSecurityRulesDisabled(async (ctx) => { await deleteDoc(doc(ctx.firestore(), `empresas/${E}/valores/s-tec`)); });
+  const db = como(TEC);
+  // Gravar o valor sem concluir no mesmo lote: recusado.
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo()));
+  // valorDefinido sem gravar o valor: recusado.
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), conclusao({ valorDefinido: true })));
+  // Lote completo: conclui + grava valor.
+  const b = writeBatch(db);
+  b.update(doc(db, `empresas/${E}/servicos/s-tec`), conclusao({ valorDefinido: true }));
+  b.set(doc(db, `empresas/${E}/valores/s-tec`), valorNovo());
+  await assertSucceeds(b.commit());
+  // Depois de concluído, o técnico não altera mais o valor; o administrador sim.
+  await assertFails(updateDoc(doc(db, `empresas/${E}/valores/s-tec`), { valorCentavos: 1 }));
+  await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/valores/s-tec`), valorNovo({ valorCentavos: 17000 })));
+  // Valor de serviço de outro técnico: recusado.
+  const c = writeBatch(db);
+  c.update(doc(db, `empresas/${E}/servicos/s-outro`), conclusao({ valorDefinido: true }));
+  c.set(doc(db, `empresas/${E}/valores/s-outro`), valorNovo());
+  await assertFails(c.commit());
+});
+
+test('valores: formato inválido é recusado (negativo, campo estranho, extras demais)', async () => {
+  const db = como(ADMIN);
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo()));
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo({ valorCentavos: -1 })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo({ campoInventado: 1 })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo({ extras: Array.from({ length: 21 }, () => ({ descricao: 'x', valorCentavos: 1 })) })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/valores/s-tec`), valorNovo({ descontoCentavos: 'dez' })));
+});
+
+test('preços padrão: administrador grava e apaga; valor inválido é recusado; outra empresa não lê', async () => {
+  const db = como(ADMIN);
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/precos/t1`), { valorCentavos: 15000, atualizadoEm: serverTimestamp() }));
+  await assertFails(setDoc(doc(db, `empresas/${E}/precos/t1`), { valorCentavos: -5 }));
+  await assertFails(setDoc(doc(db, `empresas/${E}/precos/t1`), { valorCentavos: 100, outro: 1 }));
+  await assertFails(getDoc(doc(como(OUTRO), `empresas/${E}/precos/t1`)));
+  await assertSucceeds(deleteDoc(doc(db, `empresas/${E}/precos/t1`)));
+});
+
+test('equipe: técnico lê o próprio cadastro (permissões) mas não o de outro e não se libera sozinho', async () => {
+  const db = como(TEC);
+  await assertSucceeds(getDoc(doc(db, `empresas/${E}/equipe/eq1`)));
+  await assertFails(getDoc(doc(db, `empresas/${E}/equipe/eq2`)));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/equipe/eq1`), { alterarValores: true }));
+  const adm = como(ADMIN);
+  await assertSucceeds(updateDoc(doc(adm, `empresas/${E}/equipe/eq1`), { nome: 'Tec', telefone: '5511912345678', status: 'ativo', verValores: true, alterarValores: false }));
+  await assertFails(updateDoc(doc(adm, `empresas/${E}/equipe/eq1`), { verValores: 'sim' }));
+});
+
+test('vários técnicos: cada um lê, consulta e conclui o serviço; o administrador grava a lista', async () => {
+  const lista = { tecnicoUid: 'outro-tecnico', tecnicoNome: 'Outro', tecnicoUids: ['outro-tecnico', TEC], tecnicosNomes: ['Outro', 'Tec'], ocupacaoPorTecnico: { 'outro-tecnico': 60, [TEC]: 60 } };
+  const base = { clienteId: 'c1', clienteNome: 'Ana', tipoServicoId: 't1', tipoServicoNome: 'Limpeza', status: 'agendado', dataAgendada: dia(1), pago: false, valorDefinido: false, geraRetorno: true };
+  await assertSucceeds(setDoc(doc(como(ADMIN), `empresas/${E}/servicos/multi`), { ...base, ...lista }));
+  await assertFails(setDoc(doc(como(ADMIN), `empresas/${E}/servicos/multi2`), { ...base, ...lista, tecnicoUids: Array.from({ length: 21 }, (_, i) => `u${i}`) }));
+  const db = como(TEC);
+  await assertSucceeds(getDoc(doc(db, `empresas/${E}/servicos/multi`)));
+  await assertSucceeds(getDocs(query(collection(db, `empresas/${E}/servicos`), where('tecnicoUids', 'array-contains', TEC))));
+  await assertFails(getDocs(query(collection(db, `empresas/${E}/servicos`), where('tecnicoUids', 'array-contains', 'outro-tecnico'))));
+  // O segundo técnico conclui; a conclusão vale para o serviço inteiro, mas ele não muda os técnicos.
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/multi`), conclusao({ tecnicoUids: [TEC] })));
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/multi`), conclusao()));
+});
+
+test('vários técnicos: técnico só adiciona serviço para si mesmo (lista com ele sozinho)', async () => {
+  const db = como(TEC);
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/m1`), linhaNova({ tecnicoUids: [TEC], tecnicosNomes: ['Tec'] })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/m2`), linhaNova({ tecnicoUids: [TEC, 'outro-tecnico'], tecnicosNomes: ['Tec', 'Outro'] })));
+});

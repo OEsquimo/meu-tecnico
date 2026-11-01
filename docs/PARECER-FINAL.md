@@ -8,7 +8,7 @@ O código de todas as funcionalidades combinadas está escrito e passa nas verif
 ## Matriz de rastreabilidade (requisito → onde está → como foi verificado)
 | Requisito | Implementação | Verificação |
 |---|---|---|
-| Clientes com até 2 endereços (CEP, rua, GPS, manual) | telas `cliente-form`, `servicos/cep.js`, `dominio/endereco.js` | 🟡 tela em demo; APIs ViaCEP/Nominatim não chamadas aqui |
+| Clientes com vários endereços (CEP, rua, GPS, manual) | telas `cliente-form`, `servicos/cep.js`, `dominio/endereco.js` | 🟡 tela em demo; APIs ViaCEP/Nominatim não chamadas aqui |
 | Aparelhos por cliente | `aparelho-form`, `servicos/aparelhos.js` | 🟡 demo + unit (exclusão em cascata) |
 | Serviços: agendar, concluir, histórico | `agendar`, `servico`, `concluir-servico`, `historico` | ✅ unit (serviços) · ✅ fluxo em demo |
 | Técnico sem ver valores | coleção `valores` separada + telas + regras | ✅ unit/demo (UI) · ⛔ regras (emulador) |

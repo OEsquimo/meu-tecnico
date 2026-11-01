@@ -2,7 +2,8 @@
 // AJUDANTES DA TELA DE AGENDAMENTO (cartões de aparelho e de serviço)
 // =============================================================================
 // Este arquivo NÃO é uma tela (não está em rotas.js). Guarda o que é "conta":
-//   * o estado do agendamento na tela (aparelhos -> serviços -> técnico);
+//   * o estado do agendamento na tela (aparelhos -> serviços -> técnicos; cada serviço
+//     pode ter mais de um técnico);
 //   * quais técnicos estão livres em cada serviço;
 //   * a conversão entre o estado da tela e as linhas gravadas no banco;
 //   * o rascunho que sobrevive a "Editar cliente"/"Novo aparelho" (ir e voltar).
@@ -12,6 +13,7 @@
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { combinarDataHora, ehISOValido, ehHoraValida } from '../dominio/datas.js';
+import { tecnicosDoServico } from '../dominio/servicos.js';
 
 let contador = 0;
 /** Chave só da tela (para achar o cartão). Não vai para o banco. */
@@ -51,15 +53,15 @@ export function textoDaDuracao(minutos) {
 }
 
 /** Estado vazio de um agendamento novo. `obsAberta`: a observação do agendamento está aberta na tela? */
-export function estadoInicial({ data, hora = '09:00', tecnicoUid = '' }) {
-  return { cliente: null, enderecoId: '', data, hora, observacao: '', obsAberta: false, tecnicoUid, grupos: [] };
+export function estadoInicial({ data, hora = '09:00', tecnicoUids = [] }) {
+  return { cliente: null, enderecoId: '', data, hora, observacao: '', obsAberta: false, tecnicoUids: [...tecnicoUids], grupos: [] };
 }
 
 /** Cartão de aparelho (aparelhoId '' = serviços antigos sem aparelho). */
 export const novoGrupo = (aparelhoId) => ({ chave: novaChave(), aparelhoId, obs: '', obsAberta: false, servicos: [] });
 /** Cartão de serviço dentro do aparelho. `duracaoMin` null = padrão do tipo. */
-export const novoServico = ({ id = null, tipoId, tecnicoUid = '', obs = '', duracaoMin = null }) => ({
-  chave: novaChave(), id, tipoId, tecnicoUid, obs, duracaoMin, obsAberta: false,
+export const novoServico = ({ id = null, tipoId, tecnicoUids = [], obs = '', duracaoMin = null }) => ({
+  chave: novaChave(), id, tipoId, tecnicoUids: [...tecnicoUids], obs, duracaoMin, obsAberta: false,
 });
 
 /** Início do agendamento, ou null se dia/hora ainda não estão válidos. */
@@ -76,7 +78,7 @@ export function todosOsServicos(estado) {
 /** Minutos que o técnico já ocupa nesta visita (somando os serviços dele), sem contar `ignorarChave`. */
 export function minutosDoTecnicoNaVisita(estado, tiposPorId, uid, ignorarChave = null) {
   return todosOsServicos(estado)
-    .filter((s) => s.tecnicoUid === uid && s.chave !== ignorarChave)
+    .filter((s) => s.tecnicoUids.includes(uid) && s.chave !== ignorarChave)
     .reduce((soma, s) => soma + duracaoDoServicoNaTela(s, tiposPorId), 0);
 }
 
@@ -100,36 +102,39 @@ export function tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, age
 }
 
 /**
- * Tira da tela quem ficou ocupado (depois de mudar dia/hora/serviços).
- * Devolve a quantidade de serviços que perderam o técnico (para avisar).
+ * Tira da tela os técnicos que ficaram ocupados (depois de mudar dia/hora/serviços).
+ * Devolve a quantidade de serviços que perderam algum técnico (para avisar).
  */
 export function limparTecnicosOcupados({ estado, tecnicos, tiposPorId, agendados, agendamentoId = null }) {
   let perdidos = 0;
   for (const s of todosOsServicos(estado)) {
-    if (!s.tecnicoUid) continue;
+    if (s.tecnicoUids.length === 0) continue;
     const livres = tecnicosLivresParaServico({ estado, servico: s, tecnicos, tiposPorId, agendados, agendamentoId });
-    if (!livres.some((t) => t.uid === s.tecnicoUid)) { s.tecnicoUid = ''; perdidos += 1; }
+    const ficam = s.tecnicoUids.filter((uid) => livres.some((t) => t.uid === uid));
+    if (ficam.length !== s.tecnicoUids.length) { s.tecnicoUids = ficam; perdidos += 1; }
   }
-  if (estado.tecnicoUid) {
+  if (estado.tecnicoUids.length > 0) {
     const livres = tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId });
-    if (!livres.some((t) => t.uid === estado.tecnicoUid)) estado.tecnicoUid = '';
+    estado.tecnicoUids = estado.tecnicoUids.filter((uid) => livres.some((t) => t.uid === uid));
   }
   return perdidos;
 }
 
 /**
- * Escolhe um técnico livre para um serviço novo: o do agendamento (se livre),
- * senão o primeiro livre, senão '' (o app avisa e bloqueia o botão Agendar).
+ * Escolhe os técnicos de um serviço novo: os do agendamento que estiverem livres;
+ * senão o primeiro livre; senão [] (o app avisa e bloqueia o botão Agendar).
  */
-export function tecnicoSugerido({ estado, servico, tecnicos, tiposPorId, agendados, agendamentoId = null }) {
+export function tecnicosSugeridos({ estado, servico, tecnicos, tiposPorId, agendados, agendamentoId = null }) {
   const livres = tecnicosLivresParaServico({ estado, servico, tecnicos, tiposPorId, agendados, agendamentoId });
-  return (livres.find((t) => t.uid === estado.tecnicoUid) || livres[0])?.uid || '';
+  const doAgendamento = estado.tecnicoUids.filter((uid) => livres.some((t) => t.uid === uid));
+  if (doAgendamento.length > 0) return doAgendamento;
+  return livres[0] ? [livres[0].uid] : [];
 }
 
 /**
  * O que impede de agendar agora? Lista de { texto, alvo } na ordem em que a tela
  * aparece. `alvo` diz para onde a tela deve rolar e colocar o cursor:
- *   { campo: 'clienteId' | 'data' | 'hora' | 'tecnicoUid' }  ou  { servico: chave } ou { grupo: chave }
+ *   { campo: 'clienteId' | 'data' | 'hora' | 'tecnicoUids' }  ou  { servico: chave } ou { grupo: chave }
  */
 export function problemasDoAgendamento(estado, { tecnicos, tiposPorId, agendados, agendamentoId = null }) {
   const problemas = [];
@@ -145,12 +150,12 @@ export function problemasDoAgendamento(estado, { tecnicos, tiposPorId, agendados
   if (servicos.length === 0 || gruposVazios > 0) {
     const livres = tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId });
     if (livres.length === 0) problemas.push({ texto: 'Nenhum técnico está livre nesse dia e horário. Escolha outro horário.', alvo: { campo: 'hora' } });
-    else if (!estado.tecnicoUid) problemas.push({ texto: 'Escolha o técnico do agendamento.', alvo: { campo: 'tecnicoUid' } });
+    else if (estado.tecnicoUids.length === 0) problemas.push({ texto: 'Escolha pelo menos um técnico para o agendamento.', alvo: { campo: 'tecnicoUids' } });
   }
   for (const s of servicos) {
     const livres = tecnicosLivresParaServico({ estado, servico: s, tecnicos, tiposPorId, agendados, agendamentoId });
     if (livres.length === 0) { problemas.push({ texto: 'Nenhum técnico está livre nesse dia e horário. Escolha outro horário.', alvo: { campo: 'hora' } }); break; }
-    if (!s.tecnicoUid) { problemas.push({ texto: 'Escolha o técnico deste serviço.', alvo: { servico: s.chave } }); break; }
+    if (s.tecnicoUids.length === 0) { problemas.push({ texto: 'Escolha pelo menos um técnico deste serviço.', alvo: { servico: s.chave } }); break; }
   }
   return problemas;
 }
@@ -165,17 +170,17 @@ export function pendenciasDoAgendamento(estado, contexto) {
  * Aparelho sem serviço vira uma linha "Serviço a definir" daquele aparelho.
  */
 export function montarLinhas(estado, { tiposPorId, aparelhosPorId, tecnicosPorUid }) {
-  const tecnico = (uid) => (uid && tecnicosPorUid[uid]) || null;
+  const tecnicos = (uids) => (uids || []).map((uid) => tecnicosPorUid[uid]).filter(Boolean);
   const linhas = [];
   for (const g of estado.grupos) {
     const aparelho = g.aparelhoId ? aparelhosPorId[g.aparelhoId] || null : null;
     if (g.servicos.length === 0) {
-      linhas.push({ aparelho, tipo: null, tecnico: tecnico(estado.tecnicoUid), obsAparelho: g.obs, obsServico: '' });
+      linhas.push({ aparelho, tipo: null, tecnicos: tecnicos(estado.tecnicoUids), obsAparelho: g.obs, obsServico: '' });
       continue;
     }
     for (const s of g.servicos) {
       const tipo = tiposPorId[s.tipoId];
-      linhas.push({ id: s.id || undefined, aparelho, tipo, tecnico: tecnico(s.tecnicoUid), duracaoMin: duracaoDoServicoNaTela(s, tiposPorId), obsAparelho: g.obs, obsServico: s.obs });
+      linhas.push({ id: s.id || undefined, aparelho, tipo, tecnicos: tecnicos(s.tecnicoUids), duracaoMin: duracaoDoServicoNaTela(s, tiposPorId), obsAparelho: g.obs, obsServico: s.obs });
     }
   }
   return linhas;
@@ -191,7 +196,7 @@ export function estadoDeLinhas(linhas, { cliente, data, hora, tipoExiste = () =>
   estado.cliente = cliente;
   estado.observacao = abertas[0]?.obsAgendamento || '';
   estado.obsAberta = estado.observacao.length > 0;
-  estado.tecnicoUid = abertas[0]?.tecnicoUid || '';
+  estado.tecnicoUids = abertas[0] ? tecnicosDoServico(abertas[0]) : [];
   estado.enderecoId = abertas[0]?.enderecoId || '';
   const porAparelho = new Map();
   for (const l of abertas) {
@@ -207,7 +212,7 @@ export function estadoDeLinhas(linhas, { cliente, data, hora, tipoExiste = () =>
     if (l.tipoServicoId && tipoExiste(l.tipoServicoId)) {
       const obs = l.obsServico || l.descricao || '';
       const servico = novoServico({
-        id: l.id, tipoId: l.tipoServicoId, tecnicoUid: l.tecnicoUid || '', obs, duracaoMin: Number(l.duracaoMin) > 0 ? Number(l.duracaoMin) : null,
+        id: l.id, tipoId: l.tipoServicoId, tecnicoUids: tecnicosDoServico(l), obs, duracaoMin: Number(l.duracaoMin) > 0 ? Number(l.duracaoMin) : null,
       });
       servico.obsAberta = obs.length > 0;
       porAparelho.get(chave).servicos.push(servico);

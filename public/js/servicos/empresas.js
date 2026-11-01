@@ -105,6 +105,7 @@ export async function excluirContaCompleta(empresaId, senha, aoProgresso = () =>
   aoProgresso('Apagando serviços…');
   await apagarColecao(`empresas/${empresaId}/servicos`);
   await apagarColecao(`empresas/${empresaId}/valores`);
+  await apagarColecao(`empresas/${empresaId}/precos`);
 
   aoProgresso('Apagando aparelhos…');
   await apagarColecao(`empresas/${empresaId}/aparelhos`);

@@ -12,13 +12,13 @@
 
 import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro, escolher } from '../nucleo/ui.js';
 import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucleo/componentes.js';
-import { ler } from '../nucleo/banco.js';
+import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPago, adicionarServicoNaVisita,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPago, adicionarServicoNaVisita, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
-import { seloDoServico, STATUS, ehLinhaSemServico } from '../dominio/servicos.js';
+import { seloDoServico, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { formatarDataHoraBR, formatarDataBR } from '../dominio/datas.js';
 import { formatarReais } from '../dominio/dinheiro.js';
@@ -43,11 +43,11 @@ export default async function montar(ctx) {
       const linhas = await listarLinhasDoAgendamento(usuario.empresaId, servico, { tecnicoUid: usuario.admin ? null : usuario.uid });
       // Se a consulta não trouxe a própria linha (por segurança), mostra ao menos ela.
       if (!linhas.some((l) => l.id === servico.id)) linhas.push(servico);
-      // Só o administrador lê o valor (o técnico nem tenta: as regras bloqueiam).
+      // O administrador lê o valor; o técnico só se foi liberado ("Pode ver valores").
       const valores = {};
-      if (usuario.admin) {
+      if (podeVerValores(sessao)) {
         await Promise.all(linhas.filter((l) => l.status === STATUS.CONCLUIDO).map(async (l) => {
-          valores[l.id] = await ler(`empresas/${usuario.empresaId}/valores/${l.id}`).catch(() => null);
+          valores[l.id] = await buscarValores(usuario.empresaId, l.id).catch(() => null);
         }));
       }
       if (!ctx.ativo()) return;
@@ -79,7 +79,7 @@ export default async function montar(ctx) {
         <div class="visita-servico__topo">
           <div class="expande">
             <div class="item-lista__titulo">${l.tipoServicoNome}</div>
-            <div class="item-lista__sub">${l.tecnicoNome ? `Técnico: ${l.tecnicoNome}` : 'Sem técnico'}</div>
+            <div class="item-lista__sub">${textoDosTecnicos(l) ? `${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}` : 'Sem técnico'}</div>
           </div>
           ${!ehLinhaSemServico(l) && selo(textoDoRetorno(sessao.tipos.find((t) => t.id === l.tipoServicoId) || { geraRetorno: l.geraRetorno, retornoPadraoMeses: l.retornoMeses }), l.geraRetorno ? 'azul' : '')}
           ${selo(sit.texto, sit.tom)}
@@ -90,7 +90,7 @@ export default async function montar(ctx) {
           ['Por', l.concluidoPorNome],
           ['O que foi feito', l.descricao],
           ['Cliente pagou?', l.pago ? 'Sim' : 'Não'],
-          ['Valor', usuario.admin ? (valor ? formatarReais(valor.valorCentavos) : 'Ainda não informado') : ''],
+          ...linhasDeValor(valor),
           ['Garantia até', l.garantiaAte ? formatarDataBR(l.garantiaAte) : ''],
           ['Próximo retorno', l.dataRetorno ? formatarDataBR(l.dataRetorno) : ''],
         ])}
@@ -98,18 +98,32 @@ export default async function montar(ctx) {
           <div class="acoes-cartao">
             ${botao({ texto: l.pago ? 'Marcar como a receber' : 'Marcar como pago', variante: 'secundario', acao: 'alternar-pago', dados: { id: l.id }, pequeno: true })}
           </div>`}
-        ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe em Financeiro > Concluídos sem valor.' }) : ''}
+        ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
+        ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
         ${agendada && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true })}
       </div>`;
   }
 
+  /** Linhas "Valor / Extras / Desconto / Total" para a lista de dados (vazio se não pode ver). */
+  function linhasDeValor(valor) {
+    if (!podeVerValores(sessao)) return [];
+    if (!valor) return [['Valor', usuario.admin ? 'Ainda não informado' : 'Ainda não confirmado']];
+    const itens = [['Valor do serviço', formatarReais(valor.baseCentavos)]];
+    for (const e of valor.extras) itens.push([`Extra: ${e.descricao}`, formatarReais(e.valorCentavos)]);
+    if (valor.descontoCentavos > 0) itens.push(['Desconto', `- ${formatarReais(valor.descontoCentavos)}`]);
+    itens.push(['Total', formatarReais(valor.valorCentavos)]);
+    return itens;
+  }
+
   function desenhar(s, linhas, valores) {
+    const totalDaVisita = linhas.reduce((t, l) => t + (valores[l.id]?.valorCentavos || 0), 0);
+    const concluidasComValor = linhas.filter((l) => valores[l.id]).length;
     const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
     const agendado = abertas.length > 0;
     const situacao = agendado ? seloDoServico(abertas[0]) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0]);
     const ligar = linkLigar(s.clienteWhatsapp);
     const whats = linkWhatsappDoCliente(s.clienteWhatsapp, '');
-    const tecnicos = [...new Set(linhas.map((l) => l.tecnicoNome).filter(Boolean))].join(', ');
+    const tecnicos = [...new Set(linhas.flatMap((l) => nomesDosTecnicos(l)).filter(Boolean))].join(', ');
     const observacao = s.obsAgendamento || '';
     const unico = linhas.length === 1 && !ehLinhaSemServico(linhas[0]);
     const grupos = porAparelho(linhas);
@@ -125,6 +139,7 @@ export default async function montar(ctx) {
             ['Local', s.local],
             ['Técnicos', tecnicos],
             ['Observação', observacao],
+            ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),
           ])}
           <div class="acoes-cartao">
             ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', pequeno: true })}
@@ -212,7 +227,7 @@ export default async function montar(ctx) {
           opcoes: tipos.map((t) => ({ id: t.id, rotulo: `${t.nome} · ${textoDoRetorno(t)}` })),
         });
         if (!tipoId) return;
-        const referencia = abertas.find((l) => l.tecnicoUid === usuario.uid) || abertas[0] || base;
+        const referencia = abertas.find((l) => servicoTemTecnico(l, usuario.uid)) || abertas[0] || base;
         await adicionarServicoNaVisita({
           empresaId: usuario.empresaId,
           base: referencia,

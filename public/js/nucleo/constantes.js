@@ -15,8 +15,12 @@ export const VERSAO_SDK_FIREBASE = '10.14.1';
 /** Valor usado como "limite ilimitado" nas regras e no app (precisa ser igual em firestore.rules). */
 export const LIMITE_ILIMITADO = 999999;
 
-/** Quantos endereços cada cliente pode ter (o segundo fica escondido atrás de um botão). */
-export const MAXIMO_ENDERECOS = 2;
+/**
+ * Quantos endereços cada cliente pode ter. Na tela é "livre" (o botão "Adicionar outro
+ * endereço" fica disponível); o teto existe só para o banco não receber lixo. Precisa ser
+ * igual ao número em firestore.rules.
+ */
+export const MAXIMO_ENDERECOS = 20;
 
 /** Prazos de retorno oferecidos (em meses) — "opções prontas", sem digitar. */
 export const PRAZOS_RETORNO_MESES = [3, 4, 6, 12];

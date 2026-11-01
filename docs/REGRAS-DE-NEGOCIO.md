@@ -3,16 +3,17 @@
 ## Perfis
 - **Dono do app**: cria planos, regras globais e gerencia contas (ativar, trocar plano, estender teste, bloquear). Não vê clientes nem serviços das empresas.
 - **Administrador**: dono da empresa; vê tudo da empresa, inclusive valores e Financeiro.
-- **Técnico**: vê só os serviços atribuídos a ele, **sem valores**; conclui serviço (descrição + "cliente pagou? sim/não"); cadastra clientes só se o admin liberar.
+- **Técnico**: vê só os serviços em que é um dos técnicos; conclui serviço ("cliente pagou? sim/não" e, se quiser, o que foi feito); cadastra clientes só se o admin liberar. **Valores** dependem do cadastro dele (padrão: desligado): *Pode ver valores* (vê o valor, para responder o cliente) e *Pode alterar valor e extras* (muda valor, extras e desconto ao concluir; quem altera também vê). Nenhum técnico vê o Financeiro.
 
 ## Cliente, endereço e aparelho
-Cliente tem até **2 endereços** (CEP/ViaCEP, busca por rua, GPS ou manual) e vários aparelhos. WhatsApp do cliente é a base do lembrete.
+Cliente tem **quantos endereços precisar** (limite técnico de 20, não mostrado) (CEP/ViaCEP, busca por rua, GPS ou manual) e vários aparelhos. Aparelho tem marca, modelo, número de série e data de instalação (opcionais). WhatsApp do cliente é a base do lembrete.
 
 ## Serviço
 `agendado → concluído` (ou `cancelado`). Ao concluir: garantia de **90 dias** (CDC art. 26). Se o tipo "gera retorno" (limpeza, manutenção preventiva) o usuário escolhe **3, 4, 6 ou 12 meses** (já vem o padrão do tipo) e nasce um lembrete.
 
 ### Agendamento (visita) com vários aparelhos e serviços
-- **Uma data e uma hora por agendamento** (editáveis). Cada serviço tem o **seu técnico**.
+- **Uma data e uma hora por agendamento** (editáveis). Cada serviço tem **um ou mais técnicos (pelo menos um)**; os livres aparecem como caixinhas.
+- **Cartão por visita** na Agenda e no Início: cliente e endereço uma vez; serviços agrupados por aparelho, cada um com seus técnicos e o próprio "Concluir"; "Ir até o cliente" uma vez; "Editar" (só administrador) leva à edição. O técnico vê só os serviços dele na visita.
 - Pode agendar só com **cliente, dia, hora e técnico**. Aparelhos e serviços são opcionais no agendamento.
 - Tela em cartões: um cartão por aparelho e, dentro dele, um por serviço. **Só dá para adicionar serviço depois de escolher/cadastrar o aparelho.** Cada nível tem seu campo de observações (agendamento, aparelho, serviço); ficam recolhidas atrás de "+ Observação" e abrem sozinhas se já têm texto.
 - Na lista de técnicos aparecem **só os livres** no dia/hora. Livre = nenhum outro serviço agendado dele se sobrepõe ao intervalo [hora, hora + duração]. O mesmo técnico pode fazer vários serviços da mesma visita (as durações se somam). Sem técnico livre: aviso e o botão Agendar fica bloqueado. A checagem é repetida na hora de salvar.
@@ -21,8 +22,16 @@ Cliente tem até **2 endereços** (CEP/ViaCEP, busca por rua, GPS ou manual) e v
 - **Erros**: qualquer pendência mostra a mensagem junto do item, rola a tela até ele e coloca o cursor; o botão Agendar nunca fica desativado. Avisos rápidos somem sozinhos (um toque fecha), sem botão de fechar.
 - Cliente, aparelhos e serviços podem ser editados/removidos na tela de agendamento. "Remover" tira só do agendamento; excluir o cadastro é feito na ficha do cliente (com confirmação).
 - **Conclusão**: cada serviço tem seu botão "Concluir serviço". **Não conclui sem aparelho** (o técnico escolhe um do cliente ou cadastra na hora). Se o agendamento foi feito sem serviço, o tipo é escolhido na conclusão. O técnico pode adicionar um serviço na visita (depois de escolher o aparelho).
+- **Serviço com vários técnicos**: qualquer um deles pode concluir; a conclusão vale para o serviço inteiro. No Financeiro o valor é **dividido igualmente** entre os técnicos (centavos que sobram vão para o primeiro) e o serviço conta para cada um. Na agenda, cada técnico fica ocupado pelo tempo dele na visita.
 - Retornos continuam por aparelho × serviço (um lembrete por linha concluída que gera retorno).
 - Serviços antigos (sem `agendamentoId`) continuam funcionando como uma visita de uma linha.
+
+## Valores do serviço
+- **Valor padrão** por tipo de serviço (opcional), em Tipos de serviço (criar, editar, remover; excluir o tipo apaga o preço).
+- Ao concluir, o valor **já vem preenchido** com o padrão; dá para mudar, somar **extras** (descrição + valor, quantos precisar) e dar **desconto**. **Total = valor + extras − desconto** (nunca negativo), mostrado na hora e também no total da visita.
+- "O que foi feito?" fica no fim da tela e é **opcional**.
+- Técnico sem *alterar*: conclui sem valor e o administrador confirma depois (Financeiro > Concluídos sem valor, ou "Informar/Corrigir valor" no serviço). O administrador corrige valor, extras e desconto de serviço concluído quando quiser.
+- Excluir o serviço ou o agendamento apaga também o valor e os extras. O Financeiro soma o total (valor + extras − desconto).
 
 ## Retornos
 Estados: `pendente`, `agendado`, `recusado`, `feito`. Aparecem na tela Retornos quando `dataRetorno ≤ hoje + dias de aviso` (padrão **15**, configurável). Ações: **WhatsApp** (abre o app com a mensagem pronta; o envio é manual), **Agendar** (cria serviço com origem no retorno → `agendado`; ao concluir → `feito`; se cancelar volta a `pendente`), **Adiar** 7/15/30 dias, **Não quer mais** (`recusado`).

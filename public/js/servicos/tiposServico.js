@@ -10,6 +10,7 @@
 import { gravar, operacao as op, novoId } from '../nucleo/banco.js';
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { recarregarTipos, sessao } from '../nucleo/sessao.js';
+import { invalidarCache } from '../nucleo/cache.js';
 
 const caminho = (empresaId) => `empresas/${empresaId}/tiposServico`;
 
@@ -29,6 +30,9 @@ export async function atualizarTipo(empresaId, tipo, { nome, geraRetorno, retorn
 }
 
 export async function excluirTipo(empresaId, id) {
-  await gravar([op.apagar(`${caminho(empresaId)}/${id}`)]);
+  // O preço padrão vai junto (serviços já feitos guardam o próprio valor).
+  await gravar([op.apagar(`${caminho(empresaId)}/${id}`), op.apagar(`empresas/${empresaId}/precos/${id}`)]);
+  invalidarCache(`${empresaId}:precos`);
+  
   await recarregarTipos();
 }

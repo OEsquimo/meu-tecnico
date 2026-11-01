@@ -5,11 +5,12 @@
 // aparelho-form, para não repetir código:
 //   * telaDeErro: mensagem clara + botão "Tentar de novo" (o app nunca trava
 //     em "carregando");
-//   * rotuloDoEndereco: texto curto para escolher entre os 2 endereços;
+//   * rotuloDoEndereco: texto curto para escolher entre os endereços do cliente;
 //   * carregarEstilosClientes: carrega css/telas-clientes.css (o index.html não o declara);
 //   * montarDescricaoAparelho / lerDescricaoAparelho: o modelo de dados do
-//     aparelho não tem campos "marca" e "modelo", então eles viajam dentro do
-//     texto "descricao" (linhas "Marca: ..." e "Modelo: ..." no começo).
+//     aparelho não tem campos "marca", "modelo", "série" e "instalação", então eles
+//     viajam dentro do texto "descricao" (linhas "Marca: ...", "Modelo: ...",
+//     "Série: ..." e "Instalado em: ..." no começo).
 // =============================================================================
 
 import { mostrar, aoClicar } from '../nucleo/ui.js';
@@ -63,20 +64,26 @@ export function carregarEstilosClientes() {
 // -----------------------------------------------------------------------------
 
 /** Junta marca, modelo e observações no texto único guardado em "descricao". */
-export function montarDescricaoAparelho({ marca = '', modelo = '', observacoes = '' }) {
+export function montarDescricaoAparelho({ marca = '', modelo = '', numeroSerie = '', dataInstalacao = '', observacoes = '' }) {
   return [
     marca.trim() && `Marca: ${marca.trim()}`,
     modelo.trim() && `Modelo: ${modelo.trim()}`,
+    numeroSerie.trim() && `Série: ${numeroSerie.trim()}`,
+    dataInstalacao.trim() && `Instalado em: ${dataInstalacao.trim()}`,
     observacoes.trim(),
   ].filter(Boolean).join('\n');
 }
 
-/** Faz o caminho inverso: { marca, modelo, observacoes } a partir da descrição guardada. */
+/**
+ * Faz o caminho inverso: { marca, modelo, numeroSerie, dataInstalacao, observacoes }
+ * a partir da descrição guardada. Aparelhos antigos (só marca/modelo) continuam lendo normal.
+ */
 export function lerDescricaoAparelho(descricao) {
   const linhas = String(descricao ?? '').split('\n');
-  let marca = '';
-  let modelo = '';
-  if (linhas[0]?.startsWith('Marca: ')) marca = linhas.shift().slice(7).trim();
-  if (linhas[0]?.startsWith('Modelo: ')) modelo = linhas.shift().slice(8).trim();
-  return { marca, modelo, observacoes: linhas.join('\n').trim() };
+  const dados = { marca: '', modelo: '', numeroSerie: '', dataInstalacao: '' };
+  const prefixos = [['Marca: ', 'marca'], ['Modelo: ', 'modelo'], ['Série: ', 'numeroSerie'], ['Instalado em: ', 'dataInstalacao']];
+  for (const [prefixo, campo] of prefixos) {
+    if (linhas[0]?.startsWith(prefixo)) dados[campo] = linhas.shift().slice(prefixo.length).trim();
+  }
+  return { ...dados, observacoes: linhas.join('\n').trim() };
 }

@@ -10,14 +10,17 @@ import { html, mostrar } from '../nucleo/ui.js';
 import { cabecalho, itemLista, estadoVazio, botao, selo } from '../nucleo/componentes.js';
 import { seta } from './_auxiliar-admin.js';
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
+import { listarPrecos } from '../servicos/precos.js';
+import { formatarReais } from '../dominio/dinheiro.js';
 
 export default async function montar({ raiz, sessao }) {
   const tipos = sessao.tipos;
+  const precos = await listarPrecos(sessao.vinculo.empresaId).catch(() => ({}));
 
   /** Texto que explica o retorno de cada tipo. */
   const descricao = (t) => (t.geraRetorno
     ? `Gera retorno · prazo padrão ${t.retornoPadraoMeses} meses`
-    : 'Não gera retorno') + ` · ${t.duracaoMin || DURACAO_PADRAO_MIN} min`;
+    : 'Não gera retorno') + ` · ${t.duracaoMin || DURACAO_PADRAO_MIN} min` + (Number.isInteger(precos[t.id]) ? ` · ${formatarReais(precos[t.id])}` : '');
 
   mostrar(raiz, html`
     ${cabecalho({

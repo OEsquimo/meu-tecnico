@@ -41,6 +41,7 @@ export const sessao = {
   planos: { gratis: PLANO_GRATIS_PADRAO },
   regras: { ...REGRAS_PADRAO },
   tipos: [], // tipos de serviço da empresa
+  permissoes: { verValores: false, alterarValores: false }, // liberadas pelo administrador (só técnico)
   ehDonoApp: false,
   erro: null, // { mensagem, rede }
 };
@@ -91,11 +92,13 @@ async function carregar(usuario) {
     }
 
     const empresaId = vinculo.empresaId;
-    const [empresa, listaPlanos, regras, tipos] = await Promise.all([
+    const [empresa, listaPlanos, regras, tipos, membro] = await Promise.all([
       ler(`empresas/${empresaId}`),
       listar('planos'),
       ler('config/regras'),
       listar(`empresas/${empresaId}/tiposServico`),
+      // O técnico lê o próprio cadastro para saber o que o administrador liberou.
+      vinculo.papel === 'tecnico' && vinculo.equipeId ? ler(`empresas/${empresaId}/equipe/${vinculo.equipeId}`).catch(() => null) : null,
     ]);
     if (minha !== geracao) return;
 
@@ -111,6 +114,7 @@ async function carregar(usuario) {
       planos: mapaDePlanos(listaPlanos),
       regras: { ...REGRAS_PADRAO, ...(regras || {}) },
       tipos: ordenarTipos(tipos),
+      permissoes: { verValores: membro?.verValores === true, alterarValores: membro?.alterarValores === true },
       ehDonoApp,
     });
   } catch (erro) {

@@ -1,6 +1,6 @@
 # Meu Técnico (nome provisório)
 
-Aplicativo (PWA para Android) para técnicos e empresas de ar-condicionado: **clientes → endereços (até 2) → aparelhos → serviços**, agenda, lembretes de retorno (limpeza/manutenção) enviados manualmente por WhatsApp, financeiro, planos, equipe de técnicos e painel do dono do aplicativo.
+Aplicativo (PWA para Android) para técnicos e empresas de ar-condicionado: **clientes → endereços → aparelhos → serviços**, agenda, lembretes de retorno (limpeza/manutenção) enviados manualmente por WhatsApp, financeiro, planos, equipe de técnicos e painel do dono do aplicativo.
 
 JavaScript/HTML/CSS puro (sem bundler) + Firebase (Auth, Firestore, Hosting). Custo zero para começar (plano Spark).
 
@@ -21,6 +21,8 @@ Siga **docs/GUIA-FIREBASE.md** (passo a passo, sem programar).
 | `npm test` | testes unitários (regras de negócio, serviços, rotas) | Node 20+ |
 | `npm run teste:telas` | abre as telas num navegador em modo demo | Python + Playwright + Chromium |
 | `npm run teste:regras` | testa `firestore.rules` no emulador | `npm install`, Java, Firebase CLI |
+
+Os mesmos testes rodam sozinhos no GitHub (aba **Actions**, fluxo **Testes**) a cada envio.
 
 ## Mapa das pastas
 ```

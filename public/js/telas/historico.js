@@ -11,6 +11,7 @@ import { textoParaBusca } from '../nucleo/ui-texto.js';
 import { listarHistorico } from '../servicos/servicos.js';
 import { formatarDataBR } from '../dominio/datas.js';
 import { LIMITE_HISTORICO } from '../nucleo/constantes.js';
+import { textoDosTecnicos } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -42,13 +43,13 @@ export default async function montar(ctx) {
     const alvo = raiz.querySelector('#resultado');
     const filtrar = (termo) => {
       const t = textoParaBusca(termo);
-      const achados = t ? lista.filter((s) => textoParaBusca(`${s.clienteNome} ${s.tipoServicoNome} ${s.tecnicoNome || ''} ${s.aparelhoResumo || ''}`).includes(t)) : lista;
+      const achados = t ? lista.filter((s) => textoParaBusca(`${s.clienteNome} ${s.tipoServicoNome} ${textoDosTecnicos(s)} ${s.aparelhoResumo || ''}`).includes(t)) : lista;
       mostrar(alvo, achados.length === 0
         ? estadoVazio({ icone: 'relogio', titulo: lista.length ? 'Nada encontrado' : 'Nenhum serviço concluído ainda', texto: lista.length ? 'Tente outro nome.' : 'Quando você concluir serviços, eles aparecem aqui.' })
         : html`${achados.map((s) => itemLista({
           href: `#/servico/${s.id}`,
           titulo: s.clienteNome,
-          sub: `${s.tipoServicoNome} · ${formatarDataBR(s.dataConclusao)}${s.tecnicoNome ? ` · ${s.tecnicoNome}` : ''}`,
+          sub: `${s.tipoServicoNome} · ${formatarDataBR(s.dataConclusao)}${textoDosTecnicos(s) ? ` · ${textoDosTecnicos(s)}` : ''}`,
           direita: usuario.admin && s.valorDefinido === false ? selo('Sem valor', 'amarelo') : (s.pago ? selo('Pago', 'verde') : selo('A receber', 'amarelo')),
         }))}`);
     };

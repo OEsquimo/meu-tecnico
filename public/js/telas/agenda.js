@@ -7,6 +7,8 @@
 //     botão "Agendar" (já abre a tela de agendar com o dia escolhido).
 //   * TÉCNICO: vê só os serviços dele (a consulta já filtra no servidor).
 // Mostra só serviços AGENDADOS (os concluídos ficam no Histórico).
+// Cada VISITA vira um cartão só (cliente e endereço uma vez); os serviços ficam
+// dentro, por aparelho, cada um com seu técnico e seu "Concluir".
 // Padrão: esqueleto ao carregar; se falhar, "Tentar de novo".
 // =============================================================================
 
@@ -17,7 +19,8 @@ import { listarAgendados } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { gradeDoMes, agruparPorDia, mesVizinho, DIAS_DA_SEMANA } from '../dominio/agenda.js';
 import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDoServico, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+import { agruparAgendamentos, servicoTemTecnico } from '../dominio/servicos.js';
+import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
@@ -66,7 +69,7 @@ export default async function montar(ctx) {
   }
 
   /** Serviços do mês já com o filtro de técnico aplicado. */
-  const visiveis = () => (filtroTecnico ? servicosDoMes.filter((s) => s.tecnicoUid === filtroTecnico) : servicosDoMes);
+  const visiveis = () => (filtroTecnico ? servicosDoMes.filter((s) => servicoTemTecnico(s, filtroTecnico)) : servicosDoMes);
 
   // ---------------------------------------------------------------------------
   // Desenhar
@@ -107,7 +110,7 @@ export default async function montar(ctx) {
       texto: usuario.admin ? 'Toque em "Agendar" para marcar um serviço.' : 'Você não tem serviços neste dia.',
       acao: usuario.admin ? botao({ texto: 'Agendar serviço', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}` }) : null,
     })}</div>`
-    : doDia.map((s) => cartaoDoServico(s, { mostrarTecnico: usuario.admin, acoes: true }))}
+    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin }))}
         </section>
       </div>`);
 
@@ -123,7 +126,7 @@ export default async function montar(ctx) {
     if (c.iso === hoje) classes.push('calendario__dia--hoje');
     if (c.iso === diaEscolhido) classes.push('calendario__dia--selecionado');
     return html`<button type="button" class="${classes.join(' ')}" data-acao="dia" data-dia="${c.iso}"
-      aria-label="${formatarDiaExtenso(c.iso)}${tem ? `, ${grupos[c.iso].length} serviço(s)` : ''}" aria-pressed="${c.iso === diaEscolhido ? 'true' : 'false'}">
+      aria-label="${formatarDiaExtenso(c.iso)}${tem ? `, ${agruparAgendamentos(grupos[c.iso]).length} visita(s)` : ''}" aria-pressed="${c.iso === diaEscolhido ? 'true' : 'false'}">
       ${c.dia}${tem && html`<span class="calendario__ponto"></span>`}</button>`;
   }
 

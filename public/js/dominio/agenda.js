@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { paraISO, diasNoMes } from './datas.js';
-import { chaveDoAgendamento, duracaoDoServico, STATUS } from './servicos.js';
+import { chaveDoAgendamento, duracaoDoServico, tecnicosDoServico, STATUS } from './servicos.js';
 
 /** Cabeçalho do calendário (a semana começa no domingo, como no Brasil). */
 export const DIAS_DA_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -52,11 +52,13 @@ export function mesVizinho(ano, mes, passo) {
 const MINUTO = 60000;
 
 /**
- * Fim de uma linha agendada. Usa `ocupacaoMin` (tempo TOTAL do técnico nesta visita,
- * somando os serviços dele) quando existe; senão a duração do próprio serviço.
+ * Fim de uma linha agendada para um técnico. Usa o tempo TOTAL daquele técnico nesta visita
+ * (`ocupacaoPorTecnico[uid]`, a soma dos serviços dele) quando existe; senão `ocupacaoMin`
+ * (serviços antigos, um técnico só); senão a duração do próprio serviço.
  */
-export function fimDoServico(servico) {
-  const total = Number(servico.ocupacaoMin);
+export function fimDoServico(servico, tecnicoUid = null) {
+  const doTecnico = tecnicoUid && servico.ocupacaoPorTecnico ? Number(servico.ocupacaoPorTecnico[tecnicoUid]) : NaN;
+  const total = Number.isFinite(doTecnico) && doTecnico > 0 ? doTecnico : Number(servico.ocupacaoMin);
   const minutos = Number.isFinite(total) && total > 0 ? Math.max(total, duracaoDoServico(servico)) : duracaoDoServico(servico);
   return new Date(servico.dataAgendada.getTime() + minutos * MINUTO);
 }
@@ -77,10 +79,10 @@ export function intervalosSeSobrepoem(aIni, aFim, bIni, bFim) {
 export function tecnicoEstaLivre(tecnicoUid, inicio, duracaoMin, agendados, ignorarAgendamento = null) {
   const fim = new Date(inicio.getTime() + duracaoMin * MINUTO);
   return !agendados.some((s) => s.status === STATUS.AGENDADO
-    && s.tecnicoUid === tecnicoUid
+    && tecnicosDoServico(s).includes(tecnicoUid)
     && s.dataAgendada instanceof Date
     && (!ignorarAgendamento || chaveDoAgendamento(s) !== ignorarAgendamento)
-    && intervalosSeSobrepoem(inicio, fim, s.dataAgendada, fimDoServico(s)));
+    && intervalosSeSobrepoem(inicio, fim, s.dataAgendada, fimDoServico(s, tecnicoUid)));
 }
 
 /** Filtra a lista de técnicos ({uid,nome}) deixando só os livres. */

@@ -79,6 +79,64 @@ export function chaveDoAgendamento(servico) {
   return servico.agendamentoId || servico.id;
 }
 
+// -----------------------------------------------------------------------------
+// TÉCNICOS DO SERVIÇO (um serviço pode ter mais de um técnico)
+// -----------------------------------------------------------------------------
+// O serviço guarda a lista completa em `tecnicoUids` / `tecnicosNomes` e, para os
+// serviços antigos e para as consultas, também o primeiro em `tecnicoUid` / `tecnicoNome`.
+// Serviços antigos têm só `tecnicoUid`: as funções abaixo tratam os dois formatos.
+// -----------------------------------------------------------------------------
+
+/** Uids dos técnicos do serviço (sem repetir). */
+export function tecnicosDoServico(servico) {
+  if (Array.isArray(servico.tecnicoUids) && servico.tecnicoUids.length > 0) return [...new Set(servico.tecnicoUids)];
+  return servico.tecnicoUid ? [servico.tecnicoUid] : [];
+}
+
+/** Nomes dos técnicos do serviço, na mesma ordem de tecnicosDoServico. */
+export function nomesDosTecnicos(servico) {
+  const uids = tecnicosDoServico(servico);
+  if (Array.isArray(servico.tecnicosNomes) && servico.tecnicosNomes.length === uids.length && uids.length > 0) return servico.tecnicosNomes;
+  return uids.length === 1 && servico.tecnicoNome ? [servico.tecnicoNome] : uids.map((_, i) => (i === 0 && servico.tecnicoNome) || '');
+}
+
+/** Este técnico faz parte do serviço? */
+export function servicoTemTecnico(servico, uid) {
+  return Boolean(uid) && tecnicosDoServico(servico).includes(uid);
+}
+
+/** Campos gravados no serviço a partir da lista [{ uid, nome }]. */
+export function camposDosTecnicos(tecnicos) {
+  const lista = [];
+  for (const t of tecnicos || []) {
+    if (t?.uid && !lista.some((x) => x.uid === t.uid)) lista.push({ uid: t.uid, nome: t.nome || '' });
+  }
+  return {
+    tecnicoUid: lista[0]?.uid ?? null,
+    tecnicoNome: lista[0]?.nome ?? '',
+    tecnicoUids: lista.map((t) => t.uid),
+    tecnicosNomes: lista.map((t) => t.nome),
+  };
+}
+
+/** "Rafael, Marcos" (ou "Rafael e Marcos"). */
+export function textoDosTecnicos(servico) {
+  const nomes = nomesDosTecnicos(servico).filter(Boolean);
+  if (nomes.length <= 1) return nomes[0] || '';
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
+
+/**
+ * Divide um valor em centavos igualmente entre `partes` pessoas. Os centavos que sobram
+ * vão um a um para as primeiras (ex.: 1000 em 3 -> [334, 333, 333]). A soma é sempre o total.
+ */
+export function dividirCentavos(totalCentavos, partes) {
+  const n = Math.max(1, Math.floor(partes));
+  const base = Math.floor(totalCentavos / n);
+  const resto = totalCentavos - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < resto ? 1 : 0));
+}
+
 /** A linha ainda não tem serviço escolhido (agendamento só com cliente/dia/hora/técnico)? */
 export function ehLinhaSemServico(servico) {
   return !servico.tipoServicoId;

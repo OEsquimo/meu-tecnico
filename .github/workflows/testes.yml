@@ -1,0 +1,67 @@
+name: Testes
+# Roda sozinho em cada Pull Request e em cada envio para a main.
+# Se algum passo ficar VERMELHO, não publique no Firebase real antes de corrigir.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  basicos:
+    name: Verificação e testes unitários
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verificar o projeto (imports, arquivos, consistência)
+        run: node scripts/verificar-projeto.mjs
+      - name: Testes unitários
+        run: node --test testes/unitarios/*.test.mjs
+
+  telas:
+    name: Testes de tela (navegador)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar o navegador de teste
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Subir o servidor local
+        run: |
+          node scripts/servir-local.mjs &
+          sleep 3
+          curl -sSf http://localhost:5173/ > /dev/null
+      - name: Teste de fumaça (todas as telas abrem sem erro)
+        run: python3 testes/telas/fumaca.py
+      - name: Fluxos principais
+        run: python3 testes/telas/fluxos.py
+
+  regras:
+    name: Regras de segurança do Firestore (emulador)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Instalar dependências de teste
+        run: npm install --no-audit --no-fund
+      - name: Testar as regras no emulador
+        run: npx firebase emulators:exec --project meu-tecnico-teste --only firestore "node --test testes/regras/*.test.mjs"

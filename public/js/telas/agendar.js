@@ -13,15 +13,15 @@
 //     são opcionais aqui; o aparelho passa a ser obrigatório na CONCLUSÃO.
 //   * Cartões: um por aparelho e, dentro dele, um por serviço. Só dá para
 //     adicionar serviço depois que o aparelho está no cartão.
-//   * Cada serviço tem o seu técnico. Só aparecem na lista os técnicos LIVRES
-//     naquele dia e horário (o mesmo técnico pode fazer vários serviços da
-//     visita: os tempos se somam). Sem técnico livre: aviso e botão bloqueado.
+//   * Cada serviço tem um ou mais técnicos (pelo menos um). Só aparecem na lista os
+//     técnicos LIVRES naquele dia e horário (o mesmo técnico pode fazer vários
+//     serviços da visita: os tempos se somam). Sem técnico livre: aviso e botão bloqueado.
 //   * Cliente, aparelhos e serviços podem ser editados/removidos aqui. "Remover"
 //     tira só deste agendamento; excluir o cadastro é na ficha do cliente.
 // =============================================================================
 
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, levarAte } from '../nucleo/ui.js';
-import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTexto, campoTextoLongo, campoSelecao, campoPilulas, selo } from '../nucleo/componentes.js';
+import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTexto, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
@@ -34,12 +34,12 @@ import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio
 import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora } from '../dominio/datas.js';
-import { STATUS, chaveDoAgendamento } from '../dominio/servicos.js';
+import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
 import {
   estadoInicial, novoGrupo, novoServico, inicioDoEstado, todosOsServicos, textoDoRetorno, duracaoDoTipo, duracaoDoServicoNaTela,
   DURACOES_OFERECIDAS, textoDaDuracao, problemasDoAgendamento,
-  tecnicosLivresParaServico, tecnicosLivresParaAgendamento, limparTecnicosOcupados, tecnicoSugerido,
+  tecnicosLivresParaServico, tecnicosLivresParaAgendamento, limparTecnicosOcupados, tecnicosSugeridos,
   pendenciasDoAgendamento, montarLinhas, estadoDeLinhas, guardarRascunho, pegarRascunho, descartarRascunho,
 } from './agendamento-comum.js';
 
@@ -87,10 +87,12 @@ export default async function montar(ctx) {
         listarClientes(usuario.empresaId),
         tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome }),
       ]);
-      estado.tecnicoUid = '';
+      estado.tecnicoUids = [];
 
       const rascunho = pegarRascunho();
-      if (rascunho && (rascunho.extras.editandoId || null) === (params.id || null)) {
+      // O rascunho só volta quando a pessoa RETORNA da tela para onde saiu (mesmo endereço da página).
+      // Antes ele reaparecia em qualquer agendamento novo, com o cliente de outra tentativa.
+      if (rascunho && (rascunho.extras.editandoId || null) === (params.id || null) && rascunho.extras.endereco === location.hash) {
         await restaurarRascunho(rascunho);
       } else if (editando) {
         await carregarParaEditar();
@@ -100,7 +102,11 @@ export default async function montar(ctx) {
       }
       // Técnico que saiu da equipe continua aparecendo neste agendamento.
       for (const l of linhasExistentes) {
-        if (l.tecnicoUid && !tecnicos.some((t) => t.uid === l.tecnicoUid)) tecnicos.push({ uid: l.tecnicoUid, nome: l.tecnicoNome || 'Técnico' });
+        const uids = tecnicosDoServico(l);
+        const nomes = nomesDosTecnicos(l);
+        uids.forEach((uid, i) => {
+          if (!tecnicos.some((t) => t.uid === uid)) tecnicos.push({ uid, nome: nomes[i] || 'Técnico' });
+        });
       }
       if (estado.cliente) await carregarAparelhos();
       linhasPreservadas = linhasExistentes
@@ -111,7 +117,7 @@ export default async function montar(ctx) {
       sugerirTecnicoDoAgendamento();
       // Serviços que já chegam preenchidos (retorno, ficha do cliente) recebem um técnico livre.
       for (const s of todosOsServicos(estado)) {
-        if (!s.tecnicoUid) s.tecnicoUid = tecnicoSugerido({ ...contexto(), servico: s });
+        if (s.tecnicoUids.length === 0) s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
       }
       if (!ctx.ativo()) return;
       desenhar();
@@ -135,7 +141,7 @@ export default async function montar(ctx) {
       cliente, data: paraISO(servico.dataAgendada), hora: formatarHora(servico.dataAgendada),
       tipoExiste: (id) => sessao.tipos.some((t) => t.id === id),
     });
-    if (!estado.tecnicoUid) estado.tecnicoUid = servico.tecnicoUid || '';
+    if (estado.tecnicoUids.length === 0) estado.tecnicoUids = tecnicosDoServico(servico);
   }
 
   /** Volta de "Editar cliente / aparelho / Novo aparelho": devolve o que já estava preenchido. */
@@ -222,8 +228,9 @@ export default async function montar(ctx) {
 
   /** Agendamento novo sem técnico: já deixa o primeiro técnico livre escolhido (dá para trocar). */
   function sugerirTecnicoDoAgendamento() {
-    if (estado.tecnicoUid) return;
-    estado.tecnicoUid = tecnicosLivresParaAgendamento(contexto())[0]?.uid || '';
+    if (estado.tecnicoUids.length > 0) return;
+    const primeiro = tecnicosLivresParaAgendamento(contexto())[0]?.uid;
+    estado.tecnicoUids = primeiro ? [primeiro] : [];
   }
 
   // ---------------------------------------------------------------------------
@@ -421,7 +428,6 @@ export default async function montar(ctx) {
   function cartaoDoServico(g, s) {
     const tipo = tiposPorId()[s.tipoId];
     const livres = tecnicosLivresParaServico({ ...contexto(), servico: s });
-    const opcoes = livres.map((t) => ({ valor: t.uid, rotulo: t.nome }));
     const duracao = duracaoDoServicoNaTela(s, tiposPorId());
     const ajustada = Boolean(s.duracaoMin) && s.duracaoMin !== duracaoDoTipo(tipo);
     return html`
@@ -437,11 +443,32 @@ export default async function montar(ctx) {
             ${botao({ texto: 'Remover', variante: 'perigo', pequeno: true, acao: 'remover-servico', dados: { servico: s.chave } })}
           </div>
         </div>
-        ${opcoes.length === 0
+        ${livres.length === 0
     ? html`<div data-campo="tec-${s.chave}">${aviso({ tom: 'amarelo', texto: 'Nenhum técnico está livre nesse dia e horário. Mude o dia ou a hora.' })}</div>`
-    : campoSelecao({ nome: `tec-${s.chave}`, rotulo: 'Técnico', opcoes, valor: s.tecnicoUid, vazio: s.tecnicoUid ? '' : 'Escolha o técnico' })}
+    : caixasDeTecnicos({ nome: `tec-${s.chave}`, rotulo: 'Técnicos deste serviço', livres, marcados: s.tecnicoUids })}
         ${observacaoRecolhivel({ nome: `obsServico-${s.chave}`, rotulo: 'Observações do serviço', valor: s.obs, aberta: s.obsAberta, tipo: 'servico', chave: s.chave })}
       </div>`;
+  }
+
+  /** Lista de técnicos livres com caixinhas: pode marcar mais de um (pelo menos um é obrigatório). */
+  function caixasDeTecnicos({ nome, rotulo, livres, marcados, ajuda = '' }) {
+    return html`
+      <fieldset class="campo campo--tecnicos" data-campo="${nome}">
+        <legend class="campo__rotulo">${rotulo}</legend>
+        <div class="tecnicos-caixas">
+          ${livres.map((t) => html`
+            <label class="tecnico-opcao">
+              <input type="checkbox" name="${nome}" value="${t.uid}" ${marcados.includes(t.uid) ? 'checked' : ''} />
+              <span>${t.nome}</span>
+            </label>`)}
+        </div>
+        ${ajuda && html`<p class="campo__ajuda">${ajuda}</p>`}
+      </fieldset>`;
+  }
+
+  /** Quais caixinhas desse nome estão marcadas (na ordem da tela). */
+  function marcadosNaTela(form, nome) {
+    return [...form.querySelectorAll('input[type="checkbox"]')].filter((c) => c.name === nome && c.checked).map((c) => c.value);
   }
 
   // ---- Técnico do agendamento ----
@@ -454,11 +481,11 @@ export default async function montar(ctx) {
     if (!inicio) { mostrar(area, ''); return; }
     mostrar(area, livres.length === 0
       ? aviso({ tom: 'amarelo', titulo: 'Nenhum técnico livre', texto: 'Todos já têm serviço nesse dia e horário. Escolha outro horário.' })
-      : html`${campoSelecao({
-        nome: 'tecnicoUid', rotulo: temServicos ? 'Técnico do agendamento (sugerido para novos serviços)' : 'Técnico do agendamento',
-        opcoes: livres.map((t) => ({ valor: t.uid, rotulo: t.nome })), valor: estado.tecnicoUid, vazio: estado.tecnicoUid ? '' : 'Escolha o técnico',
-        ajuda: `A lista mostra só os técnicos livres em ${formatarDataBR(inicio)} às ${formatarHora(inicio)}. Se mudar o dia ou a hora, a lista se atualiza.`,
-      })}`);
+      : caixasDeTecnicos({
+        nome: 'tecnicoUids', rotulo: temServicos ? 'Técnicos do agendamento (sugeridos para novos serviços)' : 'Técnicos do agendamento',
+        livres, marcados: estado.tecnicoUids,
+        ajuda: `A lista mostra só os técnicos livres em ${formatarDataBR(inicio)} às ${formatarHora(inicio)}. Marque mais de um se forem juntos. Se mudar o dia ou a hora, a lista se atualiza.`,
+      }));
   }
 
   function desenharPendencias() {
@@ -500,13 +527,13 @@ export default async function montar(ctx) {
         try { await carregarOcupacao(); } catch (erro) { toast(traduzirErro(erro), 'erro'); }
         sugerirTecnicoDoAgendamento();
         if (ctx.ativo()) redesenharTudo();
-      } else if (nome === 'tecnicoUid') {
-        estado.tecnicoUid = e.target.value;
+      } else if (nome === 'tecnicoUids') {
+        estado.tecnicoUids = marcadosNaTela(form, nome);
         desenharPendencias();
       } else if (nome.startsWith('tec-')) {
         const s = acharServico(nome.slice(4));
         if (s) {
-          s.tecnicoUid = e.target.value;
+          s.tecnicoUids = marcadosNaTela(form, nome);
           if (servicoComErro === s.chave) servicoComErro = null;
           redesenharTudo();
         }
@@ -543,6 +570,7 @@ export default async function montar(ctx) {
   function sairPara(caminho) {
     guardarRascunho(estado, {
       editandoId: params.id || null,
+      endereco: location.hash,
       origemRetornoId,
       aparelhosConhecidos: aparelhos.map((a) => a.id),
     });
@@ -610,7 +638,7 @@ export default async function montar(ctx) {
     if (!tipoId) return;
     const s = novoServico({ tipoId });
     g.servicos.push(s);
-    s.tecnicoUid = tecnicoSugerido({ ...contexto(), servico: s });
+    s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
     redesenharTudo();
   }
 
@@ -661,7 +689,7 @@ export default async function montar(ctx) {
       desenharAparelhos();
       toast(texto, 'erro');
       const cartao = raiz.querySelector(`[data-servico="${alvo.servico}"]`);
-      levarAte(cartao?.querySelector('select') || cartao, { focar: Boolean(cartao?.querySelector('select')) });
+      levarAte(cartao?.querySelector('input[type="checkbox"]') || cartao, { focar: Boolean(cartao?.querySelector('input[type="checkbox"]')) });
       return;
     }
     if (alvo.grupo) {
@@ -706,7 +734,7 @@ export default async function montar(ctx) {
         existentes: linhasExistentes,
         cliente: estado.cliente,
         endereco: enderecoDoCliente(estado.cliente, limpos.enderecoId),
-        tecnico: tecnicosPorUid()[estado.tecnicoUid] || null,
+        tecnicos: estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]).filter(Boolean),
         data: limpos.data,
         hora: limpos.hora,
         observacao: limpos.descricao,

@@ -40,6 +40,19 @@ export function aplicarEstilosDinamicos(raiz) {
  *   aoClicar(raiz, { excluir: (el, ev) => ..., voltar: () => ... })
  * Usa delegação: funciona mesmo para elementos criados depois.
  */
+/** Cliques ligados por aoClicar, por elemento: o roteador solta todos ao trocar de tela (limparCliques). */
+const cliquesLigados = new Map();
+
+/**
+ * Remove TODOS os cliques que aoClicar ligou neste elemento. O roteador chama ao sair de uma tela:
+ * sem isso, uma tela que esquece de desligar o próprio clique continua agindo nas telas seguintes
+ * (ex.: o "+ Novo aparelho" abria o cliente da ficha visitada antes).
+ */
+export function limparCliques(raiz) {
+  for (const ouvinte of cliquesLigados.get(raiz) || []) raiz.removeEventListener('click', ouvinte);
+  cliquesLigados.delete(raiz);
+}
+
 export function aoClicar(raiz, mapa) {
   const ouvinte = (evento) => {
     const alvo = evento.target.closest('[data-acao]');
@@ -50,7 +63,9 @@ export function aoClicar(raiz, mapa) {
     funcao(alvo, evento);
   };
   raiz.addEventListener('click', ouvinte);
-  return () => raiz.removeEventListener('click', ouvinte);
+  if (!cliquesLigados.has(raiz)) cliquesLigados.set(raiz, new Set());
+  cliquesLigados.get(raiz).add(ouvinte);
+  return () => { raiz.removeEventListener('click', ouvinte); cliquesLigados.get(raiz)?.delete(ouvinte); };
 }
 
 /** Liga o envio de um formulário (Enter ou botão) ao manipulador. */

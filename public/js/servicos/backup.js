@@ -17,15 +17,16 @@ const base = (empresaId) => `empresas/${empresaId}`;
 
 /** Lê tudo da empresa e devolve { texto (JSON), backup (objeto), resumo }. */
 export async function gerarBackup(empresaId, empresa) {
-  const [tiposServico, clientes, aparelhos, servicos, valores, equipe] = await Promise.all([
+  const [tiposServico, clientes, aparelhos, servicos, valores, precos, equipe] = await Promise.all([
     listar(`${base(empresaId)}/tiposServico`),
     listar(`${base(empresaId)}/clientes`),
     listar(`${base(empresaId)}/aparelhos`),
     listar(`${base(empresaId)}/servicos`),
     listar(`${base(empresaId)}/valores`),
+    listar(`${base(empresaId)}/precos`),
     listar(`${base(empresaId)}/equipe`),
   ]);
-  const backup = montarBackup({ empresa, tiposServico, clientes, aparelhos, servicos, valores, equipe });
+  const backup = montarBackup({ empresa, tiposServico, clientes, aparelhos, servicos, valores, precos, equipe });
   return {
     backup,
     texto: serializarBackup(backup),
@@ -53,7 +54,7 @@ async function gravarEmLotes(operacoes, resultado, chave) {
  * @returns {Promise<{tipos, clientes, aparelhos, servicos, valores, ignoradosPorLimite, falhas}>}
  */
 export async function restaurarBackup(empresaId, usuarioUid, backup, aoProgresso = () => {}) {
-  const resultado = { tipos: 0, clientes: 0, aparelhos: 0, servicos: 0, valores: 0, ignoradosPorLimite: 0, falhas: 0 };
+  const resultado = { tipos: 0, clientes: 0, aparelhos: 0, servicos: 0, valores: 0, precos: 0, ignoradosPorLimite: 0, falhas: 0 };
   const { colecoes } = backup;
 
   // 1. Tipos de serviço
@@ -115,7 +116,7 @@ export async function restaurarBackup(empresaId, usuarioUid, backup, aoProgresso
   await gravarEmLotes(
     servicosValidos.map(({ id, ...dados }) => op.definir(`${base(empresaId)}/servicos/${id}`, {
       ...dados,
-      tecnicoUid: tecnicoValido(dados.tecnicoUid, tecnicosValidos),
+      ...tecnicosRestaurados(dados, tecnicosValidos),
     })),
     resultado, 'servicos',
   );
@@ -130,6 +131,15 @@ export async function restaurarBackup(empresaId, usuarioUid, backup, aoProgresso
     resultado, 'valores',
   );
 
+  // 6. Valor padrão dos tipos de serviço (só dos tipos que foram restaurados)
+  const idsTipos = new Set(colecoes.tiposServico.map((t) => t.id));
+  await gravarEmLotes(
+    (colecoes.precos || [])
+      .filter((p) => idsTipos.has(p.id) && Number.isInteger(p.valorCentavos) && p.valorCentavos >= 0)
+      .map(({ id, ...dados }) => op.definir(`${base(empresaId)}/precos/${id}`, { ...dados, atualizadoEm: AGORA })),
+    resultado, 'precos',
+  );
+
   invalidarCache();
   await recarregarEmpresa();
   await recarregarTipos();
@@ -138,4 +148,19 @@ export async function restaurarBackup(empresaId, usuarioUid, backup, aoProgresso
 
 function tecnicoValido(uid, validos) {
   return uid && validos.has(uid) ? uid : null;
+}
+
+/** Mantém só os técnicos que ainda existem (lista nova e campo antigo). */
+function tecnicosRestaurados(dados, validos) {
+  const uids = Array.isArray(dados.tecnicoUids) && dados.tecnicoUids.length > 0 ? dados.tecnicoUids : (dados.tecnicoUid ? [dados.tecnicoUid] : []);
+  const nomes = Array.isArray(dados.tecnicosNomes) ? dados.tecnicosNomes : [dados.tecnicoNome || ''];
+  const ficam = uids.map((uid, i) => ({ uid, nome: nomes[i] || '' })).filter((t) => validos.has(t.uid));
+  const { ocupacaoPorTecnico } = dados;
+  return {
+    tecnicoUid: ficam[0]?.uid ?? tecnicoValido(dados.tecnicoUid, validos),
+    tecnicoUids: ficam.map((t) => t.uid),
+    tecnicosNomes: ficam.map((t) => t.nome),
+    ocupacaoPorTecnico: ocupacaoPorTecnico && typeof ocupacaoPorTecnico === 'object'
+      ? Object.fromEntries(Object.entries(ocupacaoPorTecnico).filter(([uid]) => validos.has(uid))) : {},
+  };
 }

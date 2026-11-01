@@ -4,7 +4,7 @@
 > Última atualização: 2026-10-29 — etapa 7 (ajustes da tela de agendamento e avisos de erro) sobre a etapa 6 (agendamento com cartões, um técnico por serviço, disponibilidade). Aguardando o usuário subir os arquivos no GitHub; regras do Firestore novas ainda NÃO testadas em emulador.
 
 ## 1. O que é
-App (PWA Android) para técnicos/empresas de ar-condicionado: clientes (até 2 endereços) → aparelhos → serviços; agenda; lembrete de retorno por WhatsApp (envio manual, botão abre wa.me com texto pronto); financeiro; planos; painel do dono do app; equipe (técnicos).
+App (PWA Android) para técnicos/empresas de ar-condicionado: clientes (vários endereços) → aparelhos → serviços; agenda; lembrete de retorno por WhatsApp (envio manual, botão abre wa.me com texto pronto); financeiro; planos; painel do dono do app; equipe (técnicos).
 Stack: JavaScript/HTML/CSS puro (módulos ES, sem bundler), Firebase (Auth + Firestore + Hosting), custo zero para começar. Código comentado em português. Nome provisório: "Meu Técnico".
 
 ## 2. Regras de negócio decididas
@@ -46,6 +46,15 @@ Stack: JavaScript/HTML/CSS puro (módulos ES, sem bundler), Firebase (Auth + Fir
 - Avisos rápidos: tempo proporcional ao texto (erro dura mais), um toque fecha, sem botão de fechar.
 - Alterados: `agendar.js`, `agendamento-comum.js`, `concluir-servico.js` (sem mudança de código necessária: usa a regra única), `nucleo/ui.js`, `componentes.css`, `telas-servicos.css`, `service-worker.js` (cache v3), `testes/unitarios/agendamento.test.mjs` (53 testes no total), `testes/telas/fluxos.py`, docs.
 
+## 3d. Etapa 8 (2026-10-31/11-01) — pacote único pedido pelo usuário
+- **Cartão por visita** (Agenda e Início), `cartaoDaVisita` em `servicos-comum.js`.
+- **Vários técnicos por serviço** (≥1; qualquer um conclui; Financeiro divide igual): `tecnicoUids`, `tecnicosNomes`, `ocupacaoPorTecnico`; telas com caixinhas de técnicos livres.
+- **Endereços sem limite** (teto técnico 20); **série e data de instalação** do aparelho.
+- **Valores**: valor padrão por tipo (`precos/`), editor com extras e desconto (`valores-editor.js`), tela `valor-servico.js`, permissões por funcionário (`verValores`, `alterarValores`), concluir com descrição opcional no fim.
+- **Correção de bug (provável causa do "Cliente não encontrado" ao tocar em "+ Novo aparelho")**: (1) o roteador agora solta todos os cliques da tela anterior (`limparCliques`); antes, um clique antigo continuava ativo e abria o aparelho de OUTRO cliente; (2) o rascunho do agendamento só volta quando a pessoa retorna ao mesmo endereço de onde saiu. Testes de regressão em `fluxos.py`.
+- **Segurança**: `firestore.rules` (valores/preços/permissões/vários técnicos) e índices novos. **Regras não foram executadas no ambiente do Claude (emulador bloqueado)**: o workflow `.github/workflows/testes.yml` roda tudo no GitHub, inclusive as regras no emulador. **Só publique as regras no Firebase real depois que o job "Regras de segurança do Firestore" ficar verde.**
+- Testes: 70 unitários, fumaça e fluxos (Playwright) passando; cache do service worker v4.
+
 ## 4. Pendências
 **Só o usuário consegue fazer:** criar o projeto Firebase e publicar (docs/GUIA-FIREBASE.md); rodar `npm install && npm run teste:regras`; testar em Android real (PWA, GPS, WhatsApp, contatos); revisão jurídica dos textos legais; decidir cobrança/Play Store.
 **Melhorias conhecidas:** considerar verificação de e-mail/App Check; commit inicial (repo sem commits; só quando o usuário pedir). Já resolvidas na etapa 5: janela própria para informar valor no Financeiro (testada em demo, com validação), campo de dias de `configuracoes.js` sem `maxlength` indevido, ícones PWA conferidos visualmente.
@@ -62,4 +71,5 @@ Stack: JavaScript/HTML/CSS puro (módulos ES, sem bundler), Firebase (Auth + Fir
 - 2026-10-19: testes unitários (23), testes de regras (escritos, não executados), README e docs, parecer final; corrigido bug da conta bloqueada.
 - 2026-10-19 (noite): retomada sem alterar o que estava validado; Financeiro ganhou janela própria para o valor; ícones conferidos; verificador, 23 testes unitários e testes de tela seguem passando.
 - 2026-10-28: etapa 6 — agendamento com cartões (aparelhos e serviços), técnico por serviço só livres, duração por tipo, aparelho obrigatório na conclusão; 49 testes unitários e testes de tela passando.
+- 2026-11-01: etapa 8 — cartão por visita, vários técnicos, valores/extras/permissões, endereços livres, série/instalação, correção do clique antigo e do rascunho, CI (`testes.yml`); 70 testes unitários, telas passando; regras escritas e ainda não executadas.
 - 2026-10-29: etapa 7 — Editar do serviço (tipo e duração), botões lado a lado, observações recolhidas, erros que rolam até o item com cursor, avisos rápidos; 53 testes unitários e testes de tela passando.

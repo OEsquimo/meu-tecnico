@@ -12,7 +12,7 @@ import { botao, selo, estadoVazio, cabecalho } from '../nucleo/componentes.js';
 import { traduzirErro, ehErroDeRede } from '../nucleo/erros.js';
 import { sessao } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
-import { seloDoServico, estaAtrasado } from '../dominio/servicos.js';
+import { estaAtrasado, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
@@ -93,34 +93,62 @@ export function mostrarNaoEncontrado(raiz, titulo, texto, href = '#/') {
 // CARTÃO DE SERVIÇO
 // -----------------------------------------------------------------------------
 
+/** Separa as linhas de uma visita por aparelho, mantendo a ordem. */
+function blocosPorAparelho(linhas) {
+  const mapa = new Map();
+  for (const l of linhas) {
+    const chave = l.aparelhoId || '';
+    if (!mapa.has(chave)) mapa.set(chave, { rotulo: l.aparelhoResumo || '', linhas: [] });
+    mapa.get(chave).linhas.push(l);
+  }
+  return [...mapa.values()];
+}
+
 /**
- * Cartão de um serviço agendado (usado no início e na agenda).
+ * Cartão de UMA VISITA agendada (usado no início e na agenda): horário, cliente
+ * e endereço aparecem uma vez; dentro, os aparelhos e, em cada um, os serviços
+ * com o técnico e o botão "Concluir" de cada serviço.
+ * visita: { linhas, clienteNome, ... } (ver agruparAgendamentos).
  * opcoes.mostrarData: mostra o dia junto da hora (lista de atrasados).
- * opcoes.mostrarTecnico: mostra o nome do técnico (visão do administrador).
- * opcoes.acoes: mostra os botões "Ir até o cliente" e "Concluir".
+ * opcoes.mostrarTecnico: mostra o técnico de cada serviço (visão do administrador).
+ * opcoes.acoes: mostra "Ir até o cliente" e os botões "Concluir".
+ * opcoes.editar: mostra o botão "Editar" no topo (só administrador).
  */
-export function cartaoDoServico(s, { mostrarData = false, mostrarTecnico = false, acoes = false } = {}) {
-  const atrasado = estaAtrasado(s);
-  const situacao = seloDoServico(s);
+export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false } = {}) {
+  const linhas = visita.linhas;
+  const primeira = linhas[0];
+  const atrasado = linhas.some((l) => estaAtrasado(l));
   return html`
     <div class="cartao servico-cartao ${atrasado ? 'servico-cartao--atrasado' : ''}">
-      <a class="servico-cartao__corpo" href="#/servico/${s.id}">
-        <div class="servico-cartao__hora">
-          ${formatarHora(s.dataAgendada)}
-          ${mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(s.dataAgendada)}</span>`}
-        </div>
-        <div class="expande">
-          <div class="item-lista__titulo">${s.clienteNome}</div>
-          <div class="item-lista__sub">${s.tipoServicoNome}${s.aparelhoResumo ? ` · ${s.aparelhoResumo}` : ''}</div>
-          ${s.local && html`<div class="item-lista__sub">${s.local}</div>`}
-          ${mostrarTecnico && s.tecnicoNome && html`<div class="item-lista__sub">Técnico: ${s.tecnicoNome}</div>`}
-        </div>
-        ${(atrasado || s.status !== 'agendado') && selo(situacao.texto, situacao.tom)}
-      </a>
+      <div class="visita-cartao__topo">
+        <a class="servico-cartao__corpo visita-cartao__corpo" href="#/servico/${primeira.id}">
+          <div class="servico-cartao__hora">
+            ${formatarHora(primeira.dataAgendada)}
+            ${mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
+          </div>
+          <div class="expande">
+            <div class="item-lista__titulo">${visita.clienteNome}</div>
+            ${primeira.local && html`<div class="item-lista__sub">${primeira.local}</div>`}
+            ${atrasado && html`<div>${selo('Atrasado', 'vermelho')}</div>`}
+          </div>
+        </a>
+        ${editar && botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
+      </div>
+      ${blocosPorAparelho(linhas).map((bloco) => html`
+        <div class="visita-bloco">
+          <div class="visita-bloco__titulo">${bloco.rotulo || 'Aparelho ainda não escolhido'}</div>
+          ${bloco.linhas.map((l) => html`
+            <div class="visita-linha">
+              <div class="expande">
+                <div class="visita-linha__nome">${l.tipoServicoNome}</div>
+                ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
+              </div>
+              ${acoes && botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true })}
+            </div>`)}
+        </div>`)}
       ${acoes && html`
         <div class="acoes-cartao">
-          ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: s.id }, pequeno: true })}
-          ${botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${s.id}`, pequeno: true })}
+          ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
         </div>`}
     </div>`;
 }

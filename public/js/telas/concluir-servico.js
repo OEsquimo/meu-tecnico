@@ -1,10 +1,13 @@
 // =============================================================================
 // TELA: Concluir serviço (/concluir/:id)
 // =============================================================================
-//   * TÉCNICO: descreve o que fez e marca "cliente pagou? sim/não". NÃO vê nem
-//     digita valor.
-//   * ADMINISTRADOR: também informa o valor; "Mais opções" permite trocar o
-//     aparelho e a data de conclusão.
+//   * O valor já vem preenchido com o valor padrão do tipo de serviço. Dá para mudar,
+//     acrescentar extras (descrição + valor) e dar desconto; o total aparece na hora.
+//   * ADMINISTRADOR: sempre vê e altera o valor; "Mais opções" troca o aparelho e a data.
+//   * TÉCNICO: só vê o valor se o administrador liberou ("Pode ver valores"); só altera
+//     valor e extras com "Pode alterar valor e extras". Sem permissão, o administrador
+//     confirma o valor depois (Financeiro).
+//   * "O que foi feito?" fica no fim e é opcional.
 // REGRAS: não dá para concluir sem aparelho. Se o serviço ainda não tem aparelho,
 // o técnico escolhe um do cliente ou cadastra um novo aqui mesmo. Se o
 // agendamento foi feito sem serviço ("Serviço a definir"), também escolhe o tipo.
@@ -18,6 +21,11 @@ import { traduzirErro } from '../nucleo/erros.js';
 import { buscarServico, concluirServico } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { validarConclusao } from '../dominio/validacoes.js';
+import { validarValores } from '../dominio/valores.js';
+import { centavosParaCampo } from '../dominio/dinheiro.js';
+import { listarPrecos } from '../servicos/precos.js';
+import { podeVerValores, podeAlterarValores } from '../nucleo/permissoes.js';
+import { editorDeValores, valorSoParaLer, ligarEditorDeValores } from './valores-editor.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { STATUS, ehLinhaSemServico } from '../dominio/servicos.js';
 import { hojeISO } from '../dominio/datas.js';
@@ -48,13 +56,18 @@ export default async function montar(ctx) {
         ? await listarAparelhosDoCliente(usuario.empresaId, servico.clienteId).catch(() => [])
         : [];
       if (!ctx.ativo()) return;
-      desenhar(servico, aparelhos);
+      const precos = podeVerValores(sessao) ? await listarPrecos(usuario.empresaId).catch(() => ({})) : {};
+      if (!ctx.ativo()) return;
+      desenhar(servico, aparelhos, precos);
     } catch (erro) {
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregar, cabecalho({ titulo: 'Concluir serviço', voltarPara }));
     }
   }
 
-  function desenhar(s, aparelhos) {
+  function desenhar(s, aparelhos, precos) {
+    const editaValores = podeAlterarValores(sessao);
+    const veValores = podeVerValores(sessao);
+    const precoDe = (t) => (Number.isInteger(precos[t?.id]) ? precos[t.id] : null);
     const semServico = ehLinhaSemServico(s);
     const semAparelho = !s.aparelhoId;
     const salvo = rascunho && rascunho.id === s.id ? rascunho : null;
@@ -83,8 +96,11 @@ export default async function montar(ctx) {
             opcoes: aparelhos.map((a) => ({ valor: a.id, rotulo: resumoDoAparelho(a) })),
           }) : html`<div class="campo" data-campo="aparelhoId"><span class="campo__rotulo">Aparelho atendido</span><p class="campo__ajuda">Este cliente ainda não tem aparelho cadastrado. Cadastre um para poder concluir.</p></div>`}
           ${botao({ texto: '+ Cadastrar aparelho novo', variante: 'secundario', acao: 'novo-aparelho', pequeno: true })}` : ''}
-        ${campoTextoLongo({ nome: 'descricao', rotulo: 'O que foi feito?', linhas: 4, maximo: 2000, valor: salvo?.descricao || '', placeholder: 'Ex.: limpeza completa, troca do dreno' })}
-        ${usuario.admin ? campoTexto({ nome: 'valor', rotulo: 'Valor (R$)', modo: 'decimal', placeholder: '150,00' }) : ''}
+        ${editaValores ? editorDeValores({
+    base: salvo?.valor ?? (precoDe(tipoInicial) === null ? '' : centavosParaCampo(precoDe(tipoInicial))),
+    extras: salvo?.extras || [], desconto: salvo?.desconto || '',
+    ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : 'Valor padrão deste serviço. Pode mudar.',
+  }) : (veValores ? valorSoParaLer(precoDe(tipoInicial)) : '')}
         ${interruptor({ nome: 'pago', titulo: 'O cliente já pagou?', descricao: usuario.admin ? '' : 'Só marque se o cliente pagou na hora.' })}
         <div id="bloco-retorno" ${geraRetornoInicial ? '' : html`hidden`}>
           ${campoPilulas({
@@ -93,6 +109,7 @@ export default async function montar(ctx) {
           })}
         </div>
         <p class="texto-suave texto-pequeno">Garantia de ${GARANTIA_DIAS} dias a partir de hoje.</p>
+        ${campoTextoLongo({ nome: 'descricao', rotulo: 'O que foi feito?', opcional: true, linhas: 3, maximo: 2000, valor: salvo?.descricao || '', placeholder: 'Ex.: limpeza completa, troca do dreno' })}
 
         ${usuario.admin ? html`
           <details class="detalhes">
@@ -111,6 +128,9 @@ export default async function montar(ctx) {
 
     const form = raiz.querySelector('#form-concluir');
     const blocoRetorno = raiz.querySelector('#bloco-retorno');
+    const editor = editaValores ? ligarEditorDeValores(form) : null;
+    let valorMexido = false; // se a pessoa já mexeu no valor, trocar o tipo não o sobrescreve
+    form.addEventListener('input', (e) => { if (e.target.name === 'valor') valorMexido = true; });
 
     // Serviço "a definir": ao escolher o tipo, mostra (ou esconde) o prazo de retorno.
     form.addEventListener('change', (e) => {
@@ -119,12 +139,19 @@ export default async function montar(ctx) {
       blocoRetorno.hidden = t?.geraRetorno !== true;
       const marcar = form.querySelector(`input[name="retornoMeses"][value="${mesesDe(t)}"]`);
       if (marcar) marcar.checked = true;
+      if (editor && !valorMexido) {
+        form.elements.valor.value = precoDe(t) === null ? '' : centavosParaCampo(precoDe(t));
+        form.elements.valor.dispatchEvent(new Event('input', { bubbles: true }));
+        valorMexido = false;
+      }
     });
 
     aoClicar(raiz, {
+      ...(editor?.acoes || {}),
       'novo-aparelho': () => {
         const c = lerCampos(form);
         rascunho = {
+          ...(editor ? { valor: c.valor, extras: editor.ler().extras, desconto: c.desconto } : {}),
           id: s.id, descricao: c.descricao || '', tipoServicoId: c.tipoServicoId || '', aparelhoId: c.aparelhoId || '',
           aparelhosAntes: aparelhos.map((a) => a.id),
         };
@@ -138,8 +165,11 @@ export default async function montar(ctx) {
       const tipoEscolhido = semServico ? tipoAtual() : null;
       const geraRetorno = semServico ? tipoEscolhido?.geraRetorno === true : s.geraRetorno === true;
       const aparelhoId = campos.aparelhoId || s.aparelhoId || '';
-      const r = validarConclusao({ ...campos, aparelhoId }, { exigirValor: usuario.admin, geraRetorno, exigirAparelho: true });
+      const r = validarConclusao({ ...campos, aparelhoId }, { exigirValor: false, geraRetorno, exigirAparelho: true });
       const erros = { ...r.erros };
+      // Valor, extras e desconto (só quem pode alterar). O administrador precisa informar o valor.
+      const v = editor ? validarValores(editor.ler(), { exigirBase: usuario.admin }) : null;
+      if (v) Object.assign(erros, v.erros);
       if (semServico && !tipoEscolhido) erros.tipoServicoId = 'Escolha qual serviço foi feito.';
       if (Object.keys(erros).length > 0) {
         mostrarErrosNosCampos(form, erros);
@@ -151,7 +181,8 @@ export default async function montar(ctx) {
             empresaId: usuario.empresaId, servico: s, papel: usuario.admin ? 'admin' : 'tecnico', nomeQuemConcluiu: usuario.nome,
             dados: {
               descricao: r.dados.descricao, pago: r.dados.pago, retornoMeses: r.dados.retornoMeses,
-              valorCentavos: r.dados.valorCentavos,
+              valores: v && v.dados.valorCentavos !== null ? v.dados : null,
+              podeAlterarValores: editaValores,
               aparelho: aparelhos.find((a) => a.id === r.dados.aparelhoId && a.id !== s.aparelhoId) || null,
               tipo: tipoEscolhido,
               exigirAparelho: true,

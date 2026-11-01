@@ -7,7 +7,7 @@
 //
 // Papéis:
 //   admin   -> dono da empresa: vê tudo, inclusive valores e financeiro
-//   tecnico -> funcionário: só os serviços atribuídos a ele, sem valores
+//   tecnico -> funcionário: só os serviços atribuídos a ele; valores só se liberados
 //   dono do aplicativo (você) -> painel separado (/dono), definido no console
 // =============================================================================
 
@@ -24,8 +24,13 @@ export const ehAdminMesmoBloqueado = (s) => (s?.estado === 'pronto' || s?.estado
 export const ehTecnico = (s) => s?.estado === 'pronto' && s.papel === PAPEL.TECNICO;
 export const ehDonoDoApp = (s) => s?.ehDonoApp === true;
 
-/** Só o administrador vê valores em dinheiro (e o técnico nunca). */
-export const podeVerValores = ehAdmin;
+/**
+ * Valores em dinheiro: o administrador sempre vê e altera. O técnico só se o administrador
+ * liberou para ele (cadastro do funcionário): "Pode ver valores" e/ou "Pode alterar valor e extras"
+ * (quem altera também vê). O Financeiro (totais da empresa) continua só do administrador.
+ */
+export const podeVerValores = (s) => ehAdmin(s) || (ehTecnico(s) && (s.permissoes?.verValores === true || s.permissoes?.alterarValores === true));
+export const podeAlterarValores = (s) => ehAdmin(s) || (ehTecnico(s) && s.permissoes?.alterarValores === true);
 export const podeVerFinanceiro = ehAdmin;
 export const podeGerirEquipe = ehAdmin;
 export const podeGerirTiposDeServico = ehAdmin;

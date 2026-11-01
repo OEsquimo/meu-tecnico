@@ -71,17 +71,19 @@ export async function semearDemonstracao(memoria) {
   };
 
   // ---- Equipe ----
-  docs[`empresas/${E}/equipe/eq-rafael`] = { nome: 'Rafael Costa', telefone: '5511987654321', status: 'ativo', uid: CONTAS_DEMO.tecnico.uid, criadoEm: dia(-40) };
+  docs[`empresas/${E}/equipe/eq-rafael`] = { nome: 'Rafael Costa', telefone: '5511987654321', status: 'ativo', uid: CONTAS_DEMO.tecnico.uid, verValores: true, alterarValores: false, criadoEm: dia(-40) };
   docs[`empresas/${E}/equipe/eq-sergio`] = { nome: 'Sérgio Alves', telefone: '5511976543210', status: 'convite', uid: null, criadoEm: dia(-2) };
   docs[`empresas/${E}/equipe/eq-julio`] = { nome: 'Júlio Ramos', telefone: '5511965432109', status: 'bloqueado', uid: 'u-julio', criadoEm: dia(-50) };
   docs['usuarios/u-julio'] = { empresaId: E, papel: 'tecnico', ativo: false, nome: 'Júlio Ramos', equipeId: 'eq-julio', criadoEm: dia(-50) };
 
-  // ---- Tipos de serviço ----
+  // ---- Tipos de serviço (e valor padrão de cada um) ----
+  const PRECOS_DEMO = { Limpeza: 15000, 'Manutenção preventiva': 22000, Instalação: 60000, 'Retirada de ar-condicionado': 18000, 'Carga de gás': 25000 };
   const tipos = {};
   TIPOS_SERVICO_PADRAO.forEach((t, i) => {
     const id = `tipo-${i + 1}`;
     tipos[t.nome] = { id, ...t };
     docs[`empresas/${E}/tiposServico/${id}`] = t;
+    if (PRECOS_DEMO[t.nome]) docs[`empresas/${E}/precos/${id}`] = { valorCentavos: PRECOS_DEMO[t.nome], atualizadoEm: dia(-60) };
   });
 
   // ---- Clientes e aparelhos ----

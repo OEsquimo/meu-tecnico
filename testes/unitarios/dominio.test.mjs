@@ -144,7 +144,10 @@ test('validações: mensagens por campo', () => {
   assert.ok(conta.erros.confirmarSenha);
   assert.ok(validarCriarConta({ nome: 'Ana', email: 'a@b.com', senha: '123456', confirmarSenha: '123456' }).erros.aceitouTermos);
   const c = validarConclusao({ descricao: 'ok', valor: '', pago: 'sim' }, { exigirValor: true, geraRetorno: true });
-  assert.ok(c.erros.descricao && c.erros.valor && c.erros.retornoMeses);
+  assert.ok(c.erros.valor && c.erros.retornoMeses);
+  assert.equal(c.erros.descricao, undefined); // descrição agora é opcional
+  assert.ok(validarConclusao({ descricao: '', pago: false }, { exigirValor: false, geraRetorno: false }).valido);
+  assert.ok(validarConclusao({ descricao: 'x'.repeat(2001) }, { exigirValor: false, geraRetorno: false }).erros.descricao);
   const c2 = validarConclusao({ descricao: 'Limpeza feita', valor: '150,50', pago: true, retornoMeses: '6' }, { exigirValor: true, geraRetorno: true });
   assert.ok(c2.valido);
   assert.equal(c2.dados.valorCentavos, 15050);

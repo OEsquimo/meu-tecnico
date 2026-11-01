@@ -48,7 +48,7 @@ with sync_playwright() as p:
     def dialogo(texto):
         pag.locator("dialog [data-escolha]", has_text=texto).first.click(); pag.wait_for_timeout(400)
     def opcoes_tecnico():
-        return pag.locator("select[name=tecnicoUid] option").all_inner_texts()
+        return pag.locator("#area-tecnico .tecnico-opcao").all_inner_texts()
 
     # 1) só cliente, dia, hora e técnico (sem aparelho nem serviço)
     escolher_cliente("Ana Lima")
@@ -91,9 +91,17 @@ with sync_playwright() as p:
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Quarto")
     pag.locator("[data-acao=adicionar-servico]").nth(1).click(); pag.wait_for_timeout(300); dialogo("Manutenção")
     ok(pag.locator(".agenda-aparelho").count() == 2 and pag.locator(".agenda-servico").count() == 3, "2 aparelhos e 3 serviços em cartões")
-    sel = pag.locator("select[name^=tec-]")
-    ok(sel.count() == 3 and sel.nth(0).locator("option").count() >= 2, "cada serviço tem a sua lista de técnicos")
-    sel.nth(2).select_option(index=sel.nth(2).locator("option").count() - 1)  # técnico diferente no último serviço
+    cx = lambda i: pag.locator(".agenda-servico").nth(i).locator("input[type=checkbox]")
+    ok(pag.locator(".agenda-servico").nth(0).locator(".tecnico-opcao").count() >= 2 and cx(0).evaluate_all("l => l.filter(c => c.checked).length") == 1, "cada serviço tem a sua lista de técnicos, com um já marcado")
+    cx(2).first.uncheck(); pag.wait_for_timeout(200)  # tira o técnico sugerido do último serviço...
+    pag.locator(".agenda-servico").nth(2).locator("input[type=checkbox]").last.check(); pag.wait_for_timeout(300)  # ...e marca outro
+    # vários técnicos no primeiro serviço: marca todos
+    n0 = cx(0).count()
+    for i in range(n0): cx(0).nth(i).check()
+    pag.wait_for_timeout(300)
+    ok(cx(0).evaluate_all("l => l.filter(c => c.checked).length") == n0 and n0 >= 2, "um serviço aceita mais de um técnico")
+    cx(0).first.uncheck(); pag.wait_for_timeout(300)
+    ok(cx(0).evaluate_all("l => l.filter(c => c.checked).length") == n0 - 1, "desmarcar um técnico mantém os outros")
     ok(pag.locator("textarea").count() == 0, "observações começam recolhidas (só o botão '+ Observação')")
     ok(pag.locator("[data-acao=editar-servico]").count() == 3, "cada serviço tem o botão Editar")
     # Editar e Remover do aparelho ficam lado a lado
@@ -109,8 +117,7 @@ with sync_playwright() as p:
     pag.locator("[data-acao=alternar-obs][data-tipo=agendamento]").click(); pag.wait_for_timeout(300)
     pag.fill("textarea[name=observacao]", "Portão azul")
     # trocar o técnico (redesenha a tela) não fecha as observações abertas
-    sel0 = pag.locator("select[name^=tec-]").first
-    sel0.select_option(index=0); pag.wait_for_timeout(300)
+    cx(1).first.check(); pag.wait_for_timeout(300)
     ok(pag.locator("textarea").count() == 3, "observações abertas continuam abertas depois de redesenhar")
     # Editar serviço: troca o tipo e a duração só deste serviço
     pag.locator("[data-acao=editar-servico]").nth(1).click(); pag.wait_for_timeout(300); dialogo("Instalação")
@@ -133,6 +140,7 @@ with sync_playwright() as p:
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     texto = pag.inner_text("#conteudo")
     ok(texto.count("Concluir serviço") == 2 and "13:00" in texto, "edição removeu 1 serviço e mudou o horário")
+    url_visita = pag.url  # uma linha que ainda existe
 
     # 5) concluir exige aparelho e (se 'a definir') o tipo; aqui pelo administrador
     ir(pag, f"/concluir/{sid_a_definir}")
@@ -150,6 +158,75 @@ with sync_playwright() as p:
     ok("minutos" in pag.inner_text("#conteudo"), "duração inválida mostra erro")
     pag.fill("input[name=duracaoMin]", "45"); pag.click("#form-tipo [type=submit]"); pag.wait_for_timeout(900)
     ok("45 min" in pag.inner_text("#conteudo"), "duração aparece na lista de tipos")
+    # 6a) regressão: cliente criado pela tela -> Agendar -> "+ Novo aparelho" abre o formulário (não "Cliente não encontrado")
+    ir(pag, "/cliente/novo")
+    pag.fill("input[name=nome]", "Cliente Recém Criado"); pag.fill("input[name=whatsapp]", "11999998888")
+    pag.locator("label.chip", has_text="Digitar à mão").first.click()
+    for n, v in [("rua", "Rua A"), ("numero", "10"), ("cidade", "São Paulo")]:
+        pag.locator(f"input[name$={n}]:visible").first.fill(v)
+    pag.click("#form-cliente [type=submit]"); pag.wait_for_timeout(1200)
+    
+    pag.locator("[data-acao=agendar]").first.click(); pag.wait_for_timeout(900)
+    
+    pag.locator("[data-acao=novo-aparelho]").first.click(); pag.wait_for_timeout(900)
+    ok("Cliente não encontrado" not in pag.inner_text("#conteudo") and pag.locator("#form-aparelho").count() == 1, "cliente novo: '+ Novo aparelho' abre o formulário do aparelho")
+    pag.locator("select[name=tipo]").select_option(index=1)
+    pag.click("#form-aparelho [type=submit]"); pag.wait_for_selector("#form-agendar", timeout=8000); pag.wait_for_timeout(300)
+    ok("#/agendar" in pag.url and "Cliente Recém Criado" in pag.inner_text("#conteudo"), "depois de cadastrar o aparelho volta ao agendamento com o mesmo cliente")
+
+    # 6a2) rascunho antigo não pode aparecer em outro agendamento: sai para "+ Novo aparelho" da Ana e abandona
+    ir(pag, "/cliente/c-ana"); pag.locator("[data-acao=agendar]").first.click(); pag.wait_for_timeout(800)
+    pag.locator("[data-acao=novo-aparelho]").first.click(); pag.wait_for_timeout(700)
+    ir(pag, "/clientes")
+    ir(pag, "/cliente/c-maria"); pag.locator("[data-acao=agendar]").first.click(); pag.wait_for_timeout(900)
+    ok("Maria" in pag.inner_text("#conteudo") and "Ana Lima" not in pag.inner_text("#conteudo"), "agendamento novo não herda o cliente de uma tentativa abandonada")
+
+    # 6b) valor padrão no tipo de serviço
+    ir(pag, "/tipos-servico/novo")
+    pag.fill("input[name=nome]", "Teste preço"); pag.fill("input[name=preco]", "abc"); pag.click("#form-tipo [type=submit]"); pag.wait_for_timeout(500)
+    ok("inválido" in pag.inner_text("#conteudo").lower(), "valor padrão inválido mostra erro")
+    pag.fill("input[name=preco]", "200,00"); pag.click("#form-tipo [type=submit]"); pag.wait_for_timeout(900)
+    ok("R$" in pag.inner_text("#conteudo") and "200,00" in pag.inner_text("#conteudo"), "valor padrão aparece na lista de tipos")
+    pag.locator("#conteudo a", has_text="Teste preço").first.click(); pag.wait_for_timeout(700)
+    ok(pag.input_value("input[name=preco]") == "200,00", "editar o tipo mostra o valor padrão salvo")
+    pag.fill("input[name=preco]", ""); pag.click("#form-tipo [type=submit]"); pag.wait_for_timeout(700)
+    ok("200,00" not in pag.inner_text("#conteudo"), "apagar o valor padrão tira da lista")
+
+    # 6c) concluir com valor padrão, extras e desconto (administrador)
+    ir(pag, url_visita.split("#")[1])
+    href = pag.locator("a[href^='#/concluir/']").first.get_attribute("href")
+    ir(pag, href.split("#")[1])
+    ok(pag.locator("textarea[name=descricao]").count() == 1 and pag.evaluate("(() => { const f = document.querySelector('#form-concluir'); const d = f.querySelector('[name=descricao]'); const v = f.querySelector('[name=valor]'); return !!(d.compareDocumentPosition(v) & Node.DOCUMENT_POSITION_PRECEDING); })()"), "'O que foi feito?' fica abaixo do valor")
+    ok(pag.input_value("input[name=valor]") != "", "valor padrão do tipo já vem preenchido")
+    base = pag.input_value("input[name=valor]")
+    pag.click("[data-acao=adicionar-extra]"); pag.wait_for_timeout(200)
+    pag.fill("input[name=extraDescricao]", "Peça"); pag.fill("input[name=extraValor]", "50,00")
+    pag.fill("input[name=desconto]", "20,00"); pag.wait_for_timeout(200)
+    total = pag.inner_text("#total-valores")
+    ok("R$" in total, f"total aparece na hora ({total})")
+    pag.fill("input[name=extraValor]", "abc"); pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(500)
+    ok("#/concluir/" in pag.url and "extras" in pag.inner_text("#conteudo").lower(), "extra inválido bloqueia e avisa")
+    pag.fill("input[name=extraValor]", "50,00")
+    if pag.locator("select[name=aparelhoId]").count() and pag.locator("select[name=aparelhoId]").input_value() == "":
+        pag.locator("select[name=aparelhoId]").select_option(index=1)
+    pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
+    ok(pag.url.endswith("#/") or pag.url.endswith("/"), "concluiu sem escrever 'o que foi feito' (opcional)")
+    ir(pag, "/servico/" + href.split("/concluir/")[1])
+    txt = pag.inner_text("#conteudo")
+    ok("Extra: Peça" in txt and "Desconto" in txt and "Total" in txt, "detalhe mostra extra, desconto e total")
+    pag.locator("a:has-text('Corrigir valor')").first.click(); pag.wait_for_timeout(800)
+    ok(pag.input_value("input[name=desconto]") == "20,00" and pag.locator("input[name=extraDescricao]").count() == 1, "corrigir valor abre com os dados gravados")
+    pag.fill("input[name=desconto]", "30,00"); pag.click("#form-valor [type=submit]"); pag.wait_for_timeout(900)
+    ok("30,00" in pag.inner_text("#conteudo"), "administrador corrige o desconto de serviço concluído")
+
+    # 6d) permissões do funcionário
+    ir(pag, "/equipe/eq-rafael")
+    ok(pag.locator("input[name=verValores]").is_checked() and not pag.locator("input[name=alterarValores]").is_checked(), "funcionário demo pode ver e não alterar valores")
+    pag.check("input[name=alterarValores]"); pag.click("#form-func [type=submit]"); pag.wait_for_timeout(900)
+    ir(pag, "/equipe/eq-rafael")
+    ok(pag.locator("input[name=alterarValores]").is_checked() and pag.locator("input[name=verValores]").is_checked(), "quem altera também vê (permissão salva)")
+    ir(pag, "/equipe/novo")
+    ok(not pag.locator("input[name=verValores]").is_checked() and not pag.locator("input[name=alterarValores]").is_checked(), "funcionário novo começa sem ver nem alterar valores")
     ir(pag, "/equipe/novo")
     pag.fill("input[name=nome]", "Teste Silva"); pag.fill("input[name=telefone]", "11912345678")
     pag.click("#form-func [type=submit]"); pag.wait_for_timeout(1000)
@@ -166,7 +243,8 @@ with sync_playwright() as p:
         l.click(); pag.wait_for_timeout(800)
         sid = pag.url.split("/servico/")[1]
         ir(pag, f"/concluir/{sid}")
-        ok(pag.locator("input[name=valor]").count() == 0, "técnico não tem campo de valor ao concluir")
+        ok(pag.locator("input[name=valor]").count() == 0, "técnico só com 'ver valores' não edita o valor")
+        ok(pag.locator(".editor-valores--leitura").count() == 1, "técnico com 'ver valores' vê o valor ao concluir")
         pag.fill("textarea[name=descricao]", "Limpeza completa feita")
         if pag.locator("select[name=aparelhoId]").count() and pag.locator("select[name=aparelhoId]").input_value() == "":
             pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(600)

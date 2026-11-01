@@ -1,7 +1,7 @@
 // =============================================================================
 // TELA: Tipo de serviço (novo e editar) — rotas /tipos-servico/novo e /tipos-servico/:id
 // =============================================================================
-// Campos: nome, duração padrão (minutos), "gera retorno" (interruptor), prazo padrão (3/4/6/12 meses),
+// Campos: nome, valor padrão (opcional), duração padrão (minutos), "gera retorno" (interruptor), prazo padrão (3/4/6/12 meses),
 // ativo (só ao editar). O prazo só aparece quando "gera retorno" está ligado.
 // Excluir um tipo não altera o histórico: o nome fica copiado em cada serviço.
 // =============================================================================
@@ -12,6 +12,9 @@ import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { criarTipo, atualizarTipo, excluirTipo } from '../servicos/tiposServico.js';
 import { validarTipoServico } from '../dominio/validacoes.js';
+import { listarPrecos, definirPreco } from '../servicos/precos.js';
+import { reaisParaCentavos, centavosParaCampo } from '../dominio/dinheiro.js';
+import { MAXIMO_CENTAVOS } from '../dominio/valores.js';
 import { PRAZOS_RETORNO_MESES, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export default async function montar({ raiz, params, sessao, ir }) {
@@ -26,6 +29,8 @@ export default async function montar({ raiz, params, sessao, ir }) {
     return;
   }
 
+  // Preço padrão (opcional). Se não der para ler, o campo abre vazio e o resto continua funcionando.
+  const precoAtual = novo ? null : ((await listarPrecos(empresaId()).catch(() => ({})))[tipo.id] ?? null);
   const geraRetorno = novo ? true : tipo.geraRetorno === true;
   // Prazo marcado ao abrir: o do tipo, ou 6 meses se ainda não tinha.
   const prazo = tipo && PRAZOS_RETORNO_MESES.includes(tipo.retornoPadraoMeses) ? tipo.retornoPadraoMeses : 6;
@@ -35,6 +40,10 @@ export default async function montar({ raiz, params, sessao, ir }) {
     <form id="form-tipo" class="formulario" novalidate>
       <div data-erros-gerais></div>
       ${campoTexto({ nome: 'nome', rotulo: 'Nome do serviço', valor: tipo?.nome ?? '', maximo: 60 })}
+      ${campoTexto({
+        nome: 'preco', rotulo: 'Valor padrão (R$)', valor: precoAtual === null ? '' : centavosParaCampo(precoAtual), modo: 'decimal', opcional: true, maximo: 12, placeholder: '150,00',
+        ajuda: 'Já vem preenchido ao concluir o serviço (dá para mudar em cada serviço). Deixe vazio se o preço varia.',
+      })}
       ${campoTexto({
         nome: 'duracaoMin', rotulo: 'Duração padrão (minutos)', valor: tipo?.duracaoMin ?? DURACAO_PADRAO_MIN, modo: 'numeric', maximo: 3,
         ajuda: 'Usada no agendamento para saber quando o técnico fica livre. Dá para mudar sempre que quiser.',
@@ -79,10 +88,17 @@ export default async function montar({ raiz, params, sessao, ir }) {
       mostrarErrosNosCampos(form, r.erros);
       return;
     }
+    let preco = null;
+    if (campos.preco !== '') {
+      preco = reaisParaCentavos(campos.preco);
+      if (preco === null || preco > MAXIMO_CENTAVOS) { mostrarErrosNosCampos(form, { preco: 'Valor inválido. Exemplo: 150 ou 150,50' }); return; }
+    }
     await comCarregando(form.querySelector('[type="submit"]'), async () => {
       try {
-        if (novo) await criarTipo(empresaId(), r.dados);
+        let id = tipo?.id;
+        if (novo) id = await criarTipo(empresaId(), r.dados);
         else await atualizarTipo(empresaId(), tipo, { ...r.dados, ativo: campos.ativo });
+        if (preco !== precoAtual) await definirPreco(empresaId(), id, preco);
         toast('Tipo salvo.', 'sucesso');
         ir('/tipos-servico');
       } catch (erro) {
