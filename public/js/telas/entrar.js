@@ -17,6 +17,11 @@ import { NOME_APP } from '../nucleo/constantes.js';
 
 export default async function montar({ raiz }) {
   const demonstracao = document.body.classList.contains('modo-demonstracao');
+  const dataHoraAtual = new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date());
+
   mostrar(raiz, html`
     <div class="tela-entrada">
       <div>
@@ -46,6 +51,8 @@ export default async function montar({ raiz }) {
           ${botao({ texto: 'Técnico (funcionário)', variante: 'secundario', acao: 'demo', dados: { email: 'tecnico@meutecnico.app' } })}
           ${botao({ texto: 'Dono do aplicativo', variante: 'secundario', acao: 'demo', dados: { email: 'dono@meutecnico.app' } })}
         </div>`}
+
+      <p>⚠️ Página aberta em: ${dataHoraAtual}</p>
     </div>`);
 
   const form = raiz.querySelector('#form-entrar');
