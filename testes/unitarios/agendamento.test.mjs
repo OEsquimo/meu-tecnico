@@ -16,7 +16,8 @@ import { definirAdaptadorAuth } from '../../public/js/nucleo/autenticacao.js';
 import { sessao } from '../../public/js/nucleo/sessao.js';
 import { PLANOS_PADRAO, REGRAS_PADRAO, TIPOS_SERVICO_PADRAO } from '../../public/js/nucleo/constantes.js';
 import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../public/js/dominio/agenda.js';
-import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos } from '../../public/js/dominio/servicos.js';
+import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico } from '../../public/js/dominio/servicos.js';
+import { formatarHora } from '../../public/js/dominio/datas.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
 import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
@@ -200,16 +201,40 @@ test('editar não conflita com o próprio agendamento', async () => {
   assert.equal((await listarLinhasDoAgendamento(E, { agendamentoId: id })).length, 1);
 });
 
-test('não edita um agendamento sem linhas agendadas', async () => {
+test('agendamento cancelado fica aguardando reagendamento e volta a "agendado" ao remarcar', async () => {
   await novoBanco();
   const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   await cancelarAgendamentoCompleto(E, existentes);
   const canceladas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   assert.ok(canceladas.every((l) => l.status === 'cancelado'));
-  await assert.rejects(() => salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, linhas: [] })), /ainda estão agendados/);
-  // Cancelado libera o técnico.
-  await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  assert.equal(seloDoServico(canceladas[0]).texto, 'Cancelado — aguardando reagendamento');
+  // Cancelado libera o técnico: outro agendamento no mesmo horário é aceito.
+  const outro = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  // Remarcar para o mesmo horário agora falha (o técnico está ocupado)...
+  await assert.rejects(() => salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] })), /já tem outro serviço/);
+  // ...e em outro horário funciona: a linha volta a "agendado" com a nova hora, sem duplicar.
+  await salvarAgendamento(base({ agendamentoId: id, hora: '15:00', existentes: canceladas, linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const depois = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(depois.length, 1);
+  assert.equal(depois[0].status, 'agendado');
+  assert.equal(formatarHora(depois[0].dataAgendada), '15:00');
+  assert.ok(outro);
+});
+
+test('excluir agendamento nunca apaga serviço concluído (nem o cliente)', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }, { aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
+  const linhas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await concluirServico({ empresaId: E, servico: linhas[0], papel: 'admin', nomeQuemConcluiu: 'Admin', dados: { descricao: 'ok', pago: false, retornoMeses: null, aparelho: null } });
+  const atuais = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(await excluirAgendamentoCompleto(E, atuais), 1); // só a que ainda estava agendada
+  const restantes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(restantes.length, 1);
+  assert.equal(restantes[0].status, 'concluido');
+  // Só concluídos: recusa e não apaga nada.
+  await assert.rejects(() => excluirAgendamentoCompleto(E, restantes), /concluídos não podem ser excluídos/);
+  assert.equal((await listarLinhasDoAgendamento(E, { agendamentoId: id })).length, 1);
 });
 
 test('retorno: agendar a partir de um lembrete marca o retorno como "agendado" e cancelar volta para "pendente"', async () => {

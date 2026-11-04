@@ -17,8 +17,8 @@
 import { ler, listar, gravar, operacao as op, novoId, AGORA } from '../nucleo/banco.js';
 import { invalidarCache } from '../nucleo/cache.js';
 import { ErroApp } from '../nucleo/erros.js';
-import { LIMITE_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
-import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos } from '../dominio/servicos.js';
+import { PAGINA_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
+import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
@@ -108,6 +108,10 @@ export async function cancelarAgendamento(empresaId, servico) {
 
 /** Exclui o serviço (e o valor dele). Só administrador. */
 export async function excluirServico(empresaId, servicoId) {
+  const atual = await ler(`${caminho(empresaId)}/${servicoId}`);
+  if (atual?.status === STATUS.CONCLUIDO) {
+    throw new ErroApp('Serviços concluídos não podem ser excluídos: ficam guardados no histórico.', 'servico-concluido');
+  }
   await gravar([op.apagar(`${caminho(empresaId)}/${servicoId}`), op.apagar(`${caminhoValores(empresaId)}/${servicoId}`)]);
   invalidarCache(`${empresaId}:servicos`);
 }
@@ -168,10 +172,12 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
 export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [] }) {
   const inicio = combinarDataHora(data, hora);
   const editando = Boolean(agendamentoId);
-  const fechadas = existentes.filter((l) => l.status !== STATUS.AGENDADO);
-  const abertas = existentes.filter((l) => l.status === STATUS.AGENDADO);
+  // Editar mexe nas linhas agendadas; se o agendamento foi cancelado, nas canceladas (reagendar).
+  const abertas = linhasEditaveis(existentes);
+  const fechadas = existentes.filter((l) => !abertas.includes(l));
+  const reagendando = abertas.length > 0 && abertas.every((l) => l.status === STATUS.CANCELADO);
   if (editando && abertas.length === 0) {
-    throw new ErroApp('Só dá para editar serviços que ainda estão agendados.', 'servico-fechado');
+    throw new ErroApp('Só dá para editar serviços que ainda estão agendados ou aguardando reagendamento.', 'servico-fechado');
   }
   const id = agendamentoId || novoId(caminho(empresaId));
 
@@ -208,7 +214,10 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
     };
     if (l.id && abertas.some((a) => a.id === l.id)) {
       mantidas.add(l.id);
-      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, campos));
+      const antiga = abertas.find((a) => a.id === l.id);
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, reagendando ? { ...campos, status: STATUS.AGENDADO } : campos));
+      // Reagendado: o lembrete de retorno que o cancelamento devolveu para "pendente" volta a "agendado".
+      if (reagendando && antiga?.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${antiga.origemRetornoId}`, { retornoSituacao: 'agendado', atualizadoEm: AGORA }));
     } else {
       const novo = novoId(caminho(empresaId));
       const documento = { ...campos, status: STATUS.AGENDADO, pago: false, valorDefinido: false, criadoEm: AGORA };
@@ -220,7 +229,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   for (const a of abertas) {
     if (mantidas.has(a.id)) continue;
     if (preservar.includes(a.id)) {
-      operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.id}`, { agendamentoId: id, obsAgendamento: observacao, dataAgendada: inicio, atualizadoEm: AGORA }));
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.id}`, { agendamentoId: id, obsAgendamento: observacao, dataAgendada: inicio, ...(reagendando ? { status: STATUS.AGENDADO } : {}), atualizadoEm: AGORA }));
       continue;
     }
     operacoes.push(op.apagar(`${caminho(empresaId)}/${a.id}`));
@@ -271,10 +280,19 @@ export async function cancelarAgendamentoCompleto(empresaId, linhas) {
   invalidarCache(`${empresaId}:servicos`);
 }
 
-/** Exclui um agendamento inteiro (e os valores de cada linha). Só administrador. */
+/**
+ * Exclui um agendamento (e os valores de cada linha). Só administrador.
+ * Serviços JÁ CONCLUÍDOS nunca são excluídos: o histórico e a garantia ficam
+ * guardados. Também não mexe no cliente nem nos aparelhos dele.
+ * @returns {Promise<number>} quantas linhas foram excluídas
+ */
 export async function excluirAgendamentoCompleto(empresaId, linhas) {
   const operacoes = [];
-  for (const l of linhas) {
+  const excluiveis = linhas.filter((l) => l.status !== STATUS.CONCLUIDO);
+  if (excluiveis.length === 0) {
+    throw new ErroApp('Serviços concluídos não podem ser excluídos: ficam guardados no histórico.', 'servico-concluido');
+  }
+  for (const l of excluiveis) {
     operacoes.push(op.apagar(`${caminho(empresaId)}/${l.id}`), op.apagar(`${caminhoValores(empresaId)}/${l.id}`));
     if (l.status === STATUS.AGENDADO && l.origemRetornoId) {
       operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
@@ -282,6 +300,7 @@ export async function excluirAgendamentoCompleto(empresaId, linhas) {
   }
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
+  return excluiveis.length;
 }
 
 /**
@@ -387,9 +406,23 @@ export function listarAtrasados({ empresaId, tecnicoUid = null, agora = new Date
   return listarAgendados({ empresaId, ate: inicioDoDia(agora), tecnicoUid });
 }
 
-/** Histórico: serviços concluídos, do mais recente para o mais antigo. */
-export function listarHistorico({ empresaId, tecnicoUid = null, limite = LIMITE_HISTORICO }) {
+/** Cancelados que esperam uma nova data (mais recentes primeiro). Só administrador. */
+export function listarAguardandoReagendamento({ empresaId, limite = 100 }) {
+  return listar(caminho(empresaId), {
+    onde: [['status', '==', STATUS.CANCELADO]],
+    ordenarPor: [['dataAgendada', 'desc']],
+    limite,
+  });
+}
+
+/**
+ * Serviços concluídos, do mais recente para o mais antigo. `de` (inclusive) e `ate`
+ * (exclusive) limitam pelo dia da conclusão.
+ */
+export function listarHistorico({ empresaId, tecnicoUid = null, limite = PAGINA_HISTORICO, de = null, ate = null }) {
   const onde = [['status', '==', STATUS.CONCLUIDO]];
+  if (de) onde.push(['dataConclusao', '>=', de]);
+  if (ate) onde.push(['dataConclusao', '<', ate]);
   const opcoes = { ordenarPor: [['dataConclusao', 'desc']], limite };
   return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
 }

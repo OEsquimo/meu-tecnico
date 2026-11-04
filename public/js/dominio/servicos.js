@@ -13,6 +13,19 @@ import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export const STATUS = { AGENDADO: 'agendado', CONCLUIDO: 'concluido', CANCELADO: 'cancelado' };
 
+/** Texto do status de um agendamento cancelado: ele não some, espera uma nova data. */
+export const TEXTO_AGUARDANDO_REAGENDAMENTO = 'Cancelado — aguardando reagendamento';
+
+/**
+ * Linhas que a tela de editar mexe: as ainda agendadas; se não sobrou nenhuma,
+ * as canceladas (é assim que o agendamento cancelado é reagendado).
+ * Linhas concluídas nunca entram.
+ */
+export function linhasEditaveis(linhas) {
+  const agendadas = linhas.filter((l) => l.status === STATUS.AGENDADO);
+  return agendadas.length > 0 ? agendadas : linhas.filter((l) => l.status === STATUS.CANCELADO);
+}
+
 /** O serviço está agendado e o horário já passou sem ser concluído? */
 export function estaAtrasado(servico, agora = new Date()) {
   return servico.status === STATUS.AGENDADO
@@ -23,7 +36,7 @@ export function estaAtrasado(servico, agora = new Date()) {
 /** Texto e cor do selo de situação do serviço. */
 export function seloDoServico(servico, agora = new Date()) {
   if (servico.status === STATUS.CONCLUIDO) return { texto: 'Concluído', tom: 'verde' };
-  if (servico.status === STATUS.CANCELADO) return { texto: 'Cancelado', tom: '' };
+  if (servico.status === STATUS.CANCELADO) return { texto: TEXTO_AGUARDANDO_REAGENDAMENTO, tom: 'amarelo' };
   if (estaAtrasado(servico, agora)) return { texto: 'Atrasado', tom: 'vermelho' };
   return { texto: 'Agendado', tom: 'azul' };
 }

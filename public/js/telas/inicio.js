@@ -16,7 +16,7 @@ import { icone } from '../nucleo/icones.js';
 import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
-import { listarAgendados, listarAtrasados, contarRetornos } from '../servicos/servicos.js';
+import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento } from '../servicos/servicos.js';
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
 import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento } from '../dominio/servicos.js';
@@ -53,17 +53,21 @@ export default async function montar(ctx) {
   // ---------------------------------------------------------------------------
   // ADMINISTRADOR
   // ---------------------------------------------------------------------------
+  let totalAguardando = 0; // agendamentos cancelados esperando nova data (lembrete de reagendamento)
+
   async function carregarAdmin() {
     const agora = new Date();
     const hoje = inicioDoDia(agora);
     const diasAviso = sessao.empresa?.diasAvisoRetorno ?? DIAS_AVISO_RETORNO_PADRAO;
 
     // Retornos e atrasados não podem derrubar a tela inteira: se falharem, só somem.
-    const [doDia, atrasados, retornos] = await Promise.all([
+    const [doDia, atrasados, retornos, aguardando] = await Promise.all([
       listarAgendados({ empresaId: usuario.empresaId, de: hoje, ate: inicioDoDiaSeguinte(agora) }),
       listarAtrasados({ empresaId: usuario.empresaId, agora }).catch(() => []),
       contarRetornos({ empresaId: usuario.empresaId, hojeISO: hojeISO(agora), diasAviso }).catch(() => 0),
+      listarAguardandoReagendamento({ empresaId: usuario.empresaId }).catch(() => []),
     ]);
+    totalAguardando = agruparAgendamentos(aguardando).length;
 
     // Próxima visita: a primeira de hoje que ainda não passou; senão, a primeira dos próximos dias.
     // (Todos os serviços da mesma visita vêm juntos no cartão.)
@@ -92,7 +96,7 @@ export default async function montar(ctx) {
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Calendário e serviços')}
           ${atalho('#/clientes', 'clientes', 'Clientes', 'Cadastro e aparelhos')}
           ${atalho('#/retornos', 'sino', 'Retornos', 'Quem já deve voltar', retornos)}
-          ${atalho('#/historico', 'relogio', 'Histórico', 'Serviços concluídos')}
+          ${atalho('#/historico', 'relogio', 'Concluídos', 'Serviços concluídos')}
           ${atalho('#/financeiro', 'grafico', 'Financeiro', 'Quanto você ganhou')}
           ${atalho('#/administrativa', 'ajustes', 'Administrativa', 'Equipe, plano e mais')}
         </div>
@@ -118,6 +122,9 @@ export default async function montar(ctx) {
       if (dias <= DIAS_AVISO_PLANO) {
         avisos.push(avisoLink('#/plano', 'amarelo', `Seu plano ${resumo?.plano?.nome || ''} vence em breve`, `Vence em ${formatarDataBR(empresa.planoAte)}. Toque para renovar.`));
       }
+    }
+    if (totalAguardando > 0) {
+      avisos.push(avisoLink('#/reagendamentos', 'amarelo', totalAguardando === 1 ? '1 agendamento aguardando reagendamento' : `${totalAguardando} agendamentos aguardando reagendamento`, 'Foram cancelados e precisam de uma nova data. Toque para reagendar.'));
     }
     if (totalAtrasados > 0) {
       avisos.push(avisoLink('#/agenda', 'vermelho', totalAtrasados === 1 ? '1 serviço atrasado' : `${totalAtrasados} serviços atrasados`, 'O horário já passou e ainda não foram concluídos.'));
@@ -177,7 +184,7 @@ export default async function montar(ctx) {
         </section>
         <div class="atalhos">
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Meus próximos serviços')}
-          ${atalho('#/historico', 'relogio', 'Histórico', 'O que já concluí')}
+          ${atalho('#/historico', 'relogio', 'Concluídos', 'O que já concluí')}
           ${podeGerirClientes(sessao) ? atalho('#/clientes', 'clientes', 'Clientes', 'Cadastro e aparelhos') : ''}
         </div>
       </div>`);

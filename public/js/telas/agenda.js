@@ -12,14 +12,14 @@
 // Padrão: esqueleto ao carregar; se falhar, "Tentar de novo".
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, confirmar, comCarregando, toast, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, estadoVazio, esqueletos, campoSelecao } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
-import { listarAgendados } from '../servicos/servicos.js';
+import { listarAgendados, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { gradeDoMes, agruparPorDia, mesVizinho, DIAS_DA_SEMANA } from '../dominio/agenda.js';
 import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js';
-import { agruparAgendamentos, servicoTemTecnico } from '../dominio/servicos.js';
+import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -110,7 +110,7 @@ export default async function montar(ctx) {
       texto: usuario.admin ? 'Toque em "Agendar" para marcar um serviço.' : 'Você não tem serviços neste dia.',
       acao: usuario.admin ? botao({ texto: 'Agendar serviço', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}` }) : null,
     })}</div>`
-    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin }))}
+    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin, acoesAtrasado: usuario.admin }))}
         </section>
       </div>`);
 
@@ -150,6 +150,31 @@ export default async function montar(ctx) {
     navegar: (el) => {
       const servico = servicosDoMes.find((s) => s.id === el.dataset.id);
       if (servico) abrirNavegacao(servico);
+    },
+    // Visita atrasada: o administrador cancela (fica aguardando reagendamento) ou exclui.
+    'cancelar-visita': async (el) => {
+      const linhas = servicosDoMes.filter((s) => chaveDoAgendamento(s) === el.dataset.chave);
+      if (linhas.length === 0) return;
+      if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await cancelarAgendamentoCompleto(usuario.empresaId, linhas);
+          toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
+          carregarMes();
+        } catch (e) { mostrarErro(e); }
+      });
+    },
+    'excluir-visita': async (el) => {
+      const linhas = servicosDoMes.filter((s) => chaveDoAgendamento(s) === el.dataset.chave);
+      if (linhas.length === 0) return;
+      if (!await confirmar({ titulo: 'Excluir este agendamento?', mensagem: 'Apaga os dados deste agendamento. Não apaga o cliente, os aparelhos dele nem serviços já concluídos. Não dá para desfazer.', confirmar: 'Excluir agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await excluirAgendamentoCompleto(usuario.empresaId, linhas);
+          toast('Agendamento excluído.', 'sucesso');
+          carregarMes();
+        } catch (e) { mostrarErro(e); }
+      });
     },
   });
 

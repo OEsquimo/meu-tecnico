@@ -5,30 +5,30 @@
 //   * dados: telefone, observações e os botões Ligar e WhatsApp;
 //   * endereços (até 2), cada um com "Ir até lá" (janela com Waze / Google Maps);
 //   * aparelhos, com o botão "Adicionar aparelho";
-//   * histórico de serviços (SÓ administrador — o técnico não vê serviços de
+//   * todos os agendamentos e serviços do cliente (SÓ administrador — o técnico não vê serviços de
 //     outros nem valores);
 //   * administrador: "Agendar serviço", "Editar" e "Excluir" (com confirmação).
 //     Técnico com permissão de cadastrar clientes vê apenas "Editar".
 // Padrão: esqueleto ao carregar; erro vira "Tentar de novo".
 // =============================================================================
 
-import { html, mostrar, aoClicar, toast, escolher, confirmar, comCarregando } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, toast, escolher, confirmar, comCarregando, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, selo, itemLista, estadoVazio, esqueletos, listaDeDados } from '../nucleo/componentes.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
 import { buscarCliente, excluirCliente } from '../servicos/clientes.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
-import { listarServicosDoCliente } from '../servicos/servicos.js';
+import { listarServicosDoCliente, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { formatarTelefone, normalizarWhatsappBR } from '../dominio/telefone.js';
 import { linhaDoEndereco, formatarCEP, opcoesDeNavegacao } from '../dominio/endereco.js';
 import { descricaoTecnica, tituloDoAparelho } from '../dominio/aparelhos.js';
-import { seloDoServico } from '../dominio/servicos.js';
+import { seloDoServico, agruparAgendamentos, STATUS } from '../dominio/servicos.js';
 import { formatarDataBR } from '../dominio/datas.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { telaDeErro, carregarEstilosClientes, lerDescricaoAparelho } from './clientes-comum.js';
 import { linkLigar } from './servicos-comum.js';
 
-/** Quantos serviços aparecem no histórico da ficha. */
-const MAXIMO_HISTORICO = 10;
+/** Quantos agendamentos (visitas) aparecem na ficha. */
+const MAXIMO_HISTORICO = 15;
 
 export default async function montar({ raiz, params, sessao, ir, recarregar, ativo }) {
   const empresaId = sessao.vinculo.empresaId;
@@ -69,6 +69,9 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
       ${estadoVazio({ icone: 'info', titulo: 'Cliente não encontrado', texto: 'Ele pode ter sido excluído.', acao: botao({ texto: 'Ver clientes', href: '#/clientes' }) })}`);
     return undefined;
   }
+
+  // Agendamentos do cliente (uma linha por visita), mais recentes primeiro.
+  const visitas = servicos ? agruparAgendamentos(servicos).reverse() : [];
 
   // ---- 2. Desenha a ficha ----
   const enderecos = cliente.enderecos || [];
@@ -124,22 +127,37 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
 
       ${administrador && html`
         <section class="cartao pilha">
-          <h2>Histórico de serviços</h2>
-          ${falhaHistorico && aviso({ tom: 'amarelo', texto: 'Não foi possível carregar o histórico agora.' })}
+          <h2>Agendamentos e serviços</h2>
+          ${falhaHistorico && aviso({ tom: 'amarelo', texto: 'Não foi possível carregar os agendamentos agora.' })}
           ${servicos && servicos.length === 0 && html`<p class="texto-suave">Nenhum serviço ainda.</p>`}
-          ${servicos && servicos.length > 0 && html`
-            <div class="lista">
-              ${servicos.slice(0, MAXIMO_HISTORICO).map((s) => {
-                const situacao = seloDoServico(s);
-                return itemLista({
-                  href: `#/servico/${encodeURIComponent(s.id)}`,
-                  titulo: s.tipoServicoNome,
-                  sub: [formatarDataBR(s.dataAgendada), s.aparelhoResumo].filter(Boolean).join(' · '),
-                  direita: selo(situacao.texto, situacao.tom),
-                });
+          ${visitas.length > 0 && html`
+            <div class="pilha pilha--pequena">
+              ${visitas.slice(0, MAXIMO_HISTORICO).map((v) => {
+                const principal = v.linhas.find((l) => l.status === STATUS.AGENDADO) || v.linhas.find((l) => l.status === STATUS.CANCELADO) || v.linhas[0];
+                const situacao = seloDoServico(principal);
+                const aguardando = v.status === STATUS.CANCELADO;
+                const aberta = v.status === STATUS.AGENDADO;
+                const nomes = [...new Set(v.linhas.map((l) => l.tipoServicoNome))].join(', ');
+                const aparelhosDaVisita = [...new Set(v.linhas.map((l) => l.aparelhoResumo).filter(Boolean))].join(', ');
+                return html`
+                  <div class="visita-cliente">
+                    ${itemLista({
+                      href: `#/servico/${encodeURIComponent(principal.id)}`,
+                      titulo: nomes,
+                      sub: [formatarDataBR(v.dataAgendada), aparelhosDaVisita].filter(Boolean).join(' · '),
+                      direita: selo(situacao.texto, situacao.tom),
+                    })}
+                    ${(aberta || aguardando) && html`
+                      <div class="acoes-cartao">
+                        ${aguardando && botao({ texto: 'Reagendar', iconeNome: 'agenda', href: `#/servico/${encodeURIComponent(principal.id)}/editar`, pequeno: true })}
+                        ${aberta && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: v.chave }, pequeno: true })}
+                        ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: v.chave }, pequeno: true })}
+                      </div>`}
+                  </div>`;
               })}
             </div>
-            ${servicos.length > MAXIMO_HISTORICO && html`<p class="texto-suave texto-pequeno">Mostrando os ${MAXIMO_HISTORICO} mais recentes de ${servicos.length}.</p>`}`}
+            ${visitas.length > MAXIMO_HISTORICO && html`<p class="texto-suave texto-pequeno">Mostrando os ${MAXIMO_HISTORICO} mais recentes de ${visitas.length}.</p>`}
+            <p class="texto-suave texto-pequeno">Serviços concluídos ficam guardados e não podem ser excluídos.</p>`}
         </section>`}
 
       <div class="ficha-acoes">
@@ -163,6 +181,32 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
     },
 
     agendar: () => ir(`/agendar?cliente=${encodeURIComponent(idCliente)}`),
+
+    // Agendamento ainda aberto: cancelar (fica aguardando reagendamento) ou excluir.
+    'cancelar-visita': async (el) => {
+      const v = visitas.find((x) => x.chave === el.dataset.chave);
+      if (!v) return;
+      if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await cancelarAgendamentoCompleto(empresaId, v.linhas);
+          toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
+          recarregar();
+        } catch (e) { mostrarErro(e); }
+      });
+    },
+    'excluir-visita': async (el) => {
+      const v = visitas.find((x) => x.chave === el.dataset.chave);
+      if (!v) return;
+      if (!await confirmar({ titulo: 'Excluir este agendamento?', mensagem: 'Apaga os dados deste agendamento. Não apaga o cliente, os aparelhos dele nem serviços já concluídos. Não dá para desfazer.', confirmar: 'Excluir agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await excluirAgendamentoCompleto(empresaId, v.linhas);
+          toast('Agendamento excluído.', 'sucesso');
+          recarregar();
+        } catch (e) { mostrarErro(e); }
+      });
+    },
 
     excluir: (el) => comCarregando(el, async () => {
       const ok = await confirmar({
