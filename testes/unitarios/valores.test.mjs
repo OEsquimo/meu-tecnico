@@ -143,13 +143,13 @@ test('administrador corrige valor, extras e desconto de serviço concluído', as
   assert.equal(v.extras.length, 1);
 });
 
-test('excluir o agendamento apaga os valores e extras', async () => {
+test('excluir o agendamento NÃO apaga o valor de serviço concluído (preço é histórico)', async () => {
   await novoBanco();
   const l = await linhaAgendada();
   await concluir(l, 'admin', { valores: { baseCentavos: 15000, extras: [{ descricao: 'Peça', valorCentavos: 100 }], descontoCentavos: 0 } });
   const linhas = await listarLinhasDoAgendamento(E, l);
-  await excluirAgendamentoCompleto(E, linhas);
-  assert.equal(await buscarValores(E, l.id), null);
+  await assert.rejects(() => excluirAgendamentoCompleto(E, linhas), /concluídos não podem ser excluídos/);
+  assert.equal((await buscarValores(E, l.id)).valorCentavos, 15100);
 });
 
 test('valores de um serviço com vários técnicos: divisão igual, centavos que sobram para os primeiros', () => {

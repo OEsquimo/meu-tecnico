@@ -34,7 +34,7 @@ import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio
 import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora } from '../dominio/datas.js';
-import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos } from '../dominio/servicos.js';
+import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
 import {
   estadoInicial, novoGrupo, novoServico, inicioDoEstado, todosOsServicos, textoDoRetorno, duracaoDoTipo, duracaoDoServicoNaTela,
@@ -109,9 +109,8 @@ export default async function montar(ctx) {
         });
       }
       if (estado.cliente) await carregarAparelhos();
-      linhasPreservadas = linhasExistentes
-        .filter((l) => l.status === STATUS.AGENDADO
-          && ((l.aparelhoId && !aparelhos.some((a) => a.id === l.aparelhoId)) || (l.tipoServicoId && !sessao.tipos.some((t) => t.id === l.tipoServicoId))))
+      linhasPreservadas = linhasEditaveis(linhasExistentes)
+        .filter((l) => (l.aparelhoId && !aparelhos.some((a) => a.id === l.aparelhoId)) || (l.tipoServicoId && !sessao.tipos.some((t) => t.id === l.tipoServicoId)))
         .map((l) => l.id);
       await carregarOcupacao({ avisar: false });
       sugerirTecnicoDoAgendamento();
@@ -129,13 +128,14 @@ export default async function montar(ctx) {
   async function carregarParaEditar() {
     servico = await buscarServico(usuario.empresaId, params.id);
     if (!servico) { mostrarNaoEncontrado(raiz, 'Serviço não encontrado', 'Ele pode ter sido excluído.', '#/agenda'); return; }
-    if (servico.status !== STATUS.AGENDADO) {
-      servico = null;
-      mostrarNaoEncontrado(raiz, 'Não dá para editar', 'Só serviços que ainda estão agendados podem ser editados.', `#/servico/${encodeURIComponent(params.id)}`);
-      return;
-    }
     agendamentoId = chaveDoAgendamento(servico);
     linhasExistentes = await listarLinhasDoAgendamento(usuario.empresaId, servico);
+    // Só dá para mexer em agendamento ainda agendado ou cancelado (aguardando reagendamento). Concluído, não.
+    if (linhasEditaveis(linhasExistentes).length === 0) {
+      servico = null;
+      mostrarNaoEncontrado(raiz, 'Não dá para editar', 'Serviços concluídos não podem ser editados.', `#/servico/${encodeURIComponent(params.id)}`);
+      return;
+    }
     const cliente = todosClientes.find((c) => c.id === servico.clienteId) || await buscarCliente(usuario.empresaId, servico.clienteId);
     estado = estadoDeLinhas(linhasExistentes, {
       cliente, data: paraISO(servico.dataAgendada), hora: formatarHora(servico.dataAgendada),
@@ -491,10 +491,13 @@ export default async function montar(ctx) {
   function desenharPendencias() {
     const area = raiz.querySelector('#area-pendencias');
     if (!area) return;
-    const fechadas = linhasExistentes.filter((l) => l.status !== STATUS.AGENDADO).length;
+    const editaveis = linhasEditaveis(linhasExistentes);
+    const fechadas = linhasExistentes.filter((l) => !editaveis.includes(l)).length;
+    const reagendando = editaveis.length > 0 && editaveis.every((l) => l.status === STATUS.CANCELADO);
     const problemas = pendenciasDoAgendamento(estado, contexto());
     mostrar(area, html`
       ${linhasPreservadas.length > 0 && aviso({ texto: `${linhasPreservadas.length} ${linhasPreservadas.length === 1 ? 'serviço usa um aparelho ou tipo que foi excluído' : 'serviços usam aparelho ou tipo que foi excluído'}. ${linhasPreservadas.length === 1 ? 'Ele continua' : 'Eles continuam'} no agendamento e só muda${linhasPreservadas.length === 1 ? '' : 'm'} de dia/hora.` })}
+      ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento estava cancelado. Escolha o novo dia e hora: ao salvar, ele volta para "Agendado".' })}
       ${fechadas > 0 && aviso({ texto: `${fechadas} ${fechadas === 1 ? 'serviço deste agendamento já foi concluído ou cancelado' : 'serviços deste agendamento já foram concluídos ou cancelados'} e não aparece${fechadas === 1 ? '' : 'm'} aqui.` })}
       ${problemas.map((p) => aviso({ tom: 'amarelo', texto: p }))}`);
   }
@@ -611,7 +614,7 @@ export default async function montar(ctx) {
   async function adicionarAparelhoDoCliente() {
     const livres = aparelhosDoEndereco().filter((a) => !estado.grupos.some((g) => g.aparelhoId === a.id));
     if (livres.length === 0) {
-      toast(aparelhos.length === 0 ? 'Este cliente ainda não tem aparelho. Use "+ Novo aparelho".' : 'Todos os aparelhos deste cliente já estão no agendamento.', 'info');
+      toast(aparelhos.length === 0 ? 'Este cliente ainda não tem aparelho. Use "+ Novo aparelho".' : '⚠️ Cadastre outro aparelho.', 'info');
       return;
     }
     const id = await escolher({
@@ -626,9 +629,15 @@ export default async function montar(ctx) {
   async function adicionarServico(chaveGrupo) {
     const g = acharGrupo(chaveGrupo);
     if (!g || !g.aparelhoId) return;
-    const tipos = tiposAtivos();
-    if (tipos.length === 0) {
+    const todos = tiposAtivos();
+    if (todos.length === 0) {
       toast('Cadastre um tipo de serviço em "Tipos de serviço" primeiro.', 'erro');
+      return;
+    }
+    // O mesmo serviço não entra duas vezes no mesmo aparelho.
+    const tipos = todos.filter((t) => !g.servicos.some((x) => x.tipoId === t.id));
+    if (tipos.length === 0) {
+      toast('Este aparelho já tem todos os serviços disponíveis.', 'info');
       return;
     }
     const tipoId = await escolher({
@@ -646,7 +655,9 @@ export default async function montar(ctx) {
   async function editarServico(chaveServico) {
     const s = acharServico(chaveServico);
     if (!s) return;
-    const tipos = [...tiposAtivos()];
+    const grupo = estado.grupos.find((x) => x.servicos.includes(s));
+    // Não dá para trocar por um serviço que o aparelho já tem.
+    const tipos = tiposAtivos().filter((t) => !grupo?.servicos.some((x) => x !== s && x.tipoId === t.id));
     const atual = sessao.tipos.find((t) => t.id === s.tipoId);
     if (atual && !tipos.some((t) => t.id === atual.id)) tipos.push(atual);
     const tipoId = await escolher({

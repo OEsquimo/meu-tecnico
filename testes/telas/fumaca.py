@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright
 BASE = "http://localhost:5173/?demo=1"
 PERFIS = {
     "admin": ("demo@meutecnico.app", [
-        "/", "/agenda", "/clientes", "/cliente/novo", "/historico", "/retornos", "/financeiro",
+        "/", "/agenda", "/clientes", "/cliente/novo", "/historico", "/reagendamentos", "/retornos", "/financeiro",
         "/administrativa", "/tipos-servico", "/tipos-servico/novo", "/equipe", "/equipe/novo",
         "/configuracoes", "/plano", "/backup", "/conta", "/agendar",
     ]),

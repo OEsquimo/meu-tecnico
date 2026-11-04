@@ -13,7 +13,7 @@
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { combinarDataHora, ehISOValido, ehHoraValida } from '../dominio/datas.js';
-import { tecnicosDoServico } from '../dominio/servicos.js';
+import { tecnicosDoServico, linhasEditaveis } from '../dominio/servicos.js';
 
 let contador = 0;
 /** Chave só da tela (para achar o cartão). Não vai para o banco. */
@@ -143,6 +143,19 @@ export function problemasDoAgendamento(estado, { tecnicos, tiposPorId, agendados
     return [...problemas, { texto: 'Escolha o dia e a hora.', alvo: { campo: ehISOValido(estado.data) ? 'hora' : 'data' } }];
   }
   const servicos = todosOsServicos(estado);
+  // Nada repetido: o mesmo aparelho uma vez só, e o mesmo serviço uma vez só em cada aparelho.
+  const vistos = new Set();
+  for (const g of estado.grupos) {
+    if (g.aparelhoId) {
+      if (vistos.has(g.aparelhoId)) problemas.push({ texto: '⚠️ O mesmo aparelho está duas vezes no agendamento. Remova um deles.', alvo: { grupo: g.chave } });
+      vistos.add(g.aparelhoId);
+    }
+    const tipos = new Set();
+    for (const s of g.servicos) {
+      if (tipos.has(s.tipoId)) problemas.push({ texto: 'O mesmo serviço está duas vezes no mesmo aparelho. Remova um deles.', alvo: { servico: s.chave } });
+      tipos.add(s.tipoId);
+    }
+  }
   for (const g of estado.grupos.filter((x) => x.aparelhoId === '' && x.servicos.length === 0)) {
     problemas.push({ texto: 'Escolha o aparelho.', alvo: { grupo: g.chave } });
   }
@@ -191,7 +204,7 @@ export function montarLinhas(estado, { tiposPorId, aparelhosPorId, tecnicosPorUi
  * Só as linhas ainda agendadas entram; concluídas/canceladas ficam como estão.
  */
 export function estadoDeLinhas(linhas, { cliente, data, hora, tipoExiste = () => true }) {
-  const abertas = linhas.filter((l) => l.status === 'agendado');
+  const abertas = linhasEditaveis(linhas);
   const estado = estadoInicial({ data, hora });
   estado.cliente = cliente;
   estado.observacao = abertas[0]?.obsAgendamento || '';

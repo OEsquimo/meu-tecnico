@@ -520,8 +520,8 @@ service cloud.firestore {
       let mudou = d.diff(resource.data).affectedKeys();
       let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm'];
       let podeValor = tecnicoAltera(emp) && existsAfter(/databases/$(database)/documents/empresas/$(emp)/valores/$(sid));
-      let comValor = podeValor ? basicas + ['valorDefinido'] : basicas;
-      let comTipo = comValor + ['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin'];
+      let comValor = podeValor ? basicas.concat(['valorDefinido']) : basicas;
+      let comTipo = comValor.concat(['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin']);
       return ehTecnico(emp)
         && ehDoServico(resource.data)
         && resource.data.status == 'agendado'

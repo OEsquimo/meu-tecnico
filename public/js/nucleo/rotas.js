@@ -39,7 +39,7 @@ export const ROTAS = [
   { padrao: '/servico/:id', carregar: () => import('../telas/servico.js'), acesso: 'membro', menu: 'agenda', titulo: 'Serviço' },
   { padrao: '/servico/:id/valor', carregar: () => import('../telas/valor-servico.js'), acesso: 'admin', menu: 'agenda', titulo: 'Valor do serviço' },
   { padrao: '/concluir/:id', carregar: () => import('../telas/concluir-servico.js'), acesso: 'membro', menu: 'agenda', titulo: 'Concluir serviço' },
-  { padrao: '/historico', carregar: () => import('../telas/historico.js'), acesso: 'membro', menu: 'historico', titulo: 'Histórico' },
+  { padrao: '/historico', carregar: () => import('../telas/historico.js'), acesso: 'membro', menu: 'historico', titulo: 'Serviços concluídos' },
   { padrao: '/aparelho/:id/editar', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Aparelho' },
   { padrao: '/cliente/:clienteId/aparelho/novo', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Novo aparelho' },
   { padrao: '/conta', carregar: () => import('../telas/conta.js'), acesso: 'membro', menu: null, titulo: 'Minha conta' },
@@ -53,6 +53,7 @@ export const ROTAS = [
   // ---- Só administrador ----
   { padrao: '/agendar', carregar: () => import('../telas/agendar.js'), acesso: 'admin', menu: 'agenda', titulo: 'Agendar serviço' },
   { padrao: '/servico/:id/editar', carregar: () => import('../telas/agendar.js'), acesso: 'admin', menu: 'agenda', titulo: 'Editar agendamento' },
+  { padrao: '/reagendamentos', carregar: () => import('../telas/reagendamentos.js'), acesso: 'admin', menu: null, titulo: 'Aguardando reagendamento' },
   { padrao: '/retornos', carregar: () => import('../telas/retornos.js'), acesso: 'admin', menu: null, titulo: 'Retornos' },
   { padrao: '/financeiro', carregar: () => import('../telas/financeiro.js'), acesso: 'admin', menu: 'financeiro', titulo: 'Financeiro' },
   { padrao: '/administrativa', carregar: () => import('../telas/administrativa.js'), acesso: 'admin', menu: null, titulo: 'Administrativa' },
@@ -166,7 +167,7 @@ export function itensDoMenu(s, tipo = 'principal') {
       { id: 'inicio', rotulo: 'Início', href: '#/' },
       { id: 'agenda', rotulo: 'Agenda', href: '#/agenda' },
       { id: 'clientes', rotulo: 'Clientes', href: '#/clientes' },
-      { id: 'historico', rotulo: 'Histórico', href: '#/historico' },
+      { id: 'historico', rotulo: 'Concluídos', href: '#/historico' },
       { id: 'financeiro', rotulo: 'Financeiro', href: '#/financeiro' },
     ];
   }
@@ -174,7 +175,7 @@ export function itensDoMenu(s, tipo = 'principal') {
     const itens = [
       { id: 'inicio', rotulo: 'Meus serviços', href: '#/' },
       { id: 'agenda', rotulo: 'Agenda', href: '#/agenda' },
-      { id: 'historico', rotulo: 'Histórico', href: '#/historico' },
+      { id: 'historico', rotulo: 'Concluídos', href: '#/historico' },
     ];
     if (podeGerirClientes(s)) itens.splice(2, 0, { id: 'clientes', rotulo: 'Clientes', href: '#/clientes' });
     return itens;

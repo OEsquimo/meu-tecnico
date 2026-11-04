@@ -83,7 +83,7 @@ test('serviços: conclusão calcula retorno só quando o tipo gera retorno', () 
   assert.equal(sem.retornoSituacao, null);
   assert.ok(estaAtrasado({ status: 'agendado', dataAgendada: new Date(2020, 0, 1) }));
   assert.ok(!estaAtrasado({ status: 'concluido', dataAgendada: new Date(2020, 0, 1) }));
-  assert.equal(seloDoServico({ status: 'cancelado' }).texto, 'Cancelado');
+  assert.equal(seloDoServico({ status: 'cancelado' }).texto, 'Cancelado — aguardando reagendamento');
 });
 
 test('whatsapp: variáveis e link', () => {
