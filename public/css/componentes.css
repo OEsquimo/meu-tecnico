@@ -513,7 +513,17 @@ textarea.campo__entrada {
   color: #35505f;
   font-size: 12px;
   font-weight: 800;
-  white-space: nowrap;
+  /* Selos curtos ficam numa linha; os longos quebram em vez de esmagar o texto ao lado. */
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Ao lado de um título: o selo nunca passa de ~40% da largura, o título fica com o resto. */
+.item-lista > .selo,
+.cabecalho > .selo {
+  flex: 0 1 auto;
+  max-width: 40%;
 }
 
 .selo--azul {
@@ -611,7 +621,7 @@ textarea.campo__entrada {
 }
 
 .item-lista__textos {
-  flex: 1;
+  flex: 1 1 55%;
   min-width: 0;
 }
 

@@ -10,16 +10,16 @@
 // Padrão: mostra esqueleto ao carregar; se der erro, "Tentar de novo".
 // =============================================================================
 
-import { html, mostrar, aoClicar } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, estadoVazio, esqueletos } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
 import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
-import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento } from '../servicos/servicos.js';
+import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
-import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento } from '../dominio/servicos.js';
+import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento, STATUS } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
 /** Quantos dias antes do fim do teste/plano o aviso aparece. */
@@ -29,6 +29,8 @@ export default async function montar(ctx) {
   const { raiz } = ctx;
   const usuario = contextoDoUsuario();
   const topo = cabecalho({ titulo: `Olá, ${primeiroNome(usuario.nome) || 'bem-vindo'}`, subtitulo: formatarDiaExtenso(new Date()) });
+  let linhasDaVisita = []; // todas as linhas da próxima visita (inclui concluídas)
+  let podeCancelarProxima = false; // só visitas SEM serviço concluído
   let servicosNaTela = []; // serviços desenhados (para o botão "Ir até o cliente")
 
   // Os cliques são ligados UMA vez; os dados são redesenhados a cada carga.
@@ -36,6 +38,28 @@ export default async function montar(ctx) {
     navegar: (el) => {
       const servico = servicosNaTela.find((s) => s.id === el.dataset.id);
       if (servico) abrirNavegacao(servico);
+    },
+    'cancelar-visita': async (el) => {
+      if (linhasDaVisita.length === 0) return;
+      if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data. O cliente não será avisado automaticamente.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await cancelarAgendamentoCompleto(usuario.empresaId, linhasDaVisita);
+          toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
+          ctx.recarregar();
+        } catch (e) { mostrarErro(e); }
+      });
+    },
+    'excluir-visita': async (el) => {
+      if (linhasDaVisita.length === 0) return;
+      if (!await confirmar({ titulo: 'Excluir este agendamento?', mensagem: 'Apaga os dados deste agendamento. Não apaga o cliente nem os aparelhos dele. Não dá para desfazer.', confirmar: 'Excluir agendamento', cancelar: 'Voltar', perigo: true })) return;
+      await comCarregando(el, async () => {
+        try {
+          await excluirAgendamentoCompleto(usuario.empresaId, linhasDaVisita);
+          toast('Agendamento excluído.', 'sucesso');
+          ctx.recarregar();
+        } catch (e) { mostrarErro(e); }
+      });
     },
   });
 
@@ -78,6 +102,14 @@ export default async function montar(ctx) {
       primeiro = origem[0] || null;
     }
     if (!ctx.ativo()) return;
+    // Cancelar/Excluir na Início: só se a visita não tem nenhum serviço concluído.
+    linhasDaVisita = [];
+    podeCancelarProxima = false;
+    if (primeiro) {
+      linhasDaVisita = await listarLinhasDoAgendamento(usuario.empresaId, primeiro).catch(() => []);
+      podeCancelarProxima = linhasDaVisita.length > 0 && !linhasDaVisita.some((l) => l.status === STATUS.CONCLUIDO);
+      if (!ctx.ativo()) return;
+    }
     const proximo = primeiro
       ? agruparAgendamentos(origem.filter((l) => chaveDoAgendamento(l) === chaveDoAgendamento(primeiro)))[0]
       : null;
@@ -151,7 +183,7 @@ export default async function montar(ctx) {
         <div class="texto-suave texto-pequeno negrito">
           Próxima visita · ${ehHoje ? 'hoje' : formatarDiaExtenso(dia)}${totalHoje > 1 && ehHoje ? ` (${totalHoje} hoje)` : ''}
         </div>
-        ${cartaoDaVisita(visita, { mostrarTecnico: true, acoes: true, editar: true })}
+        ${cartaoDaVisita(visita, { mostrarTecnico: true, acoes: true, editar: true, cancelarExcluir: podeCancelarProxima })}
       </section>`;
   }
 

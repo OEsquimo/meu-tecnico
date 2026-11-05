@@ -188,6 +188,31 @@ export function escolher({ titulo, mensagem = '', opcoes, cancelar = 'Cancelar' 
   });
 }
 
+/** Janela com um campo de texto. Retorna o texto (sem espaços nas pontas) ou null se cancelou. */
+export function pedirTexto({ titulo, mensagem = '', rotulo = '', confirmar = 'Salvar', cancelar = 'Voltar', maximo = 200 }) {
+  return new Promise((resolver) => {
+    const janela = criarJanela();
+    janela.setAttribute('aria-labelledby', 'janela-titulo');
+    janela.innerHTML = String(html`
+      <h2 id="janela-titulo">${titulo}</h2>
+      ${mensagem && html`<p class="texto-suave">${mensagem}</p>`}
+      <div class="campo"><input class="campo__entrada" type="text" maxlength="${maximo}" aria-label="${rotulo || titulo}" placeholder="${rotulo}" data-texto /></div>
+      <div class="janela__acoes">
+        <button type="button" class="botao botao--bloco" data-resposta="sim">${confirmar}</button>
+        <button type="button" class="botao botao--bloco botao--secundario" data-resposta="nao">${cancelar}</button>
+      </div>`);
+    let resposta = null;
+    janela.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-resposta]');
+      if (!b) return;
+      if (b.dataset.resposta === 'sim') resposta = janela.querySelector('[data-texto]').value.trim().slice(0, maximo);
+      janela.close();
+    });
+    janela.addEventListener('close', () => { janela.remove(); resolver(resposta); });
+    janela.showModal();
+  });
+}
+
 // -----------------------------------------------------------------------------
 // BOTÕES COM "CARREGANDO" (impede toque duplo = gravação duplicada)
 // -----------------------------------------------------------------------------

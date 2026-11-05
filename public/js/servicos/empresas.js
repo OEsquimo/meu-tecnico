@@ -75,9 +75,9 @@ export async function garantirTiposPadrao(empresaId) {
   return true;
 }
 
-/** Salva as configurações da empresa (nome, aviso de retorno, texto do WhatsApp, permissão do técnico). */
-export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente }) {
-  await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente })]);
+/** Salva as configurações da empresa (nome, aviso de retorno, texto do WhatsApp, permissão do técnico, cobrança: Pix, texto e tom). */
+export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
+  await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca })]);
 }
 
 /** Apaga em lotes todos os documentos de uma coleção. Retorna quantos apagou. */

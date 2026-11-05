@@ -407,3 +407,34 @@ test('vários técnicos: técnico só adiciona serviço para si mesmo (lista com
   await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/m1`), linhaNova({ tecnicoUids: [TEC], tecnicosNomes: ['Tec'] })));
   await assertFails(setDoc(doc(db, `empresas/${E}/servicos/m2`), linhaNova({ tecnicoUids: [TEC, 'outro-tecnico'], tecnicosNomes: ['Tec', 'Outro'] })));
 });
+
+test('cobrança: só o administrador grava Pix, texto e tom; limites e tom inválido são recusados', async () => {
+  const admin = como(ADMIN);
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}`), { chavePix: '11999998888', mensagemCobranca: 'Olá {nome}, {valor}', tomCobranca: 'formal' }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { tomCobranca: 'bravo' }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { chavePix: 'x'.repeat(101) }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { mensagemCobranca: 'x'.repeat(601) }));
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}`), { chavePix: 'meu pix' }));
+});
+
+test('cobrança: o administrador anota "cobrado em" no serviço concluído; o técnico não', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), `empresas/${E}/servicos/s-tec`), { status: 'concluido', dataConclusao: dia(0) });
+  });
+  await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { cobradoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/s-tec`), { cobradoEm: serverTimestamp() }));
+});
+
+test('pendente: o técnico devolve o próprio serviço agendado com motivo, e nada além disso', async () => {
+  const db = como(TEC);
+  const pendente = { status: 'cancelado', pendente: true, motivoPendencia: 'Faltou peça', atualizadoEm: serverTimestamp() };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-outro`), pendente)); // serviço de outro técnico
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, clienteNome: 'Hacker' }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, pendente: false }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, motivoPendencia: 'x'.repeat(201) }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, status: 'concluido' }));
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), pendente));
+  // Já cancelado: o técnico não mexe de novo (só o administrador reagenda).
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, motivoPendencia: 'outro' }));
+  await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { status: 'agendado', pendente: false, motivoPendencia: '', atualizadoEm: serverTimestamp() }));
+});

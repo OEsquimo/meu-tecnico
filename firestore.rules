@@ -264,7 +264,11 @@ service cloud.firestore {
       return d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
         && d.permiteTecnicoCliente is bool
         && d.diasAvisoRetorno is int && d.diasAvisoRetorno >= 0 && d.diasAvisoRetorno <= 90
-        && d.mensagemWhatsapp is string && d.mensagemWhatsapp.size() <= 600;
+        && d.mensagemWhatsapp is string && d.mensagemWhatsapp.size() <= 600
+        // Cobrança pelo WhatsApp (opcionais): chave Pix, texto da mensagem e tom (amigável/formal)
+        && (!('chavePix' in d) || (d.chavePix is string && d.chavePix.size() <= 100))
+        && (!('mensagemCobranca' in d) || (d.mensagemCobranca is string && d.mensagemCobranca.size() <= 600))
+        && (!('tomCobranca' in d) || d.tomCobranca in ['amigavel', 'formal']);
     }
 
     // Atualização do contador de clientes: só é aceita junto com a criação
@@ -315,7 +319,7 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca'])
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)
         || contadorValido(emp)
@@ -423,7 +427,8 @@ service cloud.firestore {
         allow create: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoAdicionaServico(emp);
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
-          || tecnicoConcluiServico(emp, sid);
+          || tecnicoConcluiServico(emp, sid)
+          || tecnicoMarcaPendente(emp);
         allow delete: if ehAdmin(emp);
       }
 
@@ -481,7 +486,7 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
@@ -497,6 +502,8 @@ service cloud.firestore {
         && (!('tecnicoUids' in d) || (d.tecnicoUids is list && d.tecnicoUids.size() <= 20))
         && (!('tecnicosNomes' in d) || (d.tecnicosNomes is list && d.tecnicosNomes.size() <= 20))
         && (!('ocupacaoPorTecnico' in d) || d.ocupacaoPorTecnico is map)
+        && (!('pendente' in d) || d.pendente is bool)
+        && (!('motivoPendencia' in d) || (d.motivoPendencia is string && d.motivoPendencia.size() <= 200))
         && (!('retornoSituacao' in d) || d.retornoSituacao == null || d.retornoSituacao in ['pendente', 'agendado', 'recusado', 'feito']);
     }
 
@@ -532,6 +539,19 @@ service cloud.firestore {
         && d.status == 'concluido'
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool);
+    }
+
+    // "Não deu para fazer": o técnico devolve um serviço SEU, ainda agendado, para o administrador
+    // reagendar (status "cancelado" + pendente=true + motivo). Não mexe em mais nada.
+    function tecnicoMarcaPendente(emp) {
+      let d = request.resource.data;
+      return ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && d.diff(resource.data).affectedKeys().hasOnly(['status', 'pendente', 'motivoPendencia', 'atualizadoEm'])
+        && d.status == 'cancelado'
+        && d.pendente == true
+        && d.motivoPendencia is string && d.motivoPendencia.size() <= 200;
     }
 
     // O técnico pode acrescentar um serviço NA SUA visita (para ele mesmo, ainda

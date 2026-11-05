@@ -26,6 +26,7 @@ export const CAMPOS_PERMITIDOS = {
     'tecnicoNome', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
     'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
+    'cobradoEm', 'pendente', 'motivoPendencia',
   ],
   valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
   precos: ['valorCentavos', 'atualizadoEm'],
@@ -76,7 +77,7 @@ export function montarBackup(dados, agora = new Date()) {
     versao: VERSAO_BACKUP,
     exportadoEm: agora,
     empresa: dados.empresa
-      ? { nome: dados.empresa.nome, diasAvisoRetorno: dados.empresa.diasAvisoRetorno, mensagemWhatsapp: dados.empresa.mensagemWhatsapp }
+      ? { nome: dados.empresa.nome, diasAvisoRetorno: dados.empresa.diasAvisoRetorno, mensagemWhatsapp: dados.empresa.mensagemWhatsapp, chavePix: dados.empresa.chavePix ?? '', mensagemCobranca: dados.empresa.mensagemCobranca ?? '', tomCobranca: dados.empresa.tomCobranca ?? 'amigavel' }
       : null,
     // Só informativo: nome/telefone/situação da equipe (não é restaurado, pois depende de logins).
     equipe: (dados.equipe || []).map((m) => ({ nome: m.nome, telefone: m.telefone, status: m.status })),

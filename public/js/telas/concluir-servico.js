@@ -15,10 +15,10 @@
 // 3/4/6/12 meses (já vem marcado o prazo padrão do tipo).
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
-import { buscarServico, concluirServico } from '../servicos/servicos.js';
+import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { validarConclusao } from '../dominio/validacoes.js';
 import { validarValores } from '../dominio/valores.js';
@@ -27,7 +27,7 @@ import { listarPrecos } from '../servicos/precos.js';
 import { podeVerValores, podeAlterarValores } from '../nucleo/permissoes.js';
 import { editorDeValores, valorSoParaLer, ligarEditorDeValores } from './valores-editor.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
-import { STATUS, ehLinhaSemServico } from '../dominio/servicos.js';
+import { STATUS, ehLinhaSemServico, MOTIVOS_PENDENCIA } from '../dominio/servicos.js';
 import { hojeISO } from '../dominio/datas.js';
 import { PRAZOS_RETORNO_MESES, GARANTIA_DIAS } from '../nucleo/constantes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
@@ -40,6 +40,38 @@ export default async function montar(ctx) {
   const { raiz, params, ir } = ctx;
   const usuario = contextoDoUsuario();
   const voltarPara = `#/servico/${params.id}`;
+
+  /** Sobrou serviço aberto na mesma visita? Pergunta se faz hoje ou fica pendente. */
+  async function perguntarPendentes(concluido) {
+    let abertos = [];
+    try {
+      const linhas = await listarLinhasDoAgendamento(usuario.empresaId, concluido, { tecnicoUid: usuario.admin ? null : usuario.uid });
+      abertos = linhas.filter((l) => l.id !== concluido.id && l.status === STATUS.AGENDADO);
+    } catch { return; } // a pergunta é um extra: se falhar, o serviço já está concluído
+    if (abertos.length === 0) return;
+    const n = abertos.length;
+    const nomes = abertos.map((l) => l.tipoServicoNome || 'Serviço a definir').join(', ');
+    const r = await escolher({
+      titulo: `${n} ${n === 1 ? 'serviço pendente' : 'serviços pendentes'} nesta visita`,
+      mensagem: `${nomes}. Dá para fazer ainda hoje?`,
+      opcoes: [
+        { id: 'hoje', rotulo: 'Fazer ainda hoje' },
+        { id: 'nao', rotulo: 'Não deu para fazer' },
+      ],
+      cancelar: 'Decidir depois',
+    });
+    if (r !== 'nao') return; // "Fazer ainda hoje" e "Decidir depois": continuam na agenda de hoje
+    let motivo = await escolher({
+      titulo: 'Por que ficou pendente?',
+      opcoes: [...MOTIVOS_PENDENCIA.map((m) => ({ id: m, rotulo: m })), { id: 'outro', rotulo: 'Outro motivo' }],
+      cancelar: 'Sem informar',
+    });
+    if (motivo === 'outro') motivo = await pedirTexto({ titulo: 'Qual o motivo?', rotulo: 'Ex.: cliente não estava em casa' }) || 'Outro motivo';
+    try {
+      await marcarPendente(usuario.empresaId, abertos.map((l) => l.id), motivo || '');
+      toast(n === 1 ? 'Serviço ficou pendente, aguardando reagendamento.' : 'Serviços pendentes, aguardando reagendamento.', 'sucesso');
+    } catch (e) { toast('Não foi possível marcar como pendente. Tente de novo pela tela do serviço.', 'erro'); }
+  }
 
   async function carregar() {
     mostrar(raiz, html`${cabecalho({ titulo: 'Concluir serviço', voltarPara })}${esqueletos(2)}`);
@@ -190,6 +222,7 @@ export default async function montar(ctx) {
             },
           });
           toast('Serviço concluído!', 'sucesso');
+          await perguntarPendentes(s);
           ir('/');
         } catch (erro) {
           mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });

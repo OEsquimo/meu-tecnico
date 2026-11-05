@@ -115,7 +115,7 @@ function blocosPorAparelho(linhas) {
  * opcoes.editar: mostra o botão "Editar" no topo (só administrador).
  * opcoes.acoesAtrasado: visita atrasada ganha "Cancelar" e "Excluir" (só administrador).
  */
-export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false, acoesAtrasado = false } = {}) {
+export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false, acoesAtrasado = false, cancelarExcluir = false } = {}) {
   const linhas = visita.linhas;
   const primeira = linhas[0];
   const atrasado = linhas.some((l) => estaAtrasado(l));
@@ -150,8 +150,8 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
       ${acoes && html`
         <div class="acoes-cartao">
           ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
-          ${acoesAtrasado && atrasado && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: visita.chave }, pequeno: true })}
-          ${acoesAtrasado && atrasado && botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: visita.chave }, pequeno: true })}
+          ${(cancelarExcluir || (acoesAtrasado && atrasado)) && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: visita.chave }, pequeno: true })}
+          ${(cancelarExcluir || (acoesAtrasado && atrasado)) && botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: visita.chave }, pequeno: true })}
         </div>`}
     </div>`;
 }
