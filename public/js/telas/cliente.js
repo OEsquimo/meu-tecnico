@@ -79,7 +79,18 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
   const linkLig = linkLigar(cliente.whatsapp);
   const nomeDoEndereco = (id) => enderecos.find((e) => e.id === id);
 
-  mostrar(raiz, html`
+  // Com vários endereços, a ficha mostra só o do próximo agendamento aberto (ou o primeiro cadastrado).
+  let verTodos = false;
+  const proximoAberto = (servicos || []).filter((l) => l.status === STATUS.AGENDADO && l.dataAgendada instanceof Date)
+    .sort((a, b) => a.dataAgendada - b.dataAgendada)[0];
+  const idEnderecoAtual = enderecos.find((e) => e.id === proximoAberto?.enderecoId)?.id || enderecos[0]?.id;
+
+  function desenharFicha() {
+    const varios = enderecos.length > 1;
+    const colapsado = varios && !verTodos;
+    const enderecosVisiveis = colapsado ? enderecos.filter((e) => e.id === idEnderecoAtual) : enderecos;
+    const aparelhosVisiveis = colapsado ? aparelhos.filter((a) => !a.enderecoId || a.enderecoId === idEnderecoAtual) : aparelhos;
+    mostrar(raiz, html`
     ${cabecalho({ titulo: cliente.nome, voltarPara: '#/clientes' })}
     <div class="pilha">
       <section class="cartao pilha">
@@ -96,25 +107,26 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
       </section>
 
       <section class="cartao pilha">
-        <h2>${enderecos.length > 1 ? 'Endereços' : 'Endereço'}</h2>
+        <h2>${enderecos.length > 1 && !colapsado ? 'Endereços' : 'Endereço'}</h2>
         ${enderecos.length === 0 && html`<p class="texto-suave">Nenhum endereço cadastrado.</p>`}
-        ${enderecos.map((e, i) => html`
+        ${enderecosVisiveis.map((e) => html`
           <div class="endereco-item">
-            ${(e.apelido || enderecos.length > 1) && html`<div class="endereco-item__apelido">${e.apelido || `Endereço ${i + 1}`}</div>`}
+            ${(e.apelido || enderecos.length > 1) && html`<div class="endereco-item__apelido">${e.apelido || `Endereço ${enderecos.indexOf(e) + 1}`}</div>`}
             <div>${linhaDoEndereco(e) || 'Endereço incompleto'}</div>
             ${e.cep && html`<div class="texto-suave texto-pequeno">CEP ${formatarCEP(e.cep)}</div>`}
-            ${botao({ texto: 'Ir até lá', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { indice: i } })}
+            ${botao({ texto: 'Ir até lá', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { indice: enderecos.indexOf(e) } })}
           </div>`)}
+        ${varios && botao({ texto: colapsado ? `Ver todos os endereços (${enderecos.length})` : 'Mostrar só o atual', variante: 'fantasma', acao: 'alternar-enderecos', pequeno: true })}
       </section>
 
       <section class="cartao pilha">
         <h2>Aparelhos</h2>
-        ${aparelhos.length === 0
-          ? html`<p class="texto-suave">Nenhum aparelho cadastrado ainda.</p>`
+        ${aparelhosVisiveis.length === 0
+          ? html`<p class="texto-suave">${aparelhos.length === 0 ? 'Nenhum aparelho cadastrado ainda.' : 'Nenhum aparelho neste endereço.'}</p>`
           : html`<div class="lista">
-              ${aparelhos.map((a) => {
+              ${aparelhosVisiveis.map((a) => {
                 const { marca, modelo } = lerDescricaoAparelho(a.descricao);
-                const onde = enderecos.length > 1 ? nomeDoEndereco(a.enderecoId) : null;
+                const onde = enderecos.length > 1 && !colapsado ? nomeDoEndereco(a.enderecoId) : null;
                 return itemLista({
                   href: `#/aparelho/${encodeURIComponent(a.id)}/editar`,
                   titulo: tituloDoAparelho(a),
@@ -134,7 +146,8 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
             <div class="pilha pilha--pequena">
               ${visitas.slice(0, MAXIMO_HISTORICO).map((v) => {
                 const principal = v.linhas.find((l) => l.status === STATUS.AGENDADO) || v.linhas.find((l) => l.status === STATUS.CANCELADO) || v.linhas[0];
-                const situacao = seloDoServico(principal);
+                const situacao = seloDoServico(principal, new Date(), { curto: true });
+                const abertas = v.linhas.filter((l) => l.status === STATUS.AGENDADO);
                 const aguardando = v.status === STATUS.CANCELADO;
                 const aberta = v.status === STATUS.AGENDADO;
                 const nomes = [...new Set(v.linhas.map((l) => l.tipoServicoNome))].join(', ');
@@ -149,6 +162,8 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
                     })}
                     ${(aberta || aguardando) && html`
                       <div class="acoes-cartao">
+                        ${abertas.length === 1 && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(abertas[0].id)}`, pequeno: true })}
+                        ${abertas.length > 1 && abertas.map((l) => botao({ texto: `Concluir ${l.tipoServicoNome}`, iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true }))}
                         ${aguardando && botao({ texto: 'Reagendar', iconeNome: 'agenda', href: `#/servico/${encodeURIComponent(principal.id)}/editar`, pequeno: true })}
                         ${aberta && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: v.chave }, pequeno: true })}
                         ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: v.chave }, pequeno: true })}
@@ -166,9 +181,12 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
         ${administrador && botao({ texto: 'Excluir cliente', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', bloco: true })}
       </div>
     </div>`);
+  }
+  desenharFicha();
 
   // ---- 3. Ações ----
   return aoClicar(raiz, {
+    'alternar-enderecos': () => { verTodos = !verTodos; desenharFicha(); },
     // Janela para escolher o aplicativo de mapas do endereço tocado.
     navegar: async (el) => {
       const endereco = enderecos[Number(el.dataset.indice)];

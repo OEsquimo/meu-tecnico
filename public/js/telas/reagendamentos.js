@@ -11,14 +11,14 @@
 import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, selo, estadoVazio, esqueletos } from '../nucleo/componentes.js';
 import { listarAguardandoReagendamento, excluirAgendamentoCompleto } from '../servicos/servicos.js';
-import { agruparAgendamentos, TEXTO_AGUARDANDO_REAGENDAMENTO } from '../dominio/servicos.js';
+import { agruparAgendamentos, seloDoServico } from '../dominio/servicos.js';
 import { formatarDataHoraBR } from '../dominio/datas.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
   const usuario = contextoDoUsuario();
-  const topo = cabecalho({ titulo: 'Aguardando reagendamento', subtitulo: 'Cancelados que precisam de nova data', voltarPara: '#/' });
+  const topo = cabecalho({ titulo: 'Aguardando reagendamento', subtitulo: 'Cancelados ou pendentes que precisam de nova data', voltarPara: '#/' });
   let visitas = [];
   let desligar = () => {};
 
@@ -36,13 +36,16 @@ export default async function montar(ctx) {
     }
   }
 
+  const motivoDe = (v) => v.linhas.find((l) => l.pendente && l.motivoPendencia)?.motivoPendencia || '';
+
   function cartao(v) {
     const primeira = v.linhas[0];
     return html`
       <div class="cartao servico-cartao">
         <div class="pilha pilha--pequena">
           <a href="#/servico/${primeira.id}" class="item-lista__titulo">${v.clienteNome}</a>
-          <div>${selo(TEXTO_AGUARDANDO_REAGENDAMENTO, 'amarelo')}</div>
+          <div>${(() => { const x = seloDoServico(primeira); return selo(x.texto, x.tom); })()}</div>
+          ${motivoDe(v) && html`<div class="item-lista__sub">Motivo: ${motivoDe(v)}</div>`}
           <div class="item-lista__sub">Era para ${formatarDataHoraBR(v.dataAgendada)}</div>
           ${primeira.local && html`<div class="item-lista__sub">${primeira.local}</div>`}
           ${v.linhas.map((l) => html`<div class="item-lista__sub">${l.tipoServicoNome}${l.aparelhoResumo ? ` · ${l.aparelhoResumo}` : ''}</div>`)}

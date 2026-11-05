@@ -15,6 +15,26 @@ export const STATUS = { AGENDADO: 'agendado', CONCLUIDO: 'concluido', CANCELADO:
 
 /** Texto do status de um agendamento cancelado: ele não some, espera uma nova data. */
 export const TEXTO_AGUARDANDO_REAGENDAMENTO = 'Cancelado — aguardando reagendamento';
+/** Serviço que o técnico não conseguiu fazer na visita. */
+export const TEXTO_PENDENTE_REAGENDAMENTO = 'Pendente — aguardando reagendamento';
+/** Versões curtas para listas (o texto completo fica na tela do serviço). */
+export const TEXTO_CURTO_AGUARDANDO = 'Aguardando reagendamento';
+
+export const MOTIVOS_PENDENCIA = [
+  'Faltou peça ou material',
+  'O cliente pediu outro dia',
+  'Faltou tempo',
+];
+
+/** Resumo de uma visita: "2 concluídos · 1 pendente". */
+export function resumoDaVisita(linhas) {
+  const c = linhas.filter((l) => l.status === STATUS.CONCLUIDO).length;
+  const p = linhas.filter((l) => l.status === STATUS.CANCELADO && l.pendente === true).length;
+  const partes = [];
+  if (c) partes.push(`${c} ${c === 1 ? 'concluído' : 'concluídos'}`);
+  if (p) partes.push(`${p} ${p === 1 ? 'pendente' : 'pendentes'}`);
+  return partes.join(' · ');
+}
 
 /**
  * Linhas que a tela de editar mexe: as ainda agendadas; se não sobrou nenhuma,
@@ -34,8 +54,10 @@ export function estaAtrasado(servico, agora = new Date()) {
 }
 
 /** Texto e cor do selo de situação do serviço. */
-export function seloDoServico(servico, agora = new Date()) {
+export function seloDoServico(servico, agora = new Date(), { curto = false } = {}) {
   if (servico.status === STATUS.CONCLUIDO) return { texto: 'Concluído', tom: 'verde' };
+  if (servico.status === STATUS.CANCELADO && servico.pendente === true) return { texto: curto ? TEXTO_CURTO_AGUARDANDO : TEXTO_PENDENTE_REAGENDAMENTO, tom: 'amarelo' };
+  if (servico.status === STATUS.CANCELADO && curto) return { texto: TEXTO_CURTO_AGUARDANDO, tom: 'amarelo' };
   if (servico.status === STATUS.CANCELADO) return { texto: TEXTO_AGUARDANDO_REAGENDAMENTO, tom: 'amarelo' };
   if (estaAtrasado(servico, agora)) return { texto: 'Atrasado', tom: 'vermelho' };
   return { texto: 'Agendado', tom: 'azul' };

@@ -210,6 +210,7 @@ with sync_playwright() as p:
     if pag.locator("select[name=aparelhoId]").count() and pag.locator("select[name=aparelhoId]").input_value() == "":
         pag.locator("select[name=aparelhoId]").select_option(index=1)
     pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
+    if pag.locator("dialog", has_text="pendente").count(): pag.locator("dialog button", has_text="Decidir depois").click(); pag.wait_for_timeout(800)
     ok(pag.url.endswith("#/") or pag.url.endswith("/"), "concluiu sem escrever 'o que foi feito' (opcional)")
     ir(pag, "/servico/" + href.split("/concluir/")[1])
     txt = pag.inner_text("#conteudo")
@@ -251,6 +252,7 @@ with sync_playwright() as p:
             ok("#/concluir/" in pag.url, "técnico não conclui sem aparelho")
             pag.locator("select[name=aparelhoId]").select_option(index=1)
         pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
+        if pag.locator("dialog", has_text="pendente").count(): pag.locator("dialog button", has_text="Decidir depois").click(); pag.wait_for_timeout(800)
         ok(pag.url.endswith("#/") or pag.url.endswith("/"), "técnico conclui e volta ao início")
     else:
         print("  (técnico sem serviço no mês: fluxo de concluir não exercitado)")

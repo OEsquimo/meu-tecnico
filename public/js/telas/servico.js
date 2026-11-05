@@ -15,15 +15,16 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPago, adicionarServicoNaVisita, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPago, registrarCobranca, adicionarServicoNaVisita, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
-import { seloDoServico, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
+import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { formatarDataHoraBR, formatarDataBR } from '../dominio/datas.js';
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
+import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
 import { textoDoRetorno } from './agendamento-comum.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao } from './servicos-comum.js';
 
@@ -68,7 +69,7 @@ export default async function montar(ctx) {
     return [...mapa.entries()];
   }
 
-  function cartaoDaLinha(l, valores) {
+  function cartaoDaLinha(l, valores, cobraveis) {
     const sit = seloDoServico(l);
     const agendada = l.status === STATUS.AGENDADO;
     const concluida = l.status === STATUS.CONCLUIDO;
@@ -98,6 +99,9 @@ export default async function montar(ctx) {
           <div class="acoes-cartao">
             ${botao({ texto: l.pago ? 'Marcar como a receber' : 'Marcar como pago', variante: 'secundario', acao: 'alternar-pago', dados: { id: l.id }, pequeno: true })}
           </div>`}
+        ${l.status === STATUS.CANCELADO && l.pendente === true && l.motivoPendencia && html`<div class="visita-obs">Motivo: ${l.motivoPendencia}</div>`}
+        ${concluida && usuario.admin && l.cobradoEm && !l.pago && html`<div class="item-lista__sub">Cobrado em ${formatarDataBR(l.cobradoEm)}</div>`}
+        ${concluida && usuario.admin && cobraveis.some((c) => c.id === l.id) && botao({ texto: 'Cobrar no WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: l.id }, pequeno: true })}
         ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
         ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
         ${agendada && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true })}
@@ -124,13 +128,17 @@ export default async function montar(ctx) {
     const canceladas = linhas.filter((l) => l.status === STATUS.CANCELADO);
     const aguardando = !agendado && canceladas.length > 0;
     const temConcluida = linhas.some((l) => l.status === STATUS.CONCLUIDO);
-    const situacao = agendado ? seloDoServico(abertas[0]) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0]);
+    const aguardandoSemConcluida = () => aguardando && !temConcluida;
+    const situacao = agendado ? seloDoServico(abertas[0], new Date(), { curto: true }) : (aguardandoSemConcluida() ? seloDoServico(canceladas[0], new Date(), { curto: true }) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0], new Date(), { curto: true }));
     const ligar = linkLigar(s.clienteWhatsapp);
     const whats = linkWhatsappDoCliente(s.clienteWhatsapp, '');
     const tecnicos = [...new Set(linhas.flatMap((l) => nomesDosTecnicos(l)).filter(Boolean))].join(', ');
     const observacao = s.obsAgendamento || '';
     const unico = linhas.length === 1 && !ehLinhaSemServico(linhas[0]);
     const grupos = porAparelho(linhas);
+    const cobraveis = usuario.admin ? linhasCobraveis(linhas, valores) : [];
+    const resumo = resumoDaVisita(linhas);
+    const pendentes = canceladas.filter((l) => l.pendente === true);
 
     mostrar(raiz, html`
       ${cabecalho({ titulo: unico ? s.tipoServicoNome : 'Agendamento', voltarPara, acaoDireita: selo(situacao.texto, situacao.tom) })}
@@ -143,6 +151,7 @@ export default async function montar(ctx) {
             ['Local', s.local],
             ['Técnicos', tecnicos],
             ['Observação', observacao],
+            ...(pendentes.length > 0 && temConcluida ? [['Situação da visita', resumo]] : []),
             ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),
           ])}
           <div class="acoes-cartao">
@@ -152,7 +161,8 @@ export default async function montar(ctx) {
           </div>
         </div>
 
-        ${aguardando && aviso({ tom: 'amarelo', texto: 'Este agendamento foi cancelado e está aguardando reagendamento. Escolha uma nova data, ou exclua se não for mais acontecer.' })}
+        ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita, aguardando reagendamento. Escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado e está aguardando reagendamento. Escolha uma nova data, ou exclua se não for mais acontecer.' })}
+        ${cobraveis.length > 1 && botao({ texto: 'Cobrar tudo desta visita', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: cobraveis.map((c) => c.id).join(',') }, bloco: true })}
         ${tituloSecao('Aparelhos e serviços')}
         ${grupos.map(([aparelhoId, lista]) => html`
           <section class="cartao visita-aparelho">
@@ -161,7 +171,7 @@ export default async function montar(ctx) {
               ${!aparelhoId && html`<div class="item-lista__sub">Escolha ou cadastre o aparelho ao concluir o serviço.</div>`}
               ${lista[0].obsAparelho && html`<div class="visita-obs">${lista[0].obsAparelho}</div>`}
             </div>
-            ${lista.map((l) => cartaoDaLinha(l, valores))}
+            ${lista.map((l) => cartaoDaLinha(l, valores, cobraveis))}
           </section>`)}
 
         ${agendado ? botao({ texto: 'Adicionar serviço na visita', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}
@@ -186,6 +196,20 @@ export default async function montar(ctx) {
           ctx.recarregar();
         } catch (e) { mostrarErro(e); }
       }),
+      cobrar: (el) => {
+        const ids = String(el.dataset.ids || '').split(',').filter(Boolean);
+        const itens = cobraveis.filter((l) => ids.includes(l.id));
+        if (itens.length === 0) return;
+        const e = sessao.empresa || {};
+        const texto = montarCobranca(modeloDaEmpresa(e), {
+          nome: String(s.clienteNome || '').split(' ')[0], empresa: e.nome, pix: e.chavePix,
+          itens: itens.map((l) => ({ servico: l.tipoServicoNome, aparelho: l.aparelhoResumo, data: l.dataConclusao, centavos: valores[l.id].valorCentavos })),
+        });
+        const link = linkWhatsappDoCliente(s.clienteWhatsapp, texto);
+        if (!link) { toast('Este cliente não tem WhatsApp cadastrado.', 'erro'); return; }
+        window.open(link, '_blank', 'noopener');
+        registrarCobranca(usuario.empresaId, ids).then(() => ctx.recarregar()).catch(mostrarErro);
+      },
       'adicionar-servico': (el) => adicionarServico(el, s, abertas),
       cancelar: async (el) => {
         if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data. O cliente não será avisado automaticamente.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;

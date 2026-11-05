@@ -7,12 +7,13 @@
 // =============================================================================
 
 import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
-import { cabecalho, campoTexto, campoTextoLongo, interruptor, botao } from '../nucleo/componentes.js';
+import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, interruptor, botao } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId, recarregarEmpresa } from '../nucleo/sessao.js';
 import { salvarConfiguracoes } from '../servicos/empresas.js';
 import { validarConfiguracoes } from '../dominio/validacoes.js';
 import { montarMensagem } from '../dominio/whatsapp.js';
+import { montarCobranca, modeloDaEmpresa, MODELOS_COBRANCA, TONS_COBRANCA, TOM_COBRANCA_PADRAO, COBRANCA_MAX_LETRAS, PIX_MAX_LETRAS } from '../dominio/cobranca.js';
 import { MENSAGEM_WHATSAPP_PADRAO } from '../nucleo/constantes.js';
 
 export default async function montar({ raiz, sessao, ir }) {
@@ -36,6 +37,19 @@ export default async function montar({ raiz, sessao, ir }) {
         <span class="campo__rotulo">Prévia</span>
         <div class="mensagem-previa" id="previa" aria-live="polite"></div>
         ${botao({ texto: 'Voltar à mensagem padrão', variante: 'fantasma', acao: 'padrao', pequeno: true })}
+      </div>
+      <h2 class="titulo-secao">Cobrança pelo WhatsApp</h2>
+      ${campoTexto({ nome: 'chavePix', rotulo: 'Chave Pix (opcional)', valor: e.chavePix ?? '', maximo: PIX_MAX_LETRAS, ajuda: 'Aparece na mensagem de cobrança. Sem chave, a linha do Pix some.' })}
+      ${campoPilulas({ nome: 'tomCobranca', rotulo: 'Tom da mensagem', opcoes: TONS_COBRANCA.map((t) => ({ valor: t.id, rotulo: t.rotulo })), valor: e.tomCobranca || TOM_COBRANCA_PADRAO })}
+      ${campoTextoLongo({
+        nome: 'mensagemCobranca', rotulo: 'Mensagem de cobrança', valor: modeloDaEmpresa(e),
+        linhas: 6, maximo: COBRANCA_MAX_LETRAS,
+        ajuda: 'Variáveis: {nome} {servico} {aparelho} {data} {valor} {pix} {empresa} {lista}.',
+      })}
+      <div class="pilha pilha--pequena">
+        <span class="campo__rotulo">Prévia da cobrança</span>
+        <div class="mensagem-previa" id="previa-cobranca" aria-live="polite"></div>
+        ${botao({ texto: 'Voltar à mensagem padrão do tom', variante: 'fantasma', acao: 'padrao-cobranca', pequeno: true })}
       </div>
       ${interruptor({
         nome: 'permiteTecnicoCliente',
@@ -62,7 +76,30 @@ export default async function montar({ raiz, sessao, ir }) {
   form.elements.nome.addEventListener('input', atualizarPrevia);
   atualizarPrevia();
 
+  const previaCobranca = raiz.querySelector('#previa-cobranca');
+  const tomAtual = () => form.querySelector('input[name="tomCobranca"]:checked')?.value || TOM_COBRANCA_PADRAO;
+  const atualizarPreviaCobranca = () => {
+    previaCobranca.textContent = montarCobranca(form.elements.mensagemCobranca.value, {
+      nome: 'Maria',
+      empresa: form.elements.nome.value.trim() || e.nome,
+      pix: form.elements.chavePix.value,
+      itens: [{ servico: 'Limpeza', aparelho: 'Sala · Split 12.000 BTUs', data: new Date(), centavos: 18000 }],
+    });
+  };
+  ['mensagemCobranca', 'chavePix', 'nome'].forEach((n) => form.elements[n].addEventListener('input', atualizarPreviaCobranca));
+  form.addEventListener('change', (ev) => {
+    if (ev.target.name === 'tomCobranca') {
+      form.elements.mensagemCobranca.value = MODELOS_COBRANCA[tomAtual()];
+      atualizarPreviaCobranca();
+    }
+  });
+  atualizarPreviaCobranca();
+
   aoClicar(raiz, {
+    'padrao-cobranca': () => {
+      form.elements.mensagemCobranca.value = MODELOS_COBRANCA[tomAtual()];
+      atualizarPreviaCobranca();
+    },
     padrao: () => {
       form.elements.mensagemWhatsapp.value = MENSAGEM_WHATSAPP_PADRAO;
       atualizarPrevia();

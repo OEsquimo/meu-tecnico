@@ -179,7 +179,11 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   if (editando && abertas.length === 0) {
     throw new ErroApp('Só dá para editar serviços que ainda estão agendados ou aguardando reagendamento.', 'servico-fechado');
   }
-  const id = agendamentoId || novoId(caminho(empresaId));
+  // Pendentes de uma visita que já teve serviços concluídos viram um agendamento NOVO:
+  // a visita original fica só com o que foi feito (registro e garantia).
+  const separar = reagendando && fechadas.some((l) => l.status === STATUS.CONCLUIDO);
+  const id = (agendamentoId && !separar) ? agendamentoId : novoId(caminho(empresaId));
+  const limpaPendencia = reagendando ? { pendente: false, motivoPendencia: '' } : {};
 
   // Sem nenhum aparelho/serviço: uma linha "Serviço a definir" só com o técnico.
   // Cada serviço tem uma lista de técnicos (pelo menos um); quem vier sem técnico usa os do agendamento.
@@ -193,7 +197,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
     }
   }
 
-  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? id : null });
+  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null });
   const minutos = minutosPorTecnico(todas);
 
   const operacoes = [];
@@ -215,7 +219,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
     if (l.id && abertas.some((a) => a.id === l.id)) {
       mantidas.add(l.id);
       const antiga = abertas.find((a) => a.id === l.id);
-      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, reagendando ? { ...campos, status: STATUS.AGENDADO } : campos));
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, reagendando ? { ...campos, status: STATUS.AGENDADO, ...limpaPendencia } : campos));
       // Reagendado: o lembrete de retorno que o cancelamento devolveu para "pendente" volta a "agendado".
       if (reagendando && antiga?.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${antiga.origemRetornoId}`, { retornoSituacao: 'agendado', atualizadoEm: AGORA }));
     } else {
@@ -229,7 +233,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   for (const a of abertas) {
     if (mantidas.has(a.id)) continue;
     if (preservar.includes(a.id)) {
-      operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.id}`, { agendamentoId: id, obsAgendamento: observacao, dataAgendada: inicio, ...(reagendando ? { status: STATUS.AGENDADO } : {}), atualizadoEm: AGORA }));
+      operacoes.push(op.atualizar(`${caminho(empresaId)}/${a.id}`, { agendamentoId: id, obsAgendamento: observacao, dataAgendada: inicio, ...(reagendando ? { status: STATUS.AGENDADO, ...limpaPendencia } : {}), atualizadoEm: AGORA }));
       continue;
     }
     operacoes.push(op.apagar(`${caminho(empresaId)}/${a.id}`));
@@ -238,6 +242,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   }
   // Linhas já concluídas/canceladas continuam como estão (só acompanham a observação geral).
   for (const f of fechadas) {
+    if (separar) continue;
     operacoes.push(op.atualizar(`${caminho(empresaId)}/${f.id}`, { obsAgendamento: observacao, atualizadoEm: AGORA }));
   }
   if (origemRetornoId && !editando) {
@@ -571,6 +576,17 @@ export async function contarRetornos({ empresaId, hojeISO, diasAviso }) {
 /** Anota que o aviso foi aberto no WhatsApp (para o administrador lembrar quem já avisou). */
 export async function registrarAviso(empresaId, servicoId) {
   await gravar([op.atualizar(`${caminho(empresaId)}/${servicoId}`, { ultimoAvisoEm: AGORA, atualizadoEm: AGORA })]);
+}
+
+/** Anota que a cobrança foi aberta no WhatsApp (não marca como pago). Só administrador. */
+export async function registrarCobranca(empresaId, servicoIds) {
+  await gravar(servicoIds.map((id) => op.atualizar(`${caminho(empresaId)}/${id}`, { cobradoEm: AGORA, atualizadoEm: AGORA })));
+}
+
+/** Técnico (ou admin) diz que o serviço não deu para fazer hoje: fica pendente, aguardando reagendamento. */
+export async function marcarPendente(empresaId, servicoIds, motivo = '') {
+  const m = String(motivo || '').trim().slice(0, 200);
+  await gravar(servicoIds.map((id) => op.atualizar(`${caminho(empresaId)}/${id}`, { status: 'cancelado', pendente: true, motivoPendencia: m, atualizadoEm: AGORA })));
 }
 
 /** "Adiar": empurra o lembrete alguns dias. */

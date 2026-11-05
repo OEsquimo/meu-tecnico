@@ -16,10 +16,10 @@ import { definirAdaptadorAuth } from '../../public/js/nucleo/autenticacao.js';
 import { sessao } from '../../public/js/nucleo/sessao.js';
 import { PLANOS_PADRAO, REGRAS_PADRAO, TIPOS_SERVICO_PADRAO } from '../../public/js/nucleo/constantes.js';
 import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../public/js/dominio/agenda.js';
-import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico } from '../../public/js/dominio/servicos.js';
+import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico, resumoDaVisita } from '../../public/js/dominio/servicos.js';
 import { formatarHora } from '../../public/js/dominio/datas.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
-import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../../public/js/servicos/servicos.js';
+import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
 import {
   estadoInicial, novoGrupo, novoServico, tecnicosLivresParaServico, limparTecnicosOcupados, pendenciasDoAgendamento,
@@ -528,4 +528,40 @@ test('vários técnicos: dividir valor igualmente, centavos que sobram vão para
   assert.deepEqual(dividirCentavos(5, 3), [2, 2, 1]);
   assert.deepEqual(dividirCentavos(777, 1), [777]);
   for (const [t, n] of [[999, 4], [1, 5], [123457, 7]]) assert.equal(dividirCentavos(t, n).reduce((a, b) => a + b, 0), t);
+});
+
+test('pendente: reagendar vira agendamento NOVO; a visita original fica só com o concluído', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }, { aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
+  const linhas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await concluirServico({ empresaId: E, servico: linhas[0], papel: 'admin', nomeQuemConcluiu: 'Admin', dados: { descricao: 'ok', pago: false, retornoMeses: null, aparelho: null } });
+  await marcarPendente(E, [linhas[1].id], 'Faltou peça ou material');
+  const atuais = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  const pend = atuais.find((l) => l.id === linhas[1].id);
+  assert.equal(pend.status, 'cancelado');
+  assert.equal(pend.pendente, true);
+  assert.equal(pend.motivoPendencia, 'Faltou peça ou material');
+  assert.equal(resumoDaVisita(atuais), '1 concluído · 1 pendente');
+  // Reagenda só o pendente.
+  const novoId = await salvarAgendamento(base({ agendamentoId: id, hora: '15:00', existentes: atuais, linhas: [{ id: pend.id, aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
+  assert.notEqual(novoId, id);
+  const original = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(original.length, 1);
+  assert.equal(original[0].status, 'concluido');
+  const novo = await listarLinhasDoAgendamento(E, { agendamentoId: novoId });
+  assert.equal(novo.length, 1);
+  assert.equal(novo[0].status, 'agendado');
+  assert.equal(novo[0].pendente, false);
+  assert.equal(novo[0].motivoPendencia, '');
+});
+
+test('cobrança: registrar "cobrado em" não marca como pago', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const [l] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await concluirServico({ empresaId: E, servico: l, papel: 'admin', nomeQuemConcluiu: 'Admin', dados: { descricao: 'ok', pago: false, retornoMeses: null, aparelho: null } });
+  await registrarCobranca(E, [l.id]);
+  const [depois] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.ok(depois.cobradoEm instanceof Date);
+  assert.notEqual(depois.pago, true);
 });

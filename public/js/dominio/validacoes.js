@@ -277,7 +277,7 @@ export function validarTipoServico({ nome, geraRetorno, retornoPadraoMeses, dura
   return resultado(erros, { nome: n, geraRetorno: gera, retornoPadraoMeses: gera ? meses : 0, duracaoMin: duracao });
 }
 
-export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente }) {
+export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
   const erros = {};
   const n = texto(nome);
   if (!n) erros.nome = 'Digite o nome da empresa.';
@@ -287,8 +287,17 @@ export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp,
   const msg = texto(mensagemWhatsapp);
   if (!msg) erros.mensagemWhatsapp = 'Escreva a mensagem do lembrete.';
   else if (msg.length > 600) erros.mensagemWhatsapp = 'A mensagem está muito longa (máximo 600 letras).';
+  // Cobrança pelo WhatsApp: chave Pix (opcional), texto da mensagem e tom (amigável ou formal).
+  const pix = texto(chavePix);
+  if (pix.length > 100) erros.chavePix = 'A chave Pix está muito longa (máximo 100 letras).';
+  const cobranca = texto(mensagemCobranca);
+  if (!cobranca) erros.mensagemCobranca = 'Escreva a mensagem de cobrança.';
+  else if (cobranca.length > 600) erros.mensagemCobranca = 'A mensagem está muito longa (máximo 600 letras).';
+  const tom = texto(tomCobranca) || 'amigavel';
+  if (!['amigavel', 'formal'].includes(tom)) erros.tomCobranca = 'Escolha o tom da mensagem.';
   return resultado(erros, {
     nome: n, diasAvisoRetorno: dias, mensagemWhatsapp: msg, permiteTecnicoCliente: permiteTecnicoCliente === true,
+    chavePix: pix, mensagemCobranca: cobranca, tomCobranca: tom,
   });
 }
 
