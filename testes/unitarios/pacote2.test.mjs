@@ -37,10 +37,9 @@ test('cobrança: modelo da empresa vence o padrão do tom', () => {
   assert.equal(modeloDaEmpresa({}), MODELOS_COBRANCA.amigavel);
 });
 
-test('pendente: selo próprio, curto nas listas, e resumo da visita', () => {
+test('selos curtos: pendente também é "Cancelado" e o resumo da visita continua', () => {
   const pend = { status: 'cancelado', pendente: true };
-  assert.equal(seloDoServico(pend).texto, 'Pendente — aguardando reagendamento');
-  assert.equal(seloDoServico(pend, new Date(), { curto: true }).texto, 'Aguardando reagendamento');
-  assert.equal(seloDoServico({ status: 'cancelado' }).texto, 'Cancelado — aguardando reagendamento');
+  assert.equal(seloDoServico(pend).texto, 'Cancelado');
+  assert.equal(seloDoServico({ status: 'cancelado' }).texto, 'Cancelado');
   assert.equal(resumoDaVisita([{ status: 'concluido' }, { status: 'concluido' }, pend]), '2 concluídos · 1 pendente');
 });

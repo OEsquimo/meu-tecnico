@@ -110,7 +110,7 @@ export default async function montar(ctx) {
       texto: usuario.admin ? 'Toque em "Agendar" para marcar um serviço.' : 'Você não tem serviços neste dia.',
       acao: usuario.admin ? botao({ texto: 'Agendar serviço', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}` }) : null,
     })}</div>`
-    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin, acoesAtrasado: usuario.admin }))}
+    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin }))}
         </section>
       </div>`);
 
@@ -151,7 +151,7 @@ export default async function montar(ctx) {
       const servico = servicosDoMes.find((s) => s.id === el.dataset.id);
       if (servico) abrirNavegacao(servico);
     },
-    // Visita atrasada: o administrador cancela (fica aguardando reagendamento) ou exclui.
+    // O administrador cancela (fica aguardando reagendamento) ou exclui a visita.
     'cancelar-visita': async (el) => {
       const linhas = servicosDoMes.filter((s) => chaveDoAgendamento(s) === el.dataset.chave);
       if (linhas.length === 0) return;

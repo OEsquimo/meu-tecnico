@@ -80,7 +80,7 @@ with sync_playwright() as p:
     pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/reagendamentos")
-    ok("Cancelado — aguardando reagendamento" in texto(), "cancelado pelo admin mantém o texto 'Cancelado — aguardando reagendamento'")
+    ok(pag.locator('.selo:has-text("Cancelado")').count() >= 1 and "Cancelado — aguardando" not in texto(), "cancelado mostra selo curto 'Cancelado'")
     larg = pag.evaluate("[...document.querySelectorAll('.servico-cartao .item-lista__titulo')].map(e=>e.getBoundingClientRect().width)")
     ok(all(w >= 100 for w in larg), "cartão de reagendamento com título legível")
 
@@ -100,7 +100,7 @@ with sync_playwright() as p:
     pag.locator("dialog [data-escolha=outro]").click(); pag.wait_for_timeout(500)
     pag.fill("dialog [data-texto]", "cliente viajou"); pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1500)
     ir("/reagendamentos")
-    ok("Pendente — aguardando reagendamento" in texto() and "cliente viajou" in texto(), "pendente aparece com o motivo para o administrador")
+    ok("Cancelado" in texto() and "Motivo: cliente viajou" in texto(), "pendente aparece como Cancelado com o motivo")
 
     # ---- Cliente com vários endereços: mostra só o atual ----
     ir("/clientes")

@@ -69,8 +69,8 @@
   min-width: 0;
 }
 
-.visita-cartao__topo > .botao {
-  flex: none;
+.visita-cartao__topo > .selo {
+  flex: 0 0 auto;
 }
 
 .visita-bloco {
@@ -380,3 +380,17 @@
 .extra-linha { display: grid; grid-template-columns: 1fr 96px auto; gap: 8px; align-items: center; }
 .editor-valores__total { display: flex; justify-content: space-between; align-items: center; font-size: 1.15rem; padding-top: 8px; border-top: 1px dashed var(--cor-borda, #d0d5dd); }
 @media (max-width: 380px) { .extra-linha { grid-template-columns: 1fr 80px; } .extra-linha .botao { grid-column: 1 / -1; } }
+
+/* ---------- Ficha do cliente: uma visita ---------- */
+.visita-cliente {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visita-cliente__servicos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px;
+}

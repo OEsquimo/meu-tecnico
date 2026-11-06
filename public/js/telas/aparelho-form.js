@@ -77,14 +77,17 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
 
   // ---- 2. Valores iniciais ----
   const enderecos = cliente?.enderecos || [];
-  const perguntaEndereco = enderecos.length > 1;
+  // Vindo do agendamento/conclusão, o endereço já foi escolhido: não pergunta de novo.
+  const enderecoDaVisita = consulta?.get('endereco') || '';
+  const enderecoJaEscolhido = !editando && enderecos.some((e) => e.id === enderecoDaVisita);
+  const perguntaEndereco = enderecos.length > 1 && !enderecoJaEscolhido;
   const { marca, modelo, numeroSerie, dataInstalacao, observacoes } = lerDescricaoAparelho(aparelho?.descricao);
   const btusAtual = aparelho?.btus ? String(aparelho.btus) : '';
   const btusEhComum = BTUS_COMUNS.map(String).includes(btusAtual);
   const escolhaInicial = !btusAtual ? '' : btusEhComum ? btusAtual : 'outro';
 
   // Endereço: o já gravado; ou, se o cliente tem só um, esse; senão o primeiro.
-  const enderecoInicial = aparelho?.enderecoId || enderecos[0]?.id || '';
+  const enderecoInicial = aparelho?.enderecoId || (enderecoJaEscolhido ? enderecoDaVisita : enderecos[0]?.id) || '';
 
   // ---- 3. Desenha ----
   mostrar(raiz, html`
@@ -141,14 +144,18 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     excluir: (el) => comCarregando(el, async () => {
       const ok = await confirmar({
         titulo: 'Excluir este aparelho?',
-        mensagem: 'Os serviços antigos continuam no histórico. Não dá para desfazer.',
+        mensagem: 'Os serviços já feitos continuam no histórico. Não dá para desfazer.',
         confirmar: 'Excluir',
         perigo: true,
       });
       if (!ok) return;
-      await excluirAparelho(empresaId, aparelho);
-      toast('Aparelho excluído.', 'sucesso');
-      terminar();
+      try {
+        await excluirAparelho(empresaId, aparelho);
+        toast('Aparelho excluído.', 'sucesso');
+        terminar();
+      } catch (erro) {
+        mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });
+      }
     }),
   });
 

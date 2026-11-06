@@ -18,7 +18,7 @@ export const FORMATO_BACKUP = 'meu-tecnico-backup';
 /** Campos que cada coleção aceita (iguais aos permitidos em firestore.rules). */
 export const CAMPOS_PERMITIDOS = {
   tiposServico: ['nome', 'geraRetorno', 'retornoPadraoMeses', 'duracaoMin', 'ativo', 'ordem'],
-  clientes: ['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor'],
+  clientes: ['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor', 'arquivado'],
   aparelhos: ['clienteId', 'enderecoId', 'tipo', 'btus', 'nome', 'descricao', 'ativo', 'criadoEm', 'atualizadoEm'],
   servicos: [
     'clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId',
@@ -26,7 +26,7 @@ export const CAMPOS_PERMITIDOS = {
     'tecnicoNome', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
     'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
-    'cobradoEm', 'pendente', 'motivoPendencia',
+    'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado',
   ],
   valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
   precos: ['valorCentavos', 'atualizadoEm'],

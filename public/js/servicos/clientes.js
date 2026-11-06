@@ -29,7 +29,7 @@ export function mensagemDeBloqueio(permissao) {
 
 /** Lista todos os clientes (ordem alfabética), com cache de alguns minutos. */
 export function listarClientes(empresaId) {
-  return comCache(`${empresaId}:clientes`, async () => ordenarPorNome(await listar(caminho(empresaId))));
+  return comCache(`${empresaId}:clientes`, async () => ordenarPorNome((await listar(caminho(empresaId))).filter((c) => c.arquivado !== true)));
 }
 
 export function buscarCliente(empresaId, id) {
@@ -96,19 +96,35 @@ export async function atualizarCliente(empresaId, id, dados, { administrador = t
 }
 
 /**
- * Exclui o cliente E tudo que pertence a ele (aparelhos, serviços e valores),
- * e baixa o contador. Só o administrador pode.
+ * Exclui o cliente. Só o administrador pode.
+ *  - Sem nenhum serviço concluído: apaga o cliente, os aparelhos, os agendamentos e os valores.
+ *  - Com serviço concluído: o histórico e o financeiro NÃO são apagados. O cliente é arquivado
+ *    (some das listas), os agendamentos abertos e os lembretes de retorno dele são removidos,
+ *    e o cadastro, os aparelhos e os serviços concluídos ficam guardados.
+ * @returns {Promise<'apagado'|'arquivado'>}
  */
 export async function excluirCliente(empresaId, id) {
   const servicos = await listar(`empresas/${empresaId}/servicos`, { onde: [['clienteId', '==', id]] });
+  const concluidos = servicos.filter((s) => s.status === 'concluido');
+  const abertos = servicos.filter((s) => s.status !== 'concluido');
+  const apagar = abertos.flatMap((s) => [
+    op.apagar(`empresas/${empresaId}/servicos/${s.id}`),
+    op.apagar(`empresas/${empresaId}/valores/${s.id}`),
+  ]);
+
+  if (concluidos.length > 0) {
+    // Cliente que saiu: não deve receber lembrete de retorno.
+    for (const s of concluidos.filter((x) => x.retornoSituacao === 'pendente')) {
+      apagar.push(op.atualizar(`empresas/${empresaId}/servicos/${s.id}`, { retornoSituacao: 'recusado', atualizadoEm: AGORA }));
+    }
+    for (let i = 0; i < apagar.length; i += 400) await gravar(apagar.slice(i, i + 400));
+    await gravar([op.atualizar(`${caminho(empresaId)}/${id}`, { arquivado: true, atualizadoEm: AGORA })]);
+    invalidarCache(`${empresaId}:`);
+    return 'arquivado';
+  }
+
   const aparelhos = await listar(`empresas/${empresaId}/aparelhos`, { onde: [['clienteId', '==', id]] });
-  const apagar = [
-    ...servicos.flatMap((s) => [
-      op.apagar(`empresas/${empresaId}/servicos/${s.id}`),
-      op.apagar(`empresas/${empresaId}/valores/${s.id}`),
-    ]),
-    ...aparelhos.map((a) => op.apagar(`empresas/${empresaId}/aparelhos/${a.id}`)),
-  ];
+  apagar.push(...aparelhos.map((a) => op.apagar(`empresas/${empresaId}/aparelhos/${a.id}`)));
   for (let i = 0; i < apagar.length; i += 400) await gravar(apagar.slice(i, i + 400));
 
   const empresa = await ler(`empresas/${empresaId}`);
@@ -118,4 +134,5 @@ export async function excluirCliente(empresaId, id) {
   ]);
   invalidarCache(`${empresaId}:`);
   await recarregarEmpresa();
+  return 'apagado';
 }

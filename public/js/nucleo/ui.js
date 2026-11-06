@@ -189,14 +189,16 @@ export function escolher({ titulo, mensagem = '', opcoes, cancelar = 'Cancelar' 
 }
 
 /** Janela com um campo de texto. Retorna o texto (sem espaços nas pontas) ou null se cancelou. */
-export function pedirTexto({ titulo, mensagem = '', rotulo = '', confirmar = 'Salvar', cancelar = 'Voltar', maximo = 200 }) {
+export function pedirTexto({ titulo, mensagem = '', rotulo = '', confirmar = 'Salvar', cancelar = 'Voltar', maximo = 200, valor = '', multilinha = false }) {
   return new Promise((resolver) => {
     const janela = criarJanela();
     janela.setAttribute('aria-labelledby', 'janela-titulo');
     janela.innerHTML = String(html`
       <h2 id="janela-titulo">${titulo}</h2>
       ${mensagem && html`<p class="texto-suave">${mensagem}</p>`}
-      <div class="campo"><input class="campo__entrada" type="text" maxlength="${maximo}" aria-label="${rotulo || titulo}" placeholder="${rotulo}" data-texto /></div>
+      <div class="campo">${multilinha
+    ? html`<textarea class="campo__entrada" rows="5" maxlength="${maximo}" aria-label="${rotulo || titulo}" placeholder="${rotulo}" data-texto>${valor}</textarea>`
+    : html`<input class="campo__entrada" type="text" maxlength="${maximo}" aria-label="${rotulo || titulo}" placeholder="${rotulo}" value="${valor}" data-texto />`}</div>
       <div class="janela__acoes">
         <button type="button" class="botao botao--bloco" data-resposta="sim">${confirmar}</button>
         <button type="button" class="botao botao--bloco botao--secundario" data-resposta="nao">${cancelar}</button>

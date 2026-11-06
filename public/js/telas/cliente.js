@@ -81,6 +81,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
 
   // Com vários endereços, a ficha mostra só o do próximo agendamento aberto (ou o primeiro cadastrado).
   let verTodos = false;
+  let verAparelhos = false; // a lista de aparelhos fica escondida até o administrador pedir
   const proximoAberto = (servicos || []).filter((l) => l.status === STATUS.AGENDADO && l.dataAgendada instanceof Date)
     .sort((a, b) => a.dataAgendada - b.dataAgendada)[0];
   const idEnderecoAtual = enderecos.find((e) => e.id === proximoAberto?.enderecoId)?.id || enderecos[0]?.id;
@@ -89,7 +90,6 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
     const varios = enderecos.length > 1;
     const colapsado = varios && !verTodos;
     const enderecosVisiveis = colapsado ? enderecos.filter((e) => e.id === idEnderecoAtual) : enderecos;
-    const aparelhosVisiveis = colapsado ? aparelhos.filter((a) => !a.enderecoId || a.enderecoId === idEnderecoAtual) : aparelhos;
     mostrar(raiz, html`
     ${cabecalho({ titulo: cliente.nome, voltarPara: '#/clientes' })}
     <div class="pilha">
@@ -121,12 +121,12 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
 
       <section class="cartao pilha">
         <h2>Aparelhos</h2>
-        ${aparelhosVisiveis.length === 0
-          ? html`<p class="texto-suave">${aparelhos.length === 0 ? 'Nenhum aparelho cadastrado ainda.' : 'Nenhum aparelho neste endereço.'}</p>`
-          : html`<div class="lista">
-              ${aparelhosVisiveis.map((a) => {
+        ${aparelhos.length > 0 && botao({ texto: verAparelhos ? 'Esconder aparelhos' : `Ver aparelhos (${aparelhos.length})`, variante: 'fantasma', acao: 'alternar-aparelhos', pequeno: true })}
+        ${aparelhos.length === 0 && html`<p class="texto-suave">Nenhum aparelho cadastrado ainda.</p>`}
+        ${verAparelhos && aparelhos.length > 0 && html`<div class="lista">
+              ${aparelhos.map((a) => {
                 const { marca, modelo } = lerDescricaoAparelho(a.descricao);
-                const onde = enderecos.length > 1 && !colapsado ? nomeDoEndereco(a.enderecoId) : null;
+                const onde = enderecos.length > 1 ? nomeDoEndereco(a.enderecoId) : null;
                 return itemLista({
                   href: `#/aparelho/${encodeURIComponent(a.id)}/editar`,
                   titulo: tituloDoAparelho(a),
@@ -146,7 +146,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
             <div class="pilha pilha--pequena">
               ${visitas.slice(0, MAXIMO_HISTORICO).map((v) => {
                 const principal = v.linhas.find((l) => l.status === STATUS.AGENDADO) || v.linhas.find((l) => l.status === STATUS.CANCELADO) || v.linhas[0];
-                const situacao = seloDoServico(principal, new Date(), { curto: true });
+                const situacao = seloDoServico(principal);
                 const abertas = v.linhas.filter((l) => l.status === STATUS.AGENDADO);
                 const aguardando = v.status === STATUS.CANCELADO;
                 const aberta = v.status === STATUS.AGENDADO;
@@ -160,11 +160,20 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
                       sub: [formatarDataBR(v.dataAgendada), aparelhosDaVisita].filter(Boolean).join(' · '),
                       direita: selo(situacao.texto, situacao.tom),
                     })}
+                    ${abertas.length > 0 && html`
+                      <div class="visita-cliente__servicos">
+                        ${abertas.map((l) => html`
+                          <div class="visita-linha">
+                            <div class="expande">
+                              <div class="visita-linha__nome">${l.tipoServicoNome}</div>
+                              ${l.aparelhoResumo && html`<div class="item-lista__sub">${l.aparelhoResumo}</div>`}
+                            </div>
+                            ${botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}
+                          </div>`)}
+                      </div>`}
                     ${(aberta || aguardando) && html`
                       <div class="acoes-cartao">
-                        ${abertas.length === 1 && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(abertas[0].id)}`, pequeno: true })}
-                        ${abertas.length > 1 && abertas.map((l) => botao({ texto: `Concluir ${l.tipoServicoNome}`, iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true }))}
-                        ${aguardando && botao({ texto: 'Reagendar', iconeNome: 'agenda', href: `#/servico/${encodeURIComponent(principal.id)}/editar`, pequeno: true })}
+                        ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${encodeURIComponent(principal.id)}/editar`, pequeno: true })}
                         ${aberta && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: v.chave }, pequeno: true })}
                         ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: v.chave }, pequeno: true })}
                       </div>`}
@@ -172,7 +181,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
               })}
             </div>
             ${visitas.length > MAXIMO_HISTORICO && html`<p class="texto-suave texto-pequeno">Mostrando os ${MAXIMO_HISTORICO} mais recentes de ${visitas.length}.</p>`}
-            <p class="texto-suave texto-pequeno">Serviços concluídos ficam guardados e não podem ser excluídos.</p>`}
+            <p class="texto-suave texto-pequeno">Para corrigir ou excluir um serviço concluído, toque nele.</p>`}
         </section>`}
 
       <div class="ficha-acoes">
@@ -187,6 +196,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
   // ---- 3. Ações ----
   return aoClicar(raiz, {
     'alternar-enderecos': () => { verTodos = !verTodos; desenharFicha(); },
+    'alternar-aparelhos': () => { verAparelhos = !verAparelhos; desenharFicha(); },
     // Janela para escolher o aplicativo de mapas do endereço tocado.
     navegar: async (el) => {
       const endereco = enderecos[Number(el.dataset.indice)];
@@ -227,15 +237,19 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
     },
 
     excluir: (el) => comCarregando(el, async () => {
+      // Com serviço concluído, o histórico e o financeiro ficam guardados (o cliente só sai das listas).
+      const temHistorico = (servicos || []).some((l) => l.status === STATUS.CONCLUIDO);
       const ok = await confirmar({
         titulo: `Excluir ${cliente.nome}?`,
-        mensagem: 'Isso apaga também os aparelhos e todo o histórico de serviços deste cliente. Não dá para desfazer.',
-        confirmar: 'Excluir tudo',
+        mensagem: temHistorico || servicos === null
+          ? 'O cliente sai da lista, mas os serviços concluídos e o financeiro dele ficam guardados. Os agendamentos abertos e os lembretes de retorno são removidos.'
+          : 'Isso apaga também os aparelhos e os agendamentos deste cliente. Não dá para desfazer.',
+        confirmar: 'Excluir cliente',
         perigo: true,
       });
       if (!ok) return;
-      await excluirCliente(empresaId, idCliente);
-      toast('Cliente excluído.', 'sucesso');
+      const resultado = await excluirCliente(empresaId, idCliente);
+      toast(resultado === 'arquivado' ? 'Cliente excluído. O histórico foi guardado.' : 'Cliente excluído.', 'sucesso');
       ir('/clientes', { substituir: true });
     }),
   });

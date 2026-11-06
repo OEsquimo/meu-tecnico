@@ -9,10 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { criarAdaptadorMemoria } from '../../public/js/nucleo/adaptador-memoria.js';
 import { semearDemonstracao, CONTAS_DEMO } from '../../public/js/nucleo/demonstracao.js';
-import { definirAdaptadorBanco, ler, listar } from '../../public/js/nucleo/banco.js';
+import { definirAdaptadorBanco, ler, listar, gravar, operacao as op } from '../../public/js/nucleo/banco.js';
 import { definirAdaptadorAuth } from '../../public/js/nucleo/autenticacao.js';
 import { sessao } from '../../public/js/nucleo/sessao.js';
-import { criarCliente, excluirCliente } from '../../public/js/servicos/clientes.js';
+import { criarCliente, excluirCliente, listarClientes } from '../../public/js/servicos/clientes.js';
 import { concluirServico, agendarServico, listarHistorico, listarAgendados, listarRetornos, recusarRetorno } from '../../public/js/servicos/servicos.js';
 import { gerarBackup, restaurarBackup } from '../../public/js/servicos/backup.js';
 import { lerBackup } from '../../public/js/dominio/backup.js';
@@ -85,16 +85,45 @@ test('retorno: agendar a partir do lembrete marca "agendado"; recusar encerra', 
   assert.ok(![...depois.vencidos, ...depois.proximos].some((x) => x.id === r.id));
 });
 
-test('excluirCliente apaga aparelhos/serviços e baixa o contador', async () => {
+test('excluirCliente sem concluído apaga aparelhos/agendamentos e baixa o contador', async () => {
   await novoBanco();
-  const antes = (await ler(`empresas/${E}`)).contadorClientes;
   const clientes = await listar(`empresas/${E}/clientes`);
-  const alvo = clientes[0];
-  await excluirCliente(E, alvo.id);
+  // Escolhe (ou monta) um cliente sem serviço concluído.
+  let alvo = null;
+  for (const c of clientes) {
+    const ss = await listar(`empresas/${E}/servicos`, { onde: [['clienteId', '==', c.id]] });
+    if (!ss.some((s) => s.status === 'concluido')) { alvo = c; break; }
+  }
+  if (!alvo) {
+    const id = await criarCliente(E, { nome: 'Sem histórico', whatsapp: '5511988887777', observacoes: '', enderecos: [] }, 'demo-admin');
+    alvo = await ler(`empresas/${E}/clientes/${id}`);
+  }
+  const antes = (await ler(`empresas/${E}`)).contadorClientes;
+  assert.equal(await excluirCliente(E, alvo.id), 'apagado');
   assert.equal(await ler(`empresas/${E}/clientes/${alvo.id}`), null);
   assert.equal((await listar(`empresas/${E}/servicos`, { onde: [['clienteId', '==', alvo.id]] })).length, 0);
   assert.equal((await listar(`empresas/${E}/aparelhos`, { onde: [['clienteId', '==', alvo.id]] })).length, 0);
   assert.equal((await ler(`empresas/${E}`)).contadorClientes, antes - 1);
+});
+
+test('excluirCliente com concluído NÃO apaga o histórico: arquiva o cliente e limpa o que está aberto', async () => {
+  await novoBanco();
+  const clientes = await listar(`empresas/${E}/clientes`);
+  let alvo = null;
+  for (const c of clientes) {
+    const ss = await listar(`empresas/${E}/servicos`, { onde: [['clienteId', '==', c.id]] });
+    if (ss.some((s) => s.status === 'concluido')) { alvo = c; break; }
+  }
+  assert.ok(alvo, 'a demonstração tem cliente com serviço concluído');
+  const antes = await listar(`empresas/${E}/servicos`, { onde: [['clienteId', '==', alvo.id]] });
+  const concluidosAntes = antes.filter((s) => s.status === 'concluido').map((s) => s.id).sort();
+  assert.equal(await excluirCliente(E, alvo.id), 'arquivado');
+  const depois = await listar(`empresas/${E}/servicos`, { onde: [['clienteId', '==', alvo.id]] });
+  assert.deepEqual(depois.map((s) => s.id).sort(), concluidosAntes); // só os concluídos ficaram
+  assert.ok(depois.every((s) => s.retornoSituacao !== 'pendente')); // sem lembrete de retorno para quem saiu
+  assert.equal((await ler(`empresas/${E}/clientes/${alvo.id}`)).arquivado, true);
+  assert.ok(!(await listarClientes(E)).some((c) => c.id === alvo.id)); // some da lista
+  assert.ok((await listarHistorico({ empresaId: E, limite: 1000 })).some((s) => s.clienteId === alvo.id)); // histórico continua
 });
 
 test('backup: gerar, serializar e ler de volta (sem valores de outras empresas)', async () => {
@@ -114,7 +143,7 @@ test('backup: restaurar devolve cliente apagado e mantém o contador coerente', 
   const { texto } = await gerarBackup(E, await ler(`empresas/${E}`));
   const total = (await ler(`empresas/${E}`)).contadorClientes;
   const alvo = (await listar(`empresas/${E}/clientes`))[0];
-  await excluirCliente(E, alvo.id);
+  await gravar([op.apagar(`empresas/${E}/clientes/${alvo.id}`), op.atualizar(`empresas/${E}`, { contadorClientes: total - 1, ultimoClienteId: alvo.id })]);
   sessao.empresa = await ler(`empresas/${E}`);
   const r = await restaurarBackup(E, E, lerBackup(texto).backup);
   assert.equal(r.falhas, 0);
