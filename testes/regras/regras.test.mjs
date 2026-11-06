@@ -449,9 +449,10 @@ test('pacote 3: o administrador marca "reagendado" no serviço (só booleano)', 
 
 test('pacote 4: o técnico corrige e exclui só o serviço que ele acrescentou, ainda agendado', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/doadmin`), linhaNova());
-    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/dele`), linhaNova({ adicionadoPeloTecnico: true }));
-    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/feito`), linhaNova({ adicionadoPeloTecnico: true, status: 'concluido', dataConclusao: dia(0) }));
+    const f = ctx.firestore(); // uma vez só: o emulador não aceita configurar de novo
+    await setDoc(doc(f, `empresas/${E}/servicos/doadmin`), linhaNova());
+    await setDoc(doc(f, `empresas/${E}/servicos/dele`), linhaNova({ adicionadoPeloTecnico: true, vistoPeloAdmin: false }));
+    await setDoc(doc(f, `empresas/${E}/servicos/feito`), linhaNova({ adicionadoPeloTecnico: true, status: 'concluido', dataConclusao: dia(0) }));
   });
   const db = como(TEC);
   const troca = { tipoServicoId: 't2', tipoServicoNome: 'Instalação', geraRetorno: false, atualizadoEm: serverTimestamp() };
