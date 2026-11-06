@@ -143,6 +143,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
             <div class="visita-linha">
               <div class="expande">
                 <div class="visita-linha__nome">${l.tipoServicoNome}</div>
+                ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
                 ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
               </div>
               ${acoes && botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true })}

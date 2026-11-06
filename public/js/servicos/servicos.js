@@ -371,12 +371,55 @@ export async function adicionarServicoNaVisita({ empresaId, base, aparelho, tipo
     descricao: '',
     pago: false,
     valorDefinido: false,
+    // Marca o serviço acrescentado em campo pelo técnico: só ele pode corrigir/excluir antes de concluir.
+    ...(tecnico ? { adicionadoPeloTecnico: true, vistoPeloAdmin: false } : {}),
     criadoEm: AGORA,
     atualizadoEm: AGORA,
   }));
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
   return id;
+}
+
+/**
+ * O técnico corrige o serviço que ELE acrescentou (ainda agendado): troca o tipo e/ou o aparelho.
+ * Não mexe em data, técnicos, duração nem valores.
+ */
+export async function corrigirServicoAdicionado({ empresaId, servico, tipo = null, aparelho = null }) {
+  if (servico?.adicionadoPeloTecnico !== true || servico.status !== STATUS.AGENDADO) {
+    throw new ErroApp('Só dá para corrigir um serviço que você acrescentou e que ainda está agendado.', 'servico-nao-editavel');
+  }
+  const mudancas = { atualizadoEm: AGORA };
+  if (tipo) Object.assign(mudancas, { tipoServicoId: tipo.id, tipoServicoNome: tipo.nome, geraRetorno: tipo.geraRetorno === true });
+  if (aparelho) Object.assign(mudancas, { aparelhoId: aparelho.id, aparelhoResumo: resumoDoAparelho(aparelho) });
+  await gravar([op.atualizar(`${caminho(empresaId)}/${servico.id}`, mudancas)]);
+  invalidarCache(`${empresaId}:servicos`);
+}
+
+/** Serviços que o técnico acrescentou em campo e que o administrador ainda não viu (só administrador). */
+export function listarIncluidosNaoVistos({ empresaId }) {
+  return listar(caminho(empresaId), {
+    onde: [['adicionadoPeloTecnico', '==', true], ['vistoPeloAdmin', '==', false]],
+    limite: 50,
+  });
+}
+
+/** O administrador abriu o agendamento: os serviços incluídos pelo técnico passam a "vistos". */
+export async function marcarIncluidosComoVistos(empresaId, linhas) {
+  const novos = linhas.filter((l) => l.adicionadoPeloTecnico === true && l.vistoPeloAdmin !== true);
+  if (novos.length === 0) return 0;
+  await gravar(novos.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, { vistoPeloAdmin: true })));
+  invalidarCache(`${empresaId}:servicos`);
+  return novos.length;
+}
+
+/** O técnico exclui o serviço que ELE acrescentou e que ainda está agendado (não existe valor para apagar). */
+export async function excluirServicoAdicionado(empresaId, servico) {
+  if (servico?.adicionadoPeloTecnico !== true || servico.status !== STATUS.AGENDADO) {
+    throw new ErroApp('Só dá para excluir um serviço que você acrescentou e que ainda está agendado.', 'servico-nao-editavel');
+  }
+  await gravar([op.apagar(`${caminho(empresaId)}/${servico.id}`)]);
+  invalidarCache(`${empresaId}:servicos`);
 }
 
 // -----------------------------------------------------------------------------

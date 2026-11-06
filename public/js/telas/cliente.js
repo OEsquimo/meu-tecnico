@@ -166,6 +166,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
                           <div class="visita-linha">
                             <div class="expande">
                               <div class="visita-linha__nome">${l.tipoServicoNome}</div>
+                              ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
                               ${l.aparelhoResumo && html`<div class="item-lista__sub">${l.aparelhoResumo}</div>`}
                             </div>
                             ${botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}

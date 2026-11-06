@@ -118,7 +118,7 @@ export default async function montar(ctx) {
       : html`${aparecem.map((s) => itemLista({
         href: `#/servico/${s.id}`,
         titulo: s.clienteNome,
-        sub: `${s.tipoServicoNome} · ${formatarDataBR(s.dataConclusao)}${textoDosTecnicos(s) ? ` · ${textoDosTecnicos(s)}` : ''}`,
+        sub: `${s.tipoServicoNome} · ${formatarDataBR(s.dataConclusao)}${textoDosTecnicos(s) ? ` · ${textoDosTecnicos(s)}` : ''}${s.adicionadoPeloTecnico === true ? ' · incluído pelo técnico' : ''}`,
         direita: usuario.admin && s.valorDefinido === false ? selo('Sem valor', 'amarelo') : (s.pago ? selo('Pago', 'verde') : selo('A receber', 'amarelo')),
       }))}`);
 
