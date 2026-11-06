@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, adicionarServicoNaVisita, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, adicionarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -53,6 +53,8 @@ export default async function montar(ctx) {
       }
       if (!ctx.ativo()) return;
       desenhar(servico, linhas, valores);
+      // O administrador abriu: o aviso de "incluído em campo" some do Início (sem atrapalhar a tela se falhar).
+      if (usuario.admin) marcarIncluidosComoVistos(usuario.empresaId, linhas).catch(() => {});
     } catch (erro) {
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregar, cabecalho({ titulo: 'Serviço', voltarPara }));
     }
@@ -84,6 +86,7 @@ export default async function montar(ctx) {
           </div>
           ${!ehLinhaSemServico(l) && selo(textoDoRetorno(sessao.tipos.find((t) => t.id === l.tipoServicoId) || { geraRetorno: l.geraRetorno, retornoPadraoMeses: l.retornoMeses }), l.geraRetorno ? 'azul' : '')}
           ${selo(sit.texto, sit.tom)}
+          ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
         </div>
         ${nota && html`<div class="visita-obs">${nota}</div>`}
         ${concluida && listaDeDados([
@@ -107,6 +110,11 @@ export default async function montar(ctx) {
         ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
         ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
         ${agendada && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true })}
+        ${agendada && !usuario.admin && l.adicionadoPeloTecnico === true && html`
+          <div class="acoes-cartao">
+            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-adicionado', dados: { id: l.id }, pequeno: true })}
+            ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-adicionado', dados: { id: l.id }, pequeno: true })}
+          </div>`}
       </div>`;
   }
 
@@ -139,6 +147,8 @@ export default async function montar(ctx) {
     const unico = linhas.length === 1 && !ehLinhaSemServico(linhas[0]);
     const grupos = porAparelho(linhas);
     const cobraveis = usuario.admin ? linhasCobraveis(linhas, valores) : [];
+    // Se já há botão de cobrança (abre o WhatsApp do cliente com a mensagem pronta), o "WhatsApp" simples sai.
+    const temCobranca = cobraveis.length > 0;
     const resumo = resumoDaVisita(linhas);
     const pendentes = canceladas.filter((l) => l.pendente === true);
 
@@ -156,10 +166,10 @@ export default async function montar(ctx) {
             ...(pendentes.length > 0 && temConcluida ? [['Situação da visita', resumo]] : []),
             ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),
           ])}
+          ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', bloco: true })}
           <div class="acoes-cartao">
-            ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', pequeno: true })}
             ${ligar ? botao({ texto: 'Ligar', variante: 'secundario', iconeNome: 'telefone', href: ligar, pequeno: true }) : ''}
-            ${whats ? botao({ texto: 'WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', href: whats, externo: true, pequeno: true }) : ''}
+            ${whats && !temCobranca ? botao({ texto: 'WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', href: whats, externo: true, pequeno: true }) : ''}
           </div>
         </div>
 
@@ -194,6 +204,31 @@ export default async function montar(ctx) {
           const linha = linhas.find((l) => l.id === el.dataset.id);
           await marcarPago(usuario.empresaId, linha.id, !linha.pago);
           toast('Atualizado.', 'sucesso');
+          ctx.recarregar();
+        } catch (e) { mostrarErro(e); }
+      }),
+      'editar-adicionado': (el) => comCarregando(el, async () => {
+        try {
+          const linha = linhas.find((l) => l.id === el.dataset.id);
+          if (!linha) return;
+          const jaTem = linhas.filter((l) => l.id !== linha.id && l.aparelhoId === linha.aparelhoId && l.status === STATUS.AGENDADO).map((l) => l.tipoServicoId);
+          const tipos = tiposAtivos().filter((t) => !jaTem.includes(t.id));
+          if (tipos.length === 0) { toast('Não há outro tipo de serviço disponível.', 'erro'); return; }
+          const tipoId = await escolher({ titulo: 'Trocar para qual serviço?', opcoes: tipos.map((t) => ({ id: t.id, rotulo: `${t.nome} · ${textoDoRetorno(t)}` })) });
+          if (!tipoId || tipoId === linha.tipoServicoId) return;
+          await corrigirServicoAdicionado({ empresaId: usuario.empresaId, servico: linha, tipo: sessao.tipos.find((t) => t.id === tipoId) });
+          toast('Serviço corrigido.', 'sucesso');
+          ctx.recarregar();
+        } catch (e) { mostrarErro(e); }
+      }),
+      'excluir-adicionado': (el) => comCarregando(el, async () => {
+        try {
+          const linha = linhas.find((l) => l.id === el.dataset.id);
+          if (!linha) return;
+          if (!await confirmar({ titulo: 'Excluir este serviço?', mensagem: 'Ele sai do agendamento. O cliente e os outros serviços não são afetados.', confirmar: 'Excluir serviço', cancelar: 'Voltar', perigo: true })) return;
+          await excluirServicoAdicionado(usuario.empresaId, linha);
+          toast('Serviço excluído.', 'sucesso');
+          if (linhas.length <= 1) { ir('/agenda'); return; }
           ctx.recarregar();
         } catch (e) { mostrarErro(e); }
       }),

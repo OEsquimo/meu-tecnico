@@ -63,3 +63,11 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Concluído**: só o administrador corrige (descrição, valor, extras, pago) ou exclui, com confirmação dupla. Excluir restaura o lembrete de retorno de origem para "pendente". As regras do banco ainda permitem ao admin alterar concluídos; a proteção é do app.
 - **Aparelhos**: ficha do cliente mostra "Ver aparelhos (N)". "Novo aparelho" vindo de um agendamento já leva o endereço (não pergunta). Excluir aparelho: com agendamento aberto recusa; com histórico de serviços fica oculto (`ativo:false`); sem histórico apaga de vez.
 - **Excluir cliente**: com serviços concluídos o cliente é **arquivado** (`arquivado:true`, some das listas; agendamentos abertos removidos; retornos pendentes viram "recusado"; histórico e financeiro preservados). Ele continua ocupando uma vaga do plano. Sem concluídos, apaga de vez e libera a vaga.
+
+## Pacote 4 — técnico e WhatsApp
+- Na tela do agendamento, quando já existe botão de **Cobrar** (admin), o botão "WhatsApp" simples sai (era duplicado). "Ir até o cliente" ocupa uma linha inteira.
+- Serviço que o **técnico acrescenta em campo** recebe a marca `adicionadoPeloTecnico`. Enquanto estiver agendado, só esse técnico pode **Editar** (trocar o tipo de serviço) e **Excluir** (com confirmação). Serviço agendado pelo administrador ou já concluído, o técnico nunca altera (usa "Não deu para fazer"). O administrador continua podendo tudo.
+
+## Pacote 5 — serviço incluído em campo fica visível ao administrador
+- Todo serviço que o técnico acrescenta no local mostra o selo **"Incluído pelo técnico"** (Agenda, Início, detalhes, ficha do cliente) e, depois de concluído, a lista de Concluídos indica "incluído pelo técnico". O valor entra pelo preço padrão do tipo de serviço: o administrador deve conferir.
+- O Início do administrador mostra o aviso "<Técnico> incluiu N serviço(s) em campo" enquanto o administrador não tiver aberto o agendamento (campo `vistoPeloAdmin`; o técnico cria sempre como `false`, só o administrador muda para `true`). Ao abrir o agendamento, o aviso some.

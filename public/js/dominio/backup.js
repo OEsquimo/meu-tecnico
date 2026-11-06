@@ -26,7 +26,7 @@ export const CAMPOS_PERMITIDOS = {
     'tecnicoNome', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno',
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
     'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
-    'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado',
+    'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin',
   ],
   valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
   precos: ['valorCentavos', 'atualizadoEm'],

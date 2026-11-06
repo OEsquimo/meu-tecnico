@@ -282,7 +282,9 @@ test('tipos de serviço: duração entre 15 e 720 minutos', async () => {
 
 test('técnico adiciona serviço na própria visita, mas não para outro técnico nem já concluído nem com valor', async () => {
   const db = como(TEC);
-  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/t1`), linhaNova()));
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/t1`), linhaNova({ adicionadoPeloTecnico: true, vistoPeloAdmin: false })));
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/tv`), linhaNova({ adicionadoPeloTecnico: true, vistoPeloAdmin: true }))); // técnico não nasce "visto"
+  await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t0`), linhaNova())); // sem a marca de acrescentado em campo
   await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t2`), linhaNova({ tecnicoUid: 'outro-tecnico' })));
   await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t3`), linhaNova({ status: 'concluido' })));
   await assertFails(setDoc(doc(db, `empresas/${E}/servicos/t4`), linhaNova({ valorDefinido: true })));
@@ -404,7 +406,7 @@ test('vários técnicos: cada um lê, consulta e conclui o serviço; o administr
 
 test('vários técnicos: técnico só adiciona serviço para si mesmo (lista com ele sozinho)', async () => {
   const db = como(TEC);
-  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/m1`), linhaNova({ tecnicoUids: [TEC], tecnicosNomes: ['Tec'] })));
+  await assertSucceeds(setDoc(doc(db, `empresas/${E}/servicos/m1`), linhaNova({ adicionadoPeloTecnico: true, vistoPeloAdmin: false, tecnicoUids: [TEC], tecnicosNomes: ['Tec'] })));
   await assertFails(setDoc(doc(db, `empresas/${E}/servicos/m2`), linhaNova({ tecnicoUids: [TEC, 'outro-tecnico'], tecnicosNomes: ['Tec', 'Outro'] })));
 });
 
@@ -443,4 +445,30 @@ test('pacote 3: o administrador marca "reagendado" no serviço (só booleano)', 
   await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: true, atualizadoEm: serverTimestamp() }));
   await assertFails(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: 'sim', atualizadoEm: serverTimestamp() }));
   await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/s-tec`), { reagendado: true }));
+});
+
+test('pacote 4: o técnico corrige e exclui só o serviço que ele acrescentou, ainda agendado', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/doadmin`), linhaNova());
+    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/dele`), linhaNova({ adicionadoPeloTecnico: true }));
+    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/feito`), linhaNova({ adicionadoPeloTecnico: true, status: 'concluido', dataConclusao: dia(0) }));
+  });
+  const db = como(TEC);
+  const troca = { tipoServicoId: 't2', tipoServicoNome: 'Instalação', geraRetorno: false, atualizadoEm: serverTimestamp() };
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/dele`), troca));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/dele`), { ...troca, dataAgendada: dia(5) })); // só tipo/aparelho
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/doadmin`), troca)); // marcado pelo administrador
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/feito`), troca)); // já concluído
+  await assertFails(deleteDoc(doc(db, `empresas/${E}/servicos/doadmin`)));
+  await assertFails(deleteDoc(doc(db, `empresas/${E}/servicos/feito`)));
+  await assertSucceeds(deleteDoc(doc(db, `empresas/${E}/servicos/dele`)));
+});
+
+test('pacote 5: só o administrador marca o serviço incluído como visto', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `empresas/${E}/servicos/inc`), linhaNova({ adicionadoPeloTecnico: true, vistoPeloAdmin: false }));
+  });
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/inc`), { vistoPeloAdmin: true }));
+  await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/inc`), { vistoPeloAdmin: true }));
+  await assertFails(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/inc`), { vistoPeloAdmin: 'sim' }));
 });

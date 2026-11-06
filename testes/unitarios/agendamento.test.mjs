@@ -19,7 +19,7 @@ import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../p
 import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico, resumoDaVisita } from '../../public/js/dominio/servicos.js';
 import { formatarHora } from '../../public/js/dominio/datas.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
-import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
+import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, corrigirServicoAdicionado, excluirServicoAdicionado, listarIncluidosNaoVistos, marcarIncluidosComoVistos, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
 import {
   estadoInicial, novoGrupo, novoServico, tecnicosLivresParaServico, limparTecnicosOcupados, pendenciasDoAgendamento,
@@ -617,4 +617,36 @@ test('excluir aparelho: sem serviço apaga; com concluído guarda (some da lista
   const [depois] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   assert.equal(depois.status, 'concluido');
   assert.ok(depois.aparelhoResumo);
+});
+
+test('técnico corrige e exclui só o serviço que ele acrescentou, enquanto agendado', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const [primeira] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(primeira.adicionadoPeloTecnico, undefined);
+  await assert.rejects(() => excluirServicoAdicionado(E, primeira), /acrescentou/);
+  const novo = await adicionarServicoNaVisita({ empresaId: E, base: primeira, aparelho: ap2, tipo: TIPOS[4], tecnico: TEC_A });
+  const linha = await ler(`empresas/${E}/servicos/${novo}`);
+  assert.equal(linha.adicionadoPeloTecnico, true);
+  await corrigirServicoAdicionado({ empresaId: E, servico: { ...linha, id: novo }, tipo: limpeza });
+  assert.equal((await ler(`empresas/${E}/servicos/${novo}`)).tipoServicoId, limpeza.id);
+  await excluirServicoAdicionado(E, { ...linha, id: novo });
+  assert.equal(await ler(`empresas/${E}/servicos/${novo}`), null);
+  // Quando o administrador adiciona, não há marca: o técnico não poderia mexer.
+  const doAdmin = await adicionarServicoNaVisita({ empresaId: E, base: primeira, aparelho: ap2, tipo: TIPOS[4] });
+  assert.equal((await ler(`empresas/${E}/servicos/${doAdmin}`)).adicionadoPeloTecnico, undefined);
+});
+
+test('serviço incluído pelo técnico aparece como "não visto" até o administrador abrir', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const [primeira] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal((await listarIncluidosNaoVistos({ empresaId: E })).length, 0);
+  const novo = await adicionarServicoNaVisita({ empresaId: E, base: primeira, aparelho: ap2, tipo: TIPOS[4], tecnico: TEC_A });
+  const naoVistos = await listarIncluidosNaoVistos({ empresaId: E });
+  assert.deepEqual(naoVistos.map((l) => l.id), [novo]);
+  const linhas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(await marcarIncluidosComoVistos(E, linhas), 1);
+  assert.equal((await listarIncluidosNaoVistos({ empresaId: E })).length, 0);
+  assert.equal(await marcarIncluidosComoVistos(E, await listarLinhasDoAgendamento(E, { agendamentoId: id })), 0); // não repete
 });
