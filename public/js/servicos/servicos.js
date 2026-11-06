@@ -106,13 +106,21 @@ export async function cancelarAgendamento(empresaId, servico) {
   invalidarCache(`${empresaId}:servicos`);
 }
 
-/** Exclui o serviço (e o valor dele). Só administrador. */
-export async function excluirServico(empresaId, servicoId) {
+/**
+ * Exclui o serviço (e o valor dele). Só administrador.
+ * Serviço concluído só sai com `permitirConcluido: true` (a tela pede confirmação dupla):
+ * ele some do histórico e do financeiro. Se ele fechou um lembrete de retorno, o lembrete volta a pendente.
+ */
+export async function excluirServico(empresaId, servicoId, { permitirConcluido = false } = {}) {
   const atual = await ler(`${caminho(empresaId)}/${servicoId}`);
-  if (atual?.status === STATUS.CONCLUIDO) {
-    throw new ErroApp('Serviços concluídos não podem ser excluídos: ficam guardados no histórico.', 'servico-concluido');
+  if (atual?.status === STATUS.CONCLUIDO && !permitirConcluido) {
+    throw new ErroApp('Para excluir um serviço concluído, confirme que ele sai do histórico e do financeiro.', 'servico-concluido');
   }
-  await gravar([op.apagar(`${caminho(empresaId)}/${servicoId}`), op.apagar(`${caminhoValores(empresaId)}/${servicoId}`)]);
+  const operacoes = [op.apagar(`${caminho(empresaId)}/${servicoId}`), op.apagar(`${caminhoValores(empresaId)}/${servicoId}`)];
+  if (atual?.status === STATUS.CONCLUIDO && atual.origemRetornoId) {
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${atual.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
+  }
+  await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
 }
 
@@ -175,7 +183,10 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   // Editar mexe nas linhas agendadas; se o agendamento foi cancelado, nas canceladas (reagendar).
   const abertas = linhasEditaveis(existentes);
   const fechadas = existentes.filter((l) => !abertas.includes(l));
-  const reagendando = abertas.length > 0 && abertas.every((l) => l.status === STATUS.CANCELADO);
+  const cancelado = abertas.length > 0 && abertas.every((l) => l.status === STATUS.CANCELADO);
+  // Editar um cancelado só o reagenda se a data ou o horário mudarem; senão ele continua cancelado.
+  const mudouQuando = abertas.some((l) => !(l.dataAgendada instanceof Date) || l.dataAgendada.getTime() !== inicio.getTime());
+  const reagendando = cancelado && mudouQuando;
   if (editando && abertas.length === 0) {
     throw new ErroApp('Só dá para editar serviços que ainda estão agendados ou aguardando reagendamento.', 'servico-fechado');
   }
@@ -183,7 +194,8 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   // a visita original fica só com o que foi feito (registro e garantia).
   const separar = reagendando && fechadas.some((l) => l.status === STATUS.CONCLUIDO);
   const id = (agendamentoId && !separar) ? agendamentoId : novoId(caminho(empresaId));
-  const limpaPendencia = reagendando ? { pendente: false, motivoPendencia: '' } : {};
+  const limpaPendencia = reagendando ? { pendente: false, motivoPendencia: '', reagendado: true } : {};
+  const herdaReagendado = abertas.some((l) => l.reagendado === true);
 
   // Sem nenhum aparelho/serviço: uma linha "Serviço a definir" só com o técnico.
   // Cada serviço tem uma lista de técnicos (pelo menos um); quem vier sem técnico usa os do agendamento.
@@ -224,7 +236,9 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
       if (reagendando && antiga?.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${antiga.origemRetornoId}`, { retornoSituacao: 'agendado', atualizadoEm: AGORA }));
     } else {
       const novo = novoId(caminho(empresaId));
-      const documento = { ...campos, status: STATUS.AGENDADO, pago: false, valorDefinido: false, criadoEm: AGORA };
+      // Serviço acrescentado a um cancelado que continua cancelado nasce cancelado.
+      const documento = { ...campos, status: cancelado && !reagendando ? STATUS.CANCELADO : STATUS.AGENDADO, pago: false, valorDefinido: false, criadoEm: AGORA };
+      if (reagendando || herdaReagendado) documento.reagendado = true;
       if (origemRetornoId && !editando && ordem === 0) documento.origemRetornoId = origemRetornoId;
       operacoes.push(op.criar(`${caminho(empresaId)}/${novo}`, documento));
     }
@@ -278,7 +292,7 @@ export async function listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid
 export async function cancelarAgendamentoCompleto(empresaId, linhas) {
   const operacoes = [];
   for (const l of linhas.filter((x) => x.status === STATUS.AGENDADO)) {
-    operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, { status: STATUS.CANCELADO, atualizadoEm: AGORA }));
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, { status: STATUS.CANCELADO, reagendado: false, atualizadoEm: AGORA }));
     if (l.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
   }
   await gravar(operacoes);

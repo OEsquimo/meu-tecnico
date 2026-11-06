@@ -541,6 +541,11 @@ textarea.campo__entrada {
   color: var(--cor-aviso);
 }
 
+.selo--roxo {
+  background: var(--cor-reagendado-fundo);
+  color: var(--cor-reagendado);
+}
+
 .selo--vermelho {
   background: var(--cor-erro-fundo);
   color: var(--cor-erro);

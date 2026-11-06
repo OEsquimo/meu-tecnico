@@ -30,12 +30,16 @@
 /* Linha de ação de cartão de serviço (Ir até o cliente / Concluir) */
 .acoes-cartao {
   display: flex;
+  flex-wrap: wrap; /* nunca passa da largura do cartão: se não couber, desce para a linha de baixo */
   gap: 8px;
   margin-top: 4px;
 }
 
 .acoes-cartao > * {
-  flex: 1;
+  flex: 1 1 92px;
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 /* Painel do dono usa a tela mais larga */

@@ -549,7 +549,7 @@ export default async function montar(ctx) {
       'escolher-cliente': (el) => escolherCliente(el.dataset.id),
       'trocar-cliente': trocarCliente,
       'editar-cliente': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/editar?voltar=1`),
-      'novo-aparelho': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/aparelho/novo?voltar=1`),
+      'novo-aparelho': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/aparelho/novo?voltar=1&endereco=${encodeURIComponent(estado.enderecoId || '')}`),
       'editar-aparelho': (el) => {
         const g = acharGrupo(el.dataset.grupo);
         if (g?.aparelhoId) sairPara(`/aparelho/${encodeURIComponent(g.aparelhoId)}/editar?voltar=1`);

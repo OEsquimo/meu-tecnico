@@ -187,7 +187,7 @@ export default async function montar(ctx) {
           id: s.id, descricao: c.descricao || '', tipoServicoId: c.tipoServicoId || '', aparelhoId: c.aparelhoId || '',
           aparelhosAntes: aparelhos.map((a) => a.id),
         };
-        ir(`/cliente/${encodeURIComponent(s.clienteId)}/aparelho/novo?voltar=1`);
+        ir(`/cliente/${encodeURIComponent(s.clienteId)}/aparelho/novo?voltar=1&endereco=${encodeURIComponent(s.enderecoId || '')}`);
       },
     });
 

@@ -13,13 +13,6 @@ import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 
 export const STATUS = { AGENDADO: 'agendado', CONCLUIDO: 'concluido', CANCELADO: 'cancelado' };
 
-/** Texto do status de um agendamento cancelado: ele não some, espera uma nova data. */
-export const TEXTO_AGUARDANDO_REAGENDAMENTO = 'Cancelado — aguardando reagendamento';
-/** Serviço que o técnico não conseguiu fazer na visita. */
-export const TEXTO_PENDENTE_REAGENDAMENTO = 'Pendente — aguardando reagendamento';
-/** Versões curtas para listas (o texto completo fica na tela do serviço). */
-export const TEXTO_CURTO_AGUARDANDO = 'Aguardando reagendamento';
-
 export const MOTIVOS_PENDENCIA = [
   'Faltou peça ou material',
   'O cliente pediu outro dia',
@@ -38,7 +31,7 @@ export function resumoDaVisita(linhas) {
 
 /**
  * Linhas que a tela de editar mexe: as ainda agendadas; se não sobrou nenhuma,
- * as canceladas (é assim que o agendamento cancelado é reagendado).
+ * as canceladas (editar um cancelado com data ou horário novos é o reagendamento).
  * Linhas concluídas nunca entram.
  */
 export function linhasEditaveis(linhas) {
@@ -53,13 +46,16 @@ export function estaAtrasado(servico, agora = new Date()) {
     && servico.dataAgendada.getTime() < agora.getTime();
 }
 
-/** Texto e cor do selo de situação do serviço. */
-export function seloDoServico(servico, agora = new Date(), { curto = false } = {}) {
+/**
+ * Texto e cor do selo de situação (sempre curto, vai no canto do cartão):
+ * Concluído (verde), Cancelado (amarelo), Atrasado (vermelho),
+ * Reagendado (roxo: era cancelado e ganhou nova data) e Agendado (azul).
+ */
+export function seloDoServico(servico, agora = new Date()) {
   if (servico.status === STATUS.CONCLUIDO) return { texto: 'Concluído', tom: 'verde' };
-  if (servico.status === STATUS.CANCELADO && servico.pendente === true) return { texto: curto ? TEXTO_CURTO_AGUARDANDO : TEXTO_PENDENTE_REAGENDAMENTO, tom: 'amarelo' };
-  if (servico.status === STATUS.CANCELADO && curto) return { texto: TEXTO_CURTO_AGUARDANDO, tom: 'amarelo' };
-  if (servico.status === STATUS.CANCELADO) return { texto: TEXTO_AGUARDANDO_REAGENDAMENTO, tom: 'amarelo' };
+  if (servico.status === STATUS.CANCELADO) return { texto: 'Cancelado', tom: 'amarelo' };
   if (estaAtrasado(servico, agora)) return { texto: 'Atrasado', tom: 'vermelho' };
+  if (servico.reagendado === true) return { texto: 'Reagendado', tom: 'roxo' };
   return { texto: 'Agendado', tom: 'azul' };
 }
 

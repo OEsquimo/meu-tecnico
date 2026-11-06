@@ -47,8 +47,8 @@ with sync_playwright() as p:
 
     # ---- Concluído não pode ser excluído ----
     pag.locator("#resultado a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
-    ok("Excluir" not in texto(), "serviço concluído não tem botão de excluir")
-    ok("não podem ser excluídos" in texto(), "explica que concluído fica guardado")
+    ok(pag.locator("[data-acao=excluir-concluido]").count() >= 1 and pag.locator("[data-acao=editar-concluido]").count() >= 1, "concluído do admin tem Editar e Excluir")
+    ok("registro e garantia" in texto(), "explica que concluído é registro e garantia")
 
     # ---- Nome do cliente não se repete no topo ----
     ir("/agenda")
@@ -59,7 +59,7 @@ with sync_playwright() as p:
     cab = pag.locator("#conteudo .cabecalho, #conteudo header").first.inner_text()
     nome_cli = texto().split("Cliente")[1].strip().split("\n")[0].strip() if "Cliente" in texto() else ""
     ok(nome_cli != "" and cab.count(nome_cli) == 0, f"nome do cliente não repete no cabeçalho ({nome_cli})")
-    ok(pag.locator("[data-acao=excluir]").count() == 1 and "Excluir agendamento" in texto(), "tem 'Excluir agendamento'")
+    ok(pag.locator("[data-acao=excluir]").count() == 1 and "Excluir" in texto(), "tem 'Excluir'")
     ok(pag.locator("[data-acao=cancelar]").count() == 1, "tem 'Cancelar'")
     ok(pag.locator("a[href*='/concluir/']").count() >= 1, "tem 'Concluir'")
     url_servico = pag.url
@@ -68,18 +68,19 @@ with sync_playwright() as p:
     pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/reagendamentos")
-    ok("aguardando reagendamento" in texto().lower(), "cancelado aparece em 'Aguardando reagendamento'")
+    ok("Cancelado" in texto(), "cancelado aparece em Reagendamentos")
     ir("/")
-    ok("aguardando reagendamento" in texto().lower(), "início avisa (lembrete de reagendamento)")
+    ok("reagend" in texto().lower(), "início avisa (lembrete de reagendamento)")
     ir("/reagendamentos")
-    pag.locator("a:has-text('Reagendar')").first.click(); pag.wait_for_timeout(1200)
+    ok(pag.locator("a:has-text('Reagendar'), button:has-text('Reagendar')").count() == 0, "não há botão Reagendar")
+    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
     ok("/editar" in pag.url, "Reagendar abre a edição")
     ok("estava cancelado" in texto(), "edição avisa que estava cancelado")
     pag.fill("input[name=data]", "2031-06-10"); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(500)
     pag.fill("input[name=hora]", "10:00"); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(500)
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "editar" not in pag.url, "salvou o reagendamento")
-    ok("Agendado" in texto() and "aguardando" not in texto().lower(), "voltou para 'Agendado'")
+    ok("Reagendado" in texto() and "aguardando" not in texto().lower(), "ficou 'Reagendado'")
 
     # ---- Excluir agendamento (admin) ----
     pag.click("[data-acao=excluir]"); pag.wait_for_timeout(400)

@@ -467,11 +467,12 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     function clienteValido(d) {
-      return d.keys().hasOnly(['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor'])
+      return d.keys().hasOnly(['nome', 'whatsapp', 'observacoes', 'enderecos', 'criadoEm', 'atualizadoEm', 'criadoPor', 'arquivado'])
         && d.keys().hasAll(['nome', 'whatsapp', 'enderecos'])
         && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 120
         && d.whatsapp is string && d.whatsapp.size() <= 20
         && (!('observacoes' in d) || (d.observacoes is string && d.observacoes.size() <= 1000))
+        && (!('arquivado' in d) || d.arquivado is bool)
         && d.enderecos is list && d.enderecos.size() <= 20;
     }
 
@@ -486,12 +487,13 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool)
         && (!('valorDefinido' in d) || d.valorDefinido is bool)
+        && (!('reagendado' in d) || d.reagendado is bool)
         && (!('agendamentoId' in d) || (d.agendamentoId is string && d.agendamentoId.size() <= 40))
         && (!('obsAgendamento' in d) || (d.obsAgendamento is string && d.obsAgendamento.size() <= 2000))
         && (!('obsAparelho' in d) || (d.obsAparelho is string && d.obsAparelho.size() <= 500))

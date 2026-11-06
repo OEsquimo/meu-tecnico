@@ -2,8 +2,8 @@
 // TELA: Aguardando reagendamento (/reagendamentos) — só administrador
 // =============================================================================
 // Agendamentos cancelados não somem: ficam aqui esperando uma nova data.
-//   * Reagendar -> abre a tela de editar já com o agendamento (o app confere se
-//                  o técnico está livre na nova data);
+//   * Editar    -> abre a tela de editar já com o agendamento: com data ou horário novos ele
+//                  vira "Reagendado" (o app confere se o técnico está livre);
 //   * Excluir   -> apaga o agendamento (nunca o cliente, os aparelhos nem os
 //                  serviços já concluídos).
 // =============================================================================
@@ -51,7 +51,7 @@ export default async function montar(ctx) {
           ${v.linhas.map((l) => html`<div class="item-lista__sub">${l.tipoServicoNome}${l.aparelhoResumo ? ` · ${l.aparelhoResumo}` : ''}</div>`)}
         </div>
         <div class="acoes-cartao">
-          ${botao({ texto: 'Reagendar', iconeNome: 'agenda', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
+          ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
           ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', dados: { chave: v.chave }, pequeno: true })}
         </div>
       </div>`;

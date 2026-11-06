@@ -54,3 +54,12 @@ Backup JSON em todos os planos. Exclusão de conta apaga tudo (exige senha e dig
 
 ## Comportamento técnico
 Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila); leituras podem usar o cache; telas sempre com carregamento e botão "Tentar de novo"; barra de progresso ao abrir.
+
+## Pacote 3 — status, botões e histórico
+
+- **Status**: Agendado (azul), Reagendado (roxo), Concluído (verde), Atrasado (vermelho), Cancelado (amarelo). Pendente aparece como Cancelado com a linha "Motivo: …".
+- **Reagendar** não é mais um botão: editar um Cancelado com nova data/hora o torna **Reagendado** (confere de novo se o técnico está livre); sem mudar data/hora continua Cancelado. Reagendado segue roxo até ser concluído ou cancelado de novo (campo `reagendado`).
+- **Botões**: Agendado/Reagendado/Atrasado → Concluir (ao lado de cada serviço), Editar, Cancelar, Excluir; Cancelado → Editar, Excluir; técnico só conclui os próprios serviços.
+- **Concluído**: só o administrador corrige (descrição, valor, extras, pago) ou exclui, com confirmação dupla. Excluir restaura o lembrete de retorno de origem para "pendente". As regras do banco ainda permitem ao admin alterar concluídos; a proteção é do app.
+- **Aparelhos**: ficha do cliente mostra "Ver aparelhos (N)". "Novo aparelho" vindo de um agendamento já leva o endereço (não pergunta). Excluir aparelho: com agendamento aberto recusa; com histórico de serviços fica oculto (`ativo:false`); sem histórico apaga de vez.
+- **Excluir cliente**: com serviços concluídos o cliente é **arquivado** (`arquivado:true`, some das listas; agendamentos abertos removidos; retornos pendentes viram "recusado"; histórico e financeiro preservados). Ele continua ocupando uma vaga do plano. Sem concluídos, apaga de vez e libera a vaga.

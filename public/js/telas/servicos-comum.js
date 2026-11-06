@@ -12,7 +12,7 @@ import { botao, selo, estadoVazio, cabecalho } from '../nucleo/componentes.js';
 import { traduzirErro, ehErroDeRede } from '../nucleo/erros.js';
 import { sessao } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
-import { estaAtrasado, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
+import { estaAtrasado, seloDoServico, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
@@ -112,13 +112,15 @@ function blocosPorAparelho(linhas) {
  * opcoes.mostrarData: mostra o dia junto da hora (lista de atrasados).
  * opcoes.mostrarTecnico: mostra o técnico de cada serviço (visão do administrador).
  * opcoes.acoes: mostra "Ir até o cliente" e os botões "Concluir".
- * opcoes.editar: mostra o botão "Editar" no topo (só administrador).
- * opcoes.acoesAtrasado: visita atrasada ganha "Cancelar" e "Excluir" (só administrador).
+ * opcoes.editar: administrador. Mostra Editar, Cancelar e Excluir (visita agendada, reagendada ou atrasada).
+ *   Cancelar e Excluir só agem nos serviços ainda abertos: concluídos ficam guardados.
+ * O status (Agendado, Reagendado ou Atrasado) fica no canto superior direito.
  */
-export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false, acoesAtrasado = false, cancelarExcluir = false } = {}) {
+export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false } = {}) {
   const linhas = visita.linhas;
   const primeira = linhas[0];
   const atrasado = linhas.some((l) => estaAtrasado(l));
+  const situacao = seloDoServico(linhas.find((l) => estaAtrasado(l)) || primeira);
   return html`
     <div class="cartao servico-cartao ${atrasado ? 'servico-cartao--atrasado' : ''}">
       <div class="visita-cartao__topo">
@@ -130,10 +132,9 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
           <div class="expande">
             <div class="item-lista__titulo">${visita.clienteNome}</div>
             ${primeira.local && html`<div class="item-lista__sub">${primeira.local}</div>`}
-            ${atrasado && html`<div>${selo('Atrasado', 'vermelho')}</div>`}
           </div>
         </a>
-        ${editar && botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
+        ${selo(situacao.texto, situacao.tom)}
       </div>
       ${blocosPorAparelho(linhas).map((bloco) => html`
         <div class="visita-bloco">
@@ -150,8 +151,12 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
       ${acoes && html`
         <div class="acoes-cartao">
           ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
-          ${(cancelarExcluir || (acoesAtrasado && atrasado)) && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: visita.chave }, pequeno: true })}
-          ${(cancelarExcluir || (acoesAtrasado && atrasado)) && botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: visita.chave }, pequeno: true })}
+        </div>`}
+      ${editar && html`
+        <div class="acoes-cartao">
+          ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
+          ${botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: visita.chave }, pequeno: true })}
+          ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: visita.chave }, pequeno: true })}
         </div>`}
     </div>`;
 }

@@ -29,6 +29,8 @@
   --cor-erro-fundo: #fce9e9;
   --cor-alerta-forte: #c93b3b; /* bolinha vermelha de retornos */
   --cor-neutra-fundo: #eef3f7;
+  --cor-reagendado: #5b2d9e; /* selo roxo: cancelado que ganhou nova data */
+  --cor-reagendado-fundo: #efe7fb;
 
   /* Medidas */
   --raio-pequeno: 12px;

@@ -10,12 +10,12 @@
 //     ou excluir o agendamento.
 // =============================================================================
 
-import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro, escolher } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro, escolher, pedirTexto } from '../nucleo/ui.js';
 import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucleo/componentes.js';
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPago, registrarCobranca, adicionarServicoNaVisita, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, adicionarServicoNaVisita, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -98,6 +98,8 @@ export default async function montar(ctx) {
         ${concluida && usuario.admin && html`
           <div class="acoes-cartao">
             ${botao({ texto: l.pago ? 'Marcar como a receber' : 'Marcar como pago', variante: 'secundario', acao: 'alternar-pago', dados: { id: l.id }, pequeno: true })}
+            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-concluido', dados: { id: l.id }, pequeno: true })}
+            ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-concluido', dados: { id: l.id }, pequeno: true })}
           </div>`}
         ${l.status === STATUS.CANCELADO && l.pendente === true && l.motivoPendencia && html`<div class="visita-obs">Motivo: ${l.motivoPendencia}</div>`}
         ${concluida && usuario.admin && l.cobradoEm && !l.pago && html`<div class="item-lista__sub">Cobrado em ${formatarDataBR(l.cobradoEm)}</div>`}
@@ -161,7 +163,7 @@ export default async function montar(ctx) {
           </div>
         </div>
 
-        ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita, aguardando reagendamento. Escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado e está aguardando reagendamento. Escolha uma nova data, ou exclua se não for mais acontecer.' })}
+        ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita. Toque em Editar e escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado. Toque em Editar e escolha uma nova data para reagendar, ou exclua se não for mais acontecer.' })}
         ${cobraveis.length > 1 && botao({ texto: 'Cobrar tudo desta visita', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: cobraveis.map((c) => c.id).join(',') }, bloco: true })}
         ${tituloSecao('Aparelhos e serviços')}
         ${grupos.map(([aparelhoId, lista]) => html`
@@ -175,14 +177,13 @@ export default async function montar(ctx) {
           </section>`)}
 
         ${agendado ? botao({ texto: 'Adicionar serviço na visita', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}
-        ${usuario.admin && agendado ? html`
-          <div class="linha">
-            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${s.id}/editar` })}
-            ${botao({ texto: 'Cancelar', variante: 'perigo', acao: 'cancelar' })}
+        ${usuario.admin && (agendado || aguardando) ? html`
+          <div class="acoes-cartao">
+            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${s.id}/editar`, pequeno: true })}
+            ${agendado ? botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar', pequeno: true }) : ''}
+            ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', pequeno: true })}
           </div>` : ''}
-        ${usuario.admin && aguardando ? botao({ texto: 'Reagendar', iconeNome: 'agenda', href: `#/servico/${s.id}/editar`, bloco: true }) : ''}
-        ${usuario.admin && (agendado || aguardando) ? botao({ texto: 'Excluir agendamento', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', bloco: true }) : ''}
-        ${usuario.admin && temConcluida ? html`<p class="texto-suave texto-pequeno">Serviços concluídos não podem ser excluídos: ficam guardados no histórico, como registro e garantia.</p>` : ''}
+        ${usuario.admin && temConcluida ? html`<p class="texto-suave texto-pequeno">Serviço concluído é registro e garantia: o administrador só corrige o que está errado, e excluir pede confirmação dupla.</p>` : ''}
       </div>`);
 
     desligar();
@@ -196,6 +197,30 @@ export default async function montar(ctx) {
           ctx.recarregar();
         } catch (e) { mostrarErro(e); }
       }),
+      'editar-concluido': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        const texto = await pedirTexto({ titulo: 'O que foi feito?', rotulo: 'Descreva o serviço', valor: linha.descricao || '', multilinha: true, maximo: 2000, confirmar: 'Salvar' });
+        if (texto === null) return;
+        await comCarregando(el, async () => {
+          try {
+            await editarDescricao(usuario.empresaId, linha.id, texto);
+            toast('Descrição corrigida.', 'sucesso');
+            ctx.recarregar();
+          } catch (e) { mostrarErro(e); }
+        });
+      },
+      'excluir-concluido': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        if (!await confirmar({ titulo: 'Excluir este serviço concluído?', mensagem: `"${linha.tipoServicoNome}" sai do histórico e do financeiro (o valor também é apagado). Ele era registro e garantia do cliente.`, confirmar: 'Continuar', cancelar: 'Voltar', perigo: true })) return;
+        if (!await confirmar({ titulo: 'Tem certeza?', mensagem: 'Não dá para desfazer. O cliente e os aparelhos dele não são apagados.', confirmar: 'Excluir de vez', cancelar: 'Voltar', perigo: true })) return;
+        await comCarregando(el, async () => {
+          try {
+            await excluirServico(usuario.empresaId, linha.id, { permitirConcluido: true });
+            toast('Serviço excluído.', 'sucesso');
+            if (linhas.length > 1) ctx.recarregar(); else ir('/historico');
+          } catch (e) { mostrarErro(e); }
+        });
+      },
       cobrar: (el) => {
         const ids = String(el.dataset.ids || '').split(',').filter(Boolean);
         const itens = cobraveis.filter((l) => ids.includes(l.id));
@@ -248,7 +273,7 @@ export default async function montar(ctx) {
         });
         if (!escolhaAparelho) return;
         if (escolhaAparelho === '__novo') {
-          ir(`/cliente/${encodeURIComponent(base.clienteId)}/aparelho/novo?voltar=1`);
+          ir(`/cliente/${encodeURIComponent(base.clienteId)}/aparelho/novo?voltar=1&endereco=${encodeURIComponent(base.enderecoId || '')}`);
           return;
         }
         // O mesmo serviço não entra duas vezes no mesmo aparelho da visita.

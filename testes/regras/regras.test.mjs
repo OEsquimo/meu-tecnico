@@ -438,3 +438,9 @@ test('pendente: o técnico devolve o próprio serviço agendado com motivo, e na
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...pendente, motivoPendencia: 'outro' }));
   await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { status: 'agendado', pendente: false, motivoPendencia: '', atualizadoEm: serverTimestamp() }));
 });
+
+test('pacote 3: o administrador marca "reagendado" no serviço (só booleano)', async () => {
+  await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: true, atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: 'sim', atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/s-tec`), { reagendado: true }));
+});

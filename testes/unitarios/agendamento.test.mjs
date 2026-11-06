@@ -19,7 +19,7 @@ import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../p
 import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico, resumoDaVisita } from '../../public/js/dominio/servicos.js';
 import { formatarHora } from '../../public/js/dominio/datas.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
-import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
+import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
 import {
   estadoInicial, novoGrupo, novoServico, tecnicosLivresParaServico, limparTecnicosOcupados, pendenciasDoAgendamento,
@@ -201,14 +201,14 @@ test('editar não conflita com o próprio agendamento', async () => {
   assert.equal((await listarLinhasDoAgendamento(E, { agendamentoId: id })).length, 1);
 });
 
-test('agendamento cancelado fica aguardando reagendamento e volta a "agendado" ao remarcar', async () => {
+test('agendamento cancelado só é reagendado ao mudar data/hora (vira Reagendado); sem mudar, continua cancelado', async () => {
   await novoBanco();
   const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   await cancelarAgendamentoCompleto(E, existentes);
   const canceladas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   assert.ok(canceladas.every((l) => l.status === 'cancelado'));
-  assert.equal(seloDoServico(canceladas[0]).texto, 'Cancelado — aguardando reagendamento');
+  assert.equal(seloDoServico(canceladas[0]).texto, 'Cancelado');
   // Cancelado libera o técnico: outro agendamento no mesmo horário é aceito.
   const outro = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   // Remarcar para o mesmo horário agora falha (o técnico está ocupado)...
@@ -218,8 +218,38 @@ test('agendamento cancelado fica aguardando reagendamento e volta a "agendado" a
   const depois = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   assert.equal(depois.length, 1);
   assert.equal(depois[0].status, 'agendado');
+  assert.equal(depois[0].reagendado, true);
+  assert.equal(seloDoServico(depois[0], new Date(2030, 0, 1)).texto, 'Reagendado');
   assert.equal(formatarHora(depois[0].dataAgendada), '15:00');
   assert.ok(outro);
+  // Cancelar de novo: volta a "Cancelado" e perde a marca de reagendado.
+  await cancelarAgendamentoCompleto(E, depois);
+  const de_novo = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(de_novo[0].status, 'cancelado');
+  assert.equal(de_novo[0].reagendado, false);
+});
+
+test('editar um cancelado SEM mudar data nem horário não reagenda (continua cancelado)', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await cancelarAgendamentoCompleto(E, existentes);
+  const canceladas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, observacao: 'trocar de peça', linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }, { aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
+  const depois = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(depois.length, 2);
+  assert.ok(depois.every((l) => l.status === 'cancelado' && l.reagendado !== true));
+});
+
+test('concluído: o administrador pode excluir (confirmando); sem a confirmação o app recusa', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const [l] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await concluirServico({ empresaId: E, servico: l, papel: 'admin', nomeQuemConcluiu: 'Admin', dados: { descricao: 'ok', pago: false, retornoMeses: null, aparelho: null, valorCentavos: 10000 } });
+  await assert.rejects(() => excluirServico(E, l.id), /concluído/);
+  await excluirServico(E, l.id, { permitirConcluido: true });
+  assert.equal(await ler(`empresas/${E}/servicos/${l.id}`), null);
+  assert.equal(await ler(`empresas/${E}/valores/${l.id}`), null);
 });
 
 test('excluir agendamento nunca apaga serviço concluído (nem o cliente)', async () => {
@@ -564,4 +594,27 @@ test('cobrança: registrar "cobrado em" não marca como pago', async () => {
   const [depois] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   assert.ok(depois.cobradoEm instanceof Date);
   assert.notEqual(depois.pago, true);
+});
+
+test('excluir aparelho: sem serviço apaga; com concluído guarda (some da lista); com agendamento aberto recusa', async () => {
+  await novoBanco();
+  const { criarAparelho, listarAparelhosDoCliente, excluirAparelho, buscarAparelho } = await import('../../public/js/servicos/aparelhos.js');
+  const novo = async (nome) => { const id = await criarAparelho(E, 'c1', { tipo: 'split', btus: 9000, nome }); return buscarAparelho(E, id); };
+  // 1) sem nenhum serviço: apaga de verdade
+  const livre = await novo('Livre');
+  assert.equal(await excluirAparelho(E, livre), 'apagado');
+  assert.equal(await buscarAparelho(E, livre.id), null);
+  // 2) com agendamento aberto: recusa
+  const usado = await novo('Usado');
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: usado, tipo: limpeza, tecnico: TEC_A }] }));
+  await assert.rejects(() => excluirAparelho(E, usado), /agendamento aberto/);
+  // 3) depois de concluído: fica guardado (ativo: false) e some da lista; o serviço mantém o resumo
+  const [l] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await concluirServico({ empresaId: E, servico: l, papel: 'admin', nomeQuemConcluiu: 'Admin', dados: { descricao: 'ok', pago: false, retornoMeses: null, aparelho: null } });
+  assert.equal(await excluirAparelho(E, usado), 'arquivado');
+  assert.equal((await buscarAparelho(E, usado.id)).ativo, false);
+  assert.ok(!(await listarAparelhosDoCliente(E, 'c1')).some((a) => a.id === usado.id));
+  const [depois] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(depois.status, 'concluido');
+  assert.ok(depois.aparelhoResumo);
 });
