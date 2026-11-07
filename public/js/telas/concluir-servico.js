@@ -16,7 +16,7 @@
 // =============================================================================
 
 import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto } from '../nucleo/ui.js';
-import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos } from '../nucleo/componentes.js';
+import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos, estadoVazio } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
@@ -102,6 +102,19 @@ export default async function montar(ctx) {
     const precoDe = (t) => (Number.isInteger(precos[t?.id]) ? precos[t.id] : null);
     const semServico = ehLinhaSemServico(s);
     const semAparelho = !s.aparelhoId;
+    // Sem aparelho ou sem serviço informado: não dá para concluir. Em vez de uma lista cheia de
+    // opções, um aviso amigável leva para a tela "Aparelhos e serviços" (primeiro o aparelho, depois os serviços).
+    if (semServico || semAparelho) {
+      mostrar(raiz, html`
+        ${cabecalho({ titulo: 'Concluir serviço', subtitulo: s.clienteNome, voltarPara })}
+        ${estadoVazio({
+    icone: 'info',
+    titulo: 'Antes de concluir',
+    texto: 'Escolha ou cadastre o aparelho e selecione o serviço feito. É rapidinho!',
+    acao: botao({ texto: 'Informar aparelhos e serviços', href: `#/informar/${s.id}` }),
+  })}`);
+      return;
+    }
     const salvo = rascunho && rascunho.id === s.id ? rascunho : null;
     const idsAntes = new Set(salvo?.aparelhosAntes || []);
     const novoAparelho = salvo ? aparelhos.find((a) => !idsAntes.has(a.id)) : null;

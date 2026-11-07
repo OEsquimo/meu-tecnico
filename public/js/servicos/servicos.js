@@ -396,6 +396,37 @@ export async function corrigirServicoAdicionado({ empresaId, servico, tipo = nul
   invalidarCache(`${empresaId}:servicos`);
 }
 
+/**
+ * "Informar aparelhos e serviços": o atendimento foi agendado sem isso. `itens` = [{ aparelho, tipos: [tipo...] }].
+ * O 1º par (aparelho + serviço) preenche a linha "a definir"; os demais viram linhas novas na mesma visita.
+ * Se o técnico informa, tudo fica marcado como "incluído pelo técnico" (o administrador é avisado).
+ * Pares que já existem na visita são ignorados (se a gravação for repetida não duplica).
+ */
+export async function informarAparelhosEServicos({ empresaId, servico, itens, tecnico = null }) {
+  if (servico.status !== STATUS.AGENDADO) throw new ErroApp('Este serviço já foi fechado.', 'servico-fechado');
+  if (itens.some((i) => !i.aparelho)) throw new ErroApp('Escolha ou cadastre o aparelho.', 'sem-aparelho');
+  if (itens.some((i) => i.tipos.length === 0)) throw new ErroApp('Escolha pelo menos um serviço para cada aparelho.', 'sem-tipo');
+  const linhas = await listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid: tecnico?.uid || null });
+  const pares = itens.flatMap((i) => i.tipos.map((tipo) => ({ aparelho: i.aparelho, tipo })));
+  const novos = pares.filter((p) => !linhas.some((l) => l.id !== servico.id && l.status === STATUS.AGENDADO && l.aparelhoId === p.aparelho.id && l.tipoServicoId === p.tipo.id));
+  if (novos.length === 0) throw new ErroApp('Esses serviços já estão nesta visita.', 'servico-repetido');
+  const [primeiro, ...resto] = novos;
+  for (const p of resto) {
+    await adicionarServicoNaVisita({ empresaId, base: servico, aparelho: p.aparelho, tipo: p.tipo, tecnico, linhasDaVisita: linhas });
+  }
+  await gravar([op.atualizar(`${caminho(empresaId)}/${servico.id}`, {
+    aparelhoId: primeiro.aparelho.id,
+    aparelhoResumo: resumoDoAparelho(primeiro.aparelho),
+    tipoServicoId: primeiro.tipo.id,
+    tipoServicoNome: primeiro.tipo.nome,
+    geraRetorno: primeiro.tipo.geraRetorno === true,
+    ...(tecnico ? { adicionadoPeloTecnico: true, vistoPeloAdmin: false } : {}),
+    atualizadoEm: AGORA,
+  })]);
+  invalidarCache(`${empresaId}:servicos`);
+  return novos.length;
+}
+
 /** Serviços que o técnico acrescentou em campo e que o administrador ainda não viu (só administrador). */
 export function listarIncluidosNaoVistos({ empresaId }) {
   return listar(caminho(empresaId), {

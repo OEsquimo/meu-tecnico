@@ -173,6 +173,11 @@ export function ehLinhaSemServico(servico) {
   return !servico.tipoServicoId;
 }
 
+/** Falta informar o aparelho ou o serviço? Então não dá para concluir ainda: antes, "Informar serviço". */
+export function precisaInformarAparelhoEServico(servico) {
+  return !servico.tipoServicoId || !servico.aparelhoId;
+}
+
 /** Duração em minutos (serviços antigos, sem duração: o padrão). */
 export function duracaoDoServico(servico) {
   const n = Number(servico.duracaoMin);

@@ -473,3 +473,19 @@ test('pacote 5: só o administrador marca o serviço incluído como visto', asyn
   await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/inc`), { vistoPeloAdmin: true }));
   await assertFails(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/inc`), { vistoPeloAdmin: 'sim' }));
 });
+
+test('pacote 6: o técnico informa aparelho e serviço só na linha dele que está "a definir"', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const f = ctx.firestore();
+    await setDoc(doc(f, `empresas/${E}/servicos/adef`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', geraRetorno: false, aparelhoId: null }));
+    await setDoc(doc(f, `empresas/${E}/servicos/completa`), linhaNova());
+    await setDoc(doc(f, `empresas/${E}/servicos/alheia`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', aparelhoId: null, tecnicoUid: TEC2, tecnicoUids: [TEC2] }));
+  });
+  const db = como(TEC);
+  const informa = { aparelhoId: 'a1', aparelhoResumo: 'Split 12.000 BTUs', tipoServicoId: 't1', tipoServicoNome: 'Limpeza', geraRetorno: true, adicionadoPeloTecnico: true, vistoPeloAdmin: false, atualizadoEm: serverTimestamp() };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/adef`), { ...informa, adicionadoPeloTecnico: false })); // tem de ficar marcada
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/adef`), { ...informa, dataAgendada: dia(9) })); // só aparelho e serviço
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/completa`), informa)); // já tem aparelho e serviço
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/alheia`), informa)); // serviço de outro técnico
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/adef`), informa));
+});

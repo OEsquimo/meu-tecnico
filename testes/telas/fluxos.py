@@ -144,12 +144,9 @@ with sync_playwright() as p:
 
     # 5) concluir exige aparelho e (se 'a definir') o tipo; aqui pelo administrador
     ir(pag, f"/concluir/{sid_a_definir}")
-    ok(pag.locator("select[name=aparelhoId]").count() == 1 and pag.locator("input[name=tipoServicoId]").count() > 0, "serviço sem aparelho/tipo pede os dois ao concluir")
-    pag.fill("textarea[name=descricao]", "Limpeza completa feita")
-    pag.fill("input[name=valor]", "150")
-    pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(600)
-    ok("#/concluir/" in pag.url, "não conclui sem aparelho")
-    ok("aparelho" in pag.inner_text("#conteudo").lower(), "mostra o aviso de aparelho obrigatório")
+    ok("Antes de concluir" in pag.inner_text("#conteudo") and pag.locator("input[name=tipoServicoId]").count() == 0, "serviço sem aparelho/tipo: aviso amigável (sem lista de serviços) em vez do formulário")
+    pag.locator("a:has-text('Informar aparelhos e serviços')").click(); pag.wait_for_timeout(900)
+    ok("#/informar/" in pag.url, "o aviso leva à tela Aparelhos e serviços")
 
     # 6) tipo de serviço tem duração editável
     ir(pag, "/tipos-servico/novo")

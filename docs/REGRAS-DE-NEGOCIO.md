@@ -71,3 +71,9 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 ## Pacote 5 — serviço incluído em campo fica visível ao administrador
 - Todo serviço que o técnico acrescenta no local mostra o selo **"Incluído pelo técnico"** (Agenda, Início, detalhes, ficha do cliente) e, depois de concluído, a lista de Concluídos indica "incluído pelo técnico". O valor entra pelo preço padrão do tipo de serviço: o administrador deve conferir.
 - O Início do administrador mostra o aviso "<Técnico> incluiu N serviço(s) em campo" enquanto o administrador não tiver aberto o agendamento (campo `vistoPeloAdmin`; o técnico cria sempre como `false`, só o administrador muda para `true`). Ao abrir o agendamento, o aviso some.
+
+## Pacote 6 — informar aparelhos e serviços
+- Em **Agendar**, o cartão do cliente mostra só o nome (largura toda) com **Editar** (ícone de lápis); abaixo, o link pequeno **"Não é o cliente?"** reabre a busca. Sem iniciais, telefone nem botão Trocar.
+- Atendimento agendado **sem aparelho e/ou sem serviço** ("Serviço a definir"): o botão vira **"Informar serviço"** (cartões, ficha do cliente) ou "Informar aparelho e serviço" (detalhes). Tocar em Concluir nessa linha mostra aviso amigável e leva à tela **Aparelhos e serviços** (`#/informar/:id`).
+- Ordem: 1) escolher o aparelho do cliente (um só já vem escolhido) ou cadastrar um novo; 2) marcar um ou mais serviços para ele; "+ Aparelho" repete. O 1º par preenche a linha "a definir"; os demais viram linhas novas na visita. Cada linha é concluída pelo Concluir de sempre (uma por vez).
+- Se quem informa é o técnico, as linhas ficam marcadas **"Incluído pelo técnico"** (o administrador é avisado no Início) e ele pode editar/excluir o que informou, enquanto agendado. O único serviço aberto da visita não é excluído por ele (use "Não deu para fazer").
