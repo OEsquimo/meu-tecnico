@@ -18,7 +18,7 @@ import {
   buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, adicionarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
-import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
+import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { formatarDataHoraBR, formatarDataBR } from '../dominio/datas.js';
 import { formatarReais } from '../dominio/dinheiro.js';
@@ -109,7 +109,9 @@ export default async function montar(ctx) {
         ${concluida && usuario.admin && cobraveis.some((c) => c.id === l.id) && botao({ texto: 'Cobrar no WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: l.id }, pequeno: true })}
         ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
         ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
-        ${agendada && botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true })}
+        ${agendada && (precisaInformarAparelhoEServico(l)
+    ? botao({ texto: 'Informar aparelho e serviço', iconeNome: 'editar', href: `#/informar/${l.id}`, bloco: true })
+    : botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true }))}
         ${agendada && !usuario.admin && l.adicionadoPeloTecnico === true && html`
           <div class="acoes-cartao">
             ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-adicionado', dados: { id: l.id }, pequeno: true })}
@@ -225,10 +227,14 @@ export default async function montar(ctx) {
         try {
           const linha = linhas.find((l) => l.id === el.dataset.id);
           if (!linha) return;
+          // O único serviço aberto da visita não sai por aqui: sumiria o agendamento do administrador.
+          if (linhas.filter((l) => l.status === STATUS.AGENDADO).length <= 1) {
+            toast('Este é o único serviço da visita. Se não deu para fazer, use "Não deu para fazer".', 'erro');
+            return;
+          }
           if (!await confirmar({ titulo: 'Excluir este serviço?', mensagem: 'Ele sai do agendamento. O cliente e os outros serviços não são afetados.', confirmar: 'Excluir serviço', cancelar: 'Voltar', perigo: true })) return;
           await excluirServicoAdicionado(usuario.empresaId, linha);
           toast('Serviço excluído.', 'sucesso');
-          if (linhas.length <= 1) { ir('/agenda'); return; }
           ctx.recarregar();
         } catch (e) { mostrarErro(e); }
       }),

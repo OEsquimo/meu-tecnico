@@ -347,13 +347,11 @@ export default async function montar(ctx) {
       <div class="campo" data-campo="clienteId">
         <span class="campo__rotulo">Cliente</span>
         <div class="cliente-escolhido">
-          ${avatar(c.nome)}
-          <div class="expande">
-            <div class="item-lista__titulo">${c.nome}</div>
-            <div class="item-lista__sub">${formatarTelefone(c.whatsapp)}</div>
+          <div class="cliente-escolhido__topo">
+            <div class="cliente-escolhido__nome">${c.nome}</div>
+            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', pequeno: true, acao: 'editar-cliente' })}
           </div>
-          ${botao({ texto: 'Editar', variante: 'secundario', pequeno: true, acao: 'editar-cliente' })}
-          ${!editando && botao({ texto: 'Trocar', variante: 'secundario', pequeno: true, acao: 'trocar-cliente' })}
+          ${!editando && html`<button type="button" class="link-pequeno" data-acao="trocar-cliente">Não é o cliente?</button>`}
         </div>
       </div>
       ${enderecos.length > 1 && campoPilulas({
@@ -395,7 +393,6 @@ export default async function montar(ctx) {
         <span class="campo__rotulo">Aparelhos e serviços <span class="campo__opcional">(opcional)</span></span>
         ${estado.grupos.length > 0 && html`<span class="agenda-secao__resumo">${estado.grupos.length} ${estado.grupos.length === 1 ? 'aparelho' : 'aparelhos'} · ${total} ${total === 1 ? 'serviço' : 'serviços'}</span>`}
       </div>
-      ${estado.grupos.length === 0 && html`<p class="campo__ajuda">Se quiser, já inclua os aparelhos e serviços. Dá para fazer isso depois, e o técnico também pode completar no atendimento.</p>`}
       ${estado.grupos.map((g) => cartaoDoAparelho(g, mapa[g.aparelhoId]))}
       <div class="acoes-cartao agenda-adicionar">
         ${botao({ texto: '+ Aparelho do cliente', variante: 'secundario', acao: 'adicionar-aparelho', pequeno: true })}

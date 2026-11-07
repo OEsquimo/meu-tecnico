@@ -19,7 +19,7 @@ import { tecnicoEstaLivre, tecnicosLivres, intervalosSeSobrepoem } from '../../p
 import { agruparAgendamentos, chaveDoAgendamento, ehLinhaSemServico, duracaoDoServico, tecnicosDoServico, servicoTemTecnico, dividirCentavos, seloDoServico, resumoDaVisita } from '../../public/js/dominio/servicos.js';
 import { formatarHora } from '../../public/js/dominio/datas.js';
 import { validarTipoServico, validarAgendamento, validarConclusao } from '../../public/js/dominio/validacoes.js';
-import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, corrigirServicoAdicionado, excluirServicoAdicionado, listarIncluidosNaoVistos, marcarIncluidosComoVistos, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
+import { salvarAgendamento, listarLinhasDoAgendamento, adicionarServicoNaVisita, concluirServico, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, corrigirServicoAdicionado, excluirServicoAdicionado, listarIncluidosNaoVistos, marcarIncluidosComoVistos, informarAparelhosEServicos, marcarPendente, registrarCobranca } from '../../public/js/servicos/servicos.js';
 import { CAMPOS_PERMITIDOS } from '../../public/js/dominio/backup.js';
 import {
   estadoInicial, novoGrupo, novoServico, tecnicosLivresParaServico, limparTecnicosOcupados, pendenciasDoAgendamento,
@@ -649,4 +649,27 @@ test('serviço incluído pelo técnico aparece como "não visto" até o administ
   assert.equal(await marcarIncluidosComoVistos(E, linhas), 1);
   assert.equal((await listarIncluidosNaoVistos({ empresaId: E })).length, 0);
   assert.equal(await marcarIncluidosComoVistos(E, await listarLinhasDoAgendamento(E, { agendamentoId: id })), 0); // não repete
+});
+
+test('informar aparelhos e serviços: o 1º par preenche a linha "a definir" e os outros viram linhas novas', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ tecnico: TEC_A }] })); // só cliente, dia, hora e técnico
+  const [vazia] = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(vazia.tipoServicoId, '');
+  await assert.rejects(() => informarAparelhosEServicos({ empresaId: E, servico: vazia, itens: [{ aparelho: ap1, tipos: [] }] }), /pelo menos um serviço/);
+  const n = await informarAparelhosEServicos({
+    empresaId: E, servico: vazia, tecnico: TEC_A,
+    itens: [{ aparelho: ap1, tipos: [limpeza, TIPOS[4]] }, { aparelho: ap2, tipos: [limpeza] }],
+  });
+  assert.equal(n, 3);
+  const linhas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(linhas.length, 3);
+  assert.ok(linhas.every((l) => l.tipoServicoId && l.aparelhoId && l.adicionadoPeloTecnico === true && l.vistoPeloAdmin === false));
+  // Repetir (ex.: a 1ª gravação falhou no meio) não duplica as linhas que já existem.
+  const repetido = await informarAparelhosEServicos({
+    empresaId: E, servico: vazia, tecnico: TEC_A,
+    itens: [{ aparelho: ap1, tipos: [limpeza, TIPOS[4]] }, { aparelho: ap2, tipos: [limpeza] }],
+  });
+  assert.equal(repetido, 1);
+  assert.equal((await listarLinhasDoAgendamento(E, { agendamentoId: id })).length, 3);
 });

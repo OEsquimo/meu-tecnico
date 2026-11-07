@@ -12,7 +12,7 @@ import { botao, selo, estadoVazio, cabecalho } from '../nucleo/componentes.js';
 import { traduzirErro, ehErroDeRede } from '../nucleo/erros.js';
 import { sessao } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
-import { estaAtrasado, seloDoServico, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
+import { estaAtrasado, precisaInformarAparelhoEServico, seloDoServico, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
@@ -146,7 +146,9 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
                 ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
                 ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
               </div>
-              ${acoes && botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true })}
+              ${acoes && (precisaInformarAparelhoEServico(l)
+    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/informar/${l.id}`, pequeno: true })
+    : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true }))}
             </div>`)}
         </div>`)}
       ${acoes && html`

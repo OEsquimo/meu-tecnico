@@ -429,7 +429,8 @@ service cloud.firestore {
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoConcluiServico(emp, sid)
           || tecnicoMarcaPendente(emp)
-          || tecnicoCorrigeServicoAdicionado(emp);
+          || tecnicoCorrigeServicoAdicionado(emp)
+          || tecnicoInformaServico(emp);
         allow delete: if ehAdmin(emp) || tecnicoApagaServicoAdicionado(emp);
       }
 
@@ -591,6 +592,22 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'aparelhoId', 'aparelhoResumo', 'atualizadoEm'])
         && request.resource.data.status == 'agendado'
         && request.resource.data.tipoServicoId is string && request.resource.data.tipoServicoId.size() > 0;
+    }
+
+    // "Informar aparelhos e serviços": o técnico preenche a linha SUA, ainda agendada, a que falta aparelho ou
+    // serviço. Ela passa a ficar marcada como incluída pelo técnico (o administrador é avisado).
+    function tecnicoInformaServico(emp) {
+      let d = request.resource.data;
+      return ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && (resource.data.tipoServicoId == '' || resource.data.get('aparelhoId', null) == null)
+        && d.diff(resource.data).affectedKeys().hasOnly(['aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atualizadoEm'])
+        && d.status == 'agendado'
+        && d.tipoServicoId is string && d.tipoServicoId.size() > 0
+        && d.aparelhoId is string && d.aparelhoId.size() > 0
+        && d.adicionadoPeloTecnico == true
+        && d.get('vistoPeloAdmin', false) == false;
     }
 
     function tecnicoApagaServicoAdicionado(emp) {

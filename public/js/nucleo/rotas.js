@@ -38,6 +38,7 @@ export const ROTAS = [
   { padrao: '/agenda', carregar: () => import('../telas/agenda.js'), acesso: 'membro', menu: 'agenda', titulo: 'Agenda' },
   { padrao: '/servico/:id', carregar: () => import('../telas/servico.js'), acesso: 'membro', menu: 'agenda', titulo: 'Serviço' },
   { padrao: '/servico/:id/valor', carregar: () => import('../telas/valor-servico.js'), acesso: 'admin', menu: 'agenda', titulo: 'Valor do serviço' },
+  { padrao: '/informar/:id', carregar: () => import('../telas/informar-servico.js'), acesso: 'membro', menu: 'agenda', titulo: 'Aparelhos e serviços' },
   { padrao: '/concluir/:id', carregar: () => import('../telas/concluir-servico.js'), acesso: 'membro', menu: 'agenda', titulo: 'Concluir serviço' },
   { padrao: '/historico', carregar: () => import('../telas/historico.js'), acesso: 'membro', menu: 'historico', titulo: 'Serviços concluídos' },
   { padrao: '/aparelho/:id/editar', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Aparelho' },

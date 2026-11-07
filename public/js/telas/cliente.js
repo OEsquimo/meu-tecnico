@@ -21,7 +21,7 @@ import { listarServicosDoCliente, cancelarAgendamentoCompleto, excluirAgendament
 import { formatarTelefone, normalizarWhatsappBR } from '../dominio/telefone.js';
 import { linhaDoEndereco, formatarCEP, opcoesDeNavegacao } from '../dominio/endereco.js';
 import { descricaoTecnica, tituloDoAparelho } from '../dominio/aparelhos.js';
-import { seloDoServico, agruparAgendamentos, STATUS } from '../dominio/servicos.js';
+import { seloDoServico, agruparAgendamentos, precisaInformarAparelhoEServico, STATUS } from '../dominio/servicos.js';
 import { formatarDataBR } from '../dominio/datas.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { telaDeErro, carregarEstilosClientes, lerDescricaoAparelho } from './clientes-comum.js';
@@ -169,7 +169,9 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
                               ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
                               ${l.aparelhoResumo && html`<div class="item-lista__sub">${l.aparelhoResumo}</div>`}
                             </div>
-                            ${botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}
+                            ${precisaInformarAparelhoEServico(l)
+    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/informar/${encodeURIComponent(l.id)}`, pequeno: true })
+    : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}
                           </div>`)}
                       </div>`}
                     ${(aberta || aguardando) && html`
