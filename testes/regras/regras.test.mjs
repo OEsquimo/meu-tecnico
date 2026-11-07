@@ -478,7 +478,7 @@ test('pacote 6: o técnico informa aparelho e serviço só na linha dele que est
   await env.withSecurityRulesDisabled(async (ctx) => {
     const f = ctx.firestore();
     await setDoc(doc(f, `empresas/${E}/servicos/adef`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', geraRetorno: false, aparelhoId: null }));
-    await setDoc(doc(f, `empresas/${E}/servicos/completa`), linhaNova());
+    await setDoc(doc(f, `empresas/${E}/servicos/completa`), linhaNova({ aparelhoId: 'a1', aparelhoResumo: 'Split 12.000 BTUs' })); // já tem aparelho e serviço
     await setDoc(doc(f, `empresas/${E}/servicos/alheia`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', aparelhoId: null, tecnicoUid: TEC2, tecnicoUids: [TEC2] }));
   });
   const db = como(TEC);
