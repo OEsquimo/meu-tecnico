@@ -41,14 +41,17 @@ export default async function montar(ctx) {
   const usuario = contextoDoUsuario();
   const voltarPara = `#/servico/${params.id}`;
 
-  /** Sobrou serviço aberto na mesma visita? Pergunta se faz hoje ou fica pendente. */
+  /**
+   * Sobrou serviço aberto na mesma visita? Pergunta se faz hoje ou fica pendente.
+   * Devolve o id de um serviço que continua aberto na visita (para voltar a ela), ou null.
+   */
   async function perguntarPendentes(concluido) {
     let abertos = [];
     try {
       const linhas = await listarLinhasDoAgendamento(usuario.empresaId, concluido, { tecnicoUid: usuario.admin ? null : usuario.uid });
       abertos = linhas.filter((l) => l.id !== concluido.id && l.status === STATUS.AGENDADO);
-    } catch { return; } // a pergunta é um extra: se falhar, o serviço já está concluído
-    if (abertos.length === 0) return;
+    } catch { return null; } // a pergunta é um extra: se falhar, o serviço já está concluído
+    if (abertos.length === 0) return null;
     const n = abertos.length;
     const nomes = abertos.map((l) => l.tipoServicoNome || 'Serviço a definir').join(', ');
     const r = await escolher({
@@ -60,7 +63,7 @@ export default async function montar(ctx) {
       ],
       cancelar: 'Decidir depois',
     });
-    if (r !== 'nao') return; // "Fazer ainda hoje" e "Decidir depois": continuam na agenda de hoje
+    if (r !== 'nao') return abertos[0].id; // "Fazer ainda hoje" e "Decidir depois": continuam abertos na visita
     let motivo = await escolher({
       titulo: 'Por que ficou pendente?',
       opcoes: [...MOTIVOS_PENDENCIA.map((m) => ({ id: m, rotulo: m })), { id: 'outro', rotulo: 'Outro motivo' }],
@@ -70,7 +73,11 @@ export default async function montar(ctx) {
     try {
       await marcarPendente(usuario.empresaId, abertos.map((l) => l.id), motivo || '');
       toast(n === 1 ? 'Serviço ficou pendente, aguardando reagendamento.' : 'Serviços pendentes, aguardando reagendamento.', 'sucesso');
-    } catch (e) { toast('Não foi possível marcar como pendente. Tente de novo pela tela do serviço.', 'erro'); }
+      return null; // todos ficaram pendentes: a visita não tem mais nada a concluir
+    } catch (e) {
+      toast('Não foi possível marcar como pendente. Tente de novo pela tela do serviço.', 'erro');
+      return abertos[0].id;
+    }
   }
 
   async function carregar() {
@@ -128,7 +135,11 @@ export default async function montar(ctx) {
     const mesesPadrao = mesesDe(tipoInicial);
 
     mostrar(raiz, html`
-      ${cabecalho({ titulo: 'Concluir serviço', subtitulo: `${semServico ? 'Serviço a definir' : s.tipoServicoNome} · ${s.clienteNome}`, voltarPara })}
+      ${cabecalho({
+    titulo: 'Concluir serviço',
+    subtitulo: html`${semServico ? 'Serviço a definir' : s.tipoServicoNome} · ${s.clienteNome}${s.aparelhoResumo ? html`<div class="cabecalho__aparelho">${s.aparelhoResumo}</div>` : ''}`,
+    voltarPara,
+  })}
       <form id="form-concluir" class="formulario" novalidate>
         <div data-erros-gerais></div>
         ${semServico ? campoPilulas({
@@ -234,9 +245,15 @@ export default async function montar(ctx) {
               dataConclusaoISO: usuario.admin ? (campos.dataConclusao || null) : null,
             },
           });
-          toast('Serviço concluído!', 'sucesso');
-          await perguntarPendentes(s);
-          ir('/');
+          const aindaAberto = await perguntarPendentes(s);
+          if (aindaAberto) {
+            // Ainda há serviço aberto nesta visita: volta para ela para concluir o resto.
+            toast('Serviço concluído! Ainda falta concluir o resto desta visita.', 'sucesso');
+            ir(`/servico/${encodeURIComponent(aindaAberto)}`, { substituir: true });
+          } else {
+            toast('Serviço concluído!', 'sucesso');
+            ir('/');
+          }
         } catch (erro) {
           mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });
         }

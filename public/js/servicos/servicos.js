@@ -184,9 +184,9 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   const abertas = linhasEditaveis(existentes);
   const fechadas = existentes.filter((l) => !abertas.includes(l));
   const cancelado = abertas.length > 0 && abertas.every((l) => l.status === STATUS.CANCELADO);
-  // Editar um cancelado só o reagenda se a data ou o horário mudarem; senão ele continua cancelado.
-  const mudouQuando = abertas.some((l) => !(l.dataAgendada instanceof Date) || l.dataAgendada.getTime() !== inicio.getTime());
-  const reagendando = cancelado && mudouQuando;
+  // Salvar um agendamento cancelado o reagenda, mesmo com o mesmo dia e hora (o cliente pode querer o mesmo horário).
+  // Antes de gravar, verificarDisponibilidade confere se os técnicos estão livres nesse horário.
+  const reagendando = cancelado;
   if (editando && abertas.length === 0) {
     throw new ErroApp('Só dá para editar serviços que ainda estão agendados ou aguardando reagendamento.', 'servico-fechado');
   }

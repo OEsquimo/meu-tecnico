@@ -19,6 +19,7 @@ export default async function montar({ raiz, sessao }) {
   const linhas = [
     { titulo: 'Equipe', sub: 'Funcionários e convites', href: '#/equipe' },
     { titulo: 'Tipos de serviço', sub: 'Limpeza, instalação, retorno...', href: '#/tipos-servico' },
+    { titulo: 'Horário de funcionamento', sub: 'Dias e horários em que você atende', href: '#/expediente' },
     { titulo: 'Configurações', sub: 'Empresa, aviso de retorno e mensagem', href: '#/configuracoes' },
     { titulo: 'Meu plano', sub: textoPlano || 'Plano, limite e pagamento', href: '#/plano' },
     { titulo: 'Backup', sub: 'Salvar ou restaurar seus dados', href: '#/backup' },

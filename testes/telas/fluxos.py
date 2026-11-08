@@ -5,6 +5,7 @@ Uso: node scripts/servir-local.mjs &   python3 testes/telas/fluxos.py
 """
 import sys, re
 from playwright.sync_api import sync_playwright
+from _quando import escolher_quando, tecnicos_no_horario
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -43,12 +44,9 @@ with sync_playwright() as p:
         ir(pag, "/agenda"); ir(pag, "/agendar")
         pag.locator("[data-acao=escolher-cliente]", has_text=nome).click(); pag.wait_for_timeout(600)
     def agendar_data(data, hora):
-        pag.fill("input[name=data]", data); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(500)
-        pag.fill("input[name=hora]", hora); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(500)
+        escolher_quando(pag, data, hora)
     def dialogo(texto):
         pag.locator("dialog [data-escolha]", has_text=texto).first.click(); pag.wait_for_timeout(400)
-    def opcoes_tecnico():
-        return pag.locator("#area-tecnico .tecnico-opcao").all_inner_texts()
 
     # 1) só cliente, dia, hora e técnico (sem aparelho nem serviço)
     escolher_cliente("Ana Lima")
@@ -61,28 +59,33 @@ with sync_playwright() as p:
     url_a_definir = pag.url
     sid_a_definir = pag.url.split("/servico/")[1]
 
-    # 2) técnico ocupado some da lista (mesmo horário) e aparece de novo em outro horário
+    # 2) técnico ocupado some da lista de técnicos livres (mesmo horário) e volta em outro horário
     escolher_cliente("Maria Souza")
-    agendar_data("2031-03-10", "09:30")
-    livres = opcoes_tecnico()
-    ok(not any("Marcos" in t or "Rafael" in t for t in livres) or len(livres) < 3, "técnicos ocupados saem da lista")
-    agendar_data("2031-03-10", "12:00")
-    ok(len(opcoes_tecnico()) >= 2, "em outro horário os técnicos voltam")
+    livres = tecnicos_no_horario(pag, "2031-03-10", "09:30")
+    ok(livres is None or not any("Marcos" in t for t in livres), "técnico ocupado não aparece entre os livres")
+    livres2 = tecnicos_no_horario(pag, "2031-03-10", "12:00")
+    ok(livres2 is not None and len(livres2) >= 2, "em outro horário os técnicos voltam")
 
-    # 2b) todos os técnicos ocupados: aviso e botão Agendar bloqueado
-    for _ in range(2):
-        escolher_cliente("Ana Lima"); agendar_data("2031-03-11", "10:00")
+    # 2b) horário lotado: depois de agendar até acabarem os técnicos, o horário deixa de ser oferecido
+    lotado = False
+    for _ in range(8):
+        escolher_cliente("Ana Lima")
+        if tecnicos_no_horario(pag, "2031-03-11", "10:00") is None:
+            lotado = True
+            break
+        agendar_data("2031-03-11", "10:00")
         pag.click("#botao-salvar"); pag.wait_for_timeout(1200)
-    escolher_cliente("Ana Lima"); agendar_data("2031-03-11", "10:00")
-    ok("Nenhum técnico" in pag.inner_text("#conteudo"), "sem técnico livre: avisa na tela")
-    ok(not pag.locator("#botao-salvar").is_disabled(), "o botão Agendar continua ativo (toque mostra o motivo)")
+    ok(lotado, "sem técnico livre: o horário deixa de ser oferecido no seletor")
+
+    # 2c) Agendar sem escolher dia e hora: mostra o erro no campo "Quando"
+    escolher_cliente("Maria Souza")
+    ok("Escolher dia e horário" in pag.inner_text("#botao-quando"), "novo agendamento começa sem dia e hora (botão 'Escolher dia e horário')")
     pag.click("#botao-salvar"); pag.wait_for_timeout(700)
-    ok("#/agendar" in pag.url and pag.locator(".aviso-rapido--erro").count() >= 1, "sem técnico livre: Agendar mostra o erro e não agenda")
-    ok(pag.evaluate("(() => { const el = document.querySelector('[data-campo=hora] input'); const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), "a tela rolou até o campo da hora")
-    ok(pag.evaluate("document.activeElement && document.activeElement.name") == "hora", "o cursor foi para o campo da hora")
+    ok("#/agendar" in pag.url and pag.locator(".aviso-rapido--erro").count() >= 1, "sem dia e hora: Agendar mostra o erro e não agenda")
+    ok(pag.evaluate("(() => { const el = document.querySelector('#botao-quando'); const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), "a tela rolou até o campo 'Quando'")
     pag.locator(".aviso-rapido--erro").first.click(); pag.wait_for_timeout(200)
     ok(pag.locator(".aviso-rapido--erro").count() == 0, "um toque fecha o aviso antes da hora")
-    escolher_cliente("Maria Souza"); agendar_data("2031-03-10", "12:00")
+    agendar_data("2031-03-10", "12:00")
 
     # 3) vários aparelhos e serviços, um técnico por serviço
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Sala")
@@ -208,7 +211,7 @@ with sync_playwright() as p:
         pag.locator("select[name=aparelhoId]").select_option(index=1)
     pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
     if pag.locator("dialog", has_text="pendente").count(): pag.locator("dialog button", has_text="Decidir depois").click(); pag.wait_for_timeout(800)
-    ok(pag.url.endswith("#/") or pag.url.endswith("/"), "concluiu sem escrever 'o que foi feito' (opcional)")
+    ok(pag.url.endswith("#/") or pag.url.endswith("/") or "#/servico/" in pag.url, "concluiu sem escrever 'o que foi feito' (opcional)")
     ir(pag, "/servico/" + href.split("/concluir/")[1])
     txt = pag.inner_text("#conteudo")
     ok("Extra: Peça" in txt and "Desconto" in txt and "Total" in txt, "detalhe mostra extra, desconto e total")
@@ -250,7 +253,7 @@ with sync_playwright() as p:
             pag.locator("select[name=aparelhoId]").select_option(index=1)
         pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
         if pag.locator("dialog", has_text="pendente").count(): pag.locator("dialog button", has_text="Decidir depois").click(); pag.wait_for_timeout(800)
-        ok(pag.url.endswith("#/") or pag.url.endswith("/"), "técnico conclui e volta ao início")
+        ok(pag.url.endswith("#/") or pag.url.endswith("/") or "#/servico/" in pag.url, "técnico conclui e volta (ao início, ou à visita se sobrou serviço)")
     else:
         print("  (técnico sem serviço no mês: fluxo de concluir não exercitado)")
     ir(pag, "/financeiro"); ok("#/financeiro" not in pag.url, "técnico não acessa financeiro")

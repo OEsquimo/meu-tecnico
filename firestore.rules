@@ -268,7 +268,9 @@ service cloud.firestore {
         // Cobrança pelo WhatsApp (opcionais): chave Pix, texto da mensagem e tom (amigável/formal)
         && (!('chavePix' in d) || (d.chavePix is string && d.chavePix.size() <= 100))
         && (!('mensagemCobranca' in d) || (d.mensagemCobranca is string && d.mensagemCobranca.size() <= 600))
-        && (!('tomCobranca' in d) || d.tomCobranca in ['amigavel', 'formal']);
+        && (!('tomCobranca' in d) || d.tomCobranca in ['amigavel', 'formal'])
+        // Horário de funcionamento (opcional): um mapa com, no máximo, os 7 dias da semana
+        && (!('expediente' in d) || (d.expediente is map && d.expediente.keys().hasOnly(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'])));
     }
 
     // Atualização do contador de clientes: só é aceita junto com a criação
@@ -319,7 +321,7 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente'])
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)
         || contadorValido(emp)

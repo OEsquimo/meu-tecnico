@@ -478,7 +478,7 @@ test('pacote 6: o técnico informa aparelho e serviço só na linha dele que est
   await env.withSecurityRulesDisabled(async (ctx) => {
     const f = ctx.firestore();
     await setDoc(doc(f, `empresas/${E}/servicos/adef`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', geraRetorno: false, aparelhoId: null }));
-    await setDoc(doc(f, `empresas/${E}/servicos/completa`), linhaNova());
+    await setDoc(doc(f, `empresas/${E}/servicos/completa`), linhaNova({ aparelhoId: 'a1', aparelhoResumo: 'Split 12.000 BTUs' })); // já tem aparelho e serviço
     await setDoc(doc(f, `empresas/${E}/servicos/alheia`), linhaNova({ tipoServicoId: '', tipoServicoNome: 'Serviço a definir', aparelhoId: null, tecnicoUid: TEC2, tecnicoUids: [TEC2] }));
   });
   const db = como(TEC);
@@ -488,4 +488,16 @@ test('pacote 6: o técnico informa aparelho e serviço só na linha dele que est
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/completa`), informa)); // já tem aparelho e serviço
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/alheia`), informa)); // serviço de outro técnico
   await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/adef`), informa));
+});
+
+test('pacote 9: só o administrador grava o horário de funcionamento (mapa com no máximo os 7 dias)', async () => {
+  await semear();
+  const admin = como(ADMIN);
+  const semana = Object.fromEntries(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'].map((d) => [d, { aberto: d !== 'dom', de: '07:00', ate: '18:00' }]));
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}`), { expediente: semana }));
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}`), { expediente: { ...semana, sab: { aberto: true, de: '08:00', ate: '12:00' } } }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { expediente: { ...semana, feriado: { aberto: true, de: '08:00', ate: '12:00' } } }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { expediente: 'sempre aberto' }));
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}`), { expediente: semana }));
+  await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}`), { expediente: semana }));
 });

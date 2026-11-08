@@ -77,3 +77,18 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - Atendimento agendado **sem aparelho e/ou sem serviço** ("Serviço a definir"): o botão vira **"Informar serviço"** (cartões, ficha do cliente) ou "Informar aparelho e serviço" (detalhes). Tocar em Concluir nessa linha mostra aviso amigável e leva à tela **Aparelhos e serviços** (`#/informar/:id`).
 - Ordem: 1) escolher o aparelho do cliente (um só já vem escolhido) ou cadastrar um novo; 2) marcar um ou mais serviços para ele; "+ Aparelho" repete. O 1º par preenche a linha "a definir"; os demais viram linhas novas na visita. Cada linha é concluída pelo Concluir de sempre (uma por vez).
 - Se quem informa é o técnico, as linhas ficam marcadas **"Incluído pelo técnico"** (o administrador é avisado no Início) e ele pode editar/excluir o que informou, enquanto agendado. O único serviço aberto da visita não é excluído por ele (use "Não deu para fazer").
+
+## Pacote 7 — depois de concluir
+- Ao concluir um serviço, se a visita ainda tem serviço aberto (do técnico, se for técnico), o app volta para o detalhe da visita para concluir o resto. Se era o último (ou o resto ficou "pendente"), vai para o Início.
+
+## Pacote 8 — ajustes
+- Tela "Aparelhos e serviços": o botão "+ Cadastrar aparelho novo" tem espaço em cima e embaixo.
+- Tela "Concluir serviço": mostra também o aparelho (sem endereço).
+- Depois de excluir um serviço (concluído ou adicionado) ou um agendamento: se sobrou serviço na visita, o app continua nela; se não sobrou nenhum, vai para o Início.
+
+## Pacote 9 — horário de funcionamento e seletor de dia, hora e técnicos
+- **Horário de funcionamento (Administrativa):** para cada dia da semana, aberto/fechado e hora de abrir e fechar. Padrão: segunda a sábado, 07:00–18:00; domingo fechado. Guardado em `empresas/{id}.expediente`. Valem para todos os técnicos (horário e folga por técnico ficam para depois).
+- **Seletor de dia, hora e técnicos (tela cheia):** calendário em cima (só dias com horário livre ficam ativos, com um ponto; dias passados e sem vaga ficam apagados), horários livres do dia no meio (de 30 em 30 minutos, dentro do expediente, sem passar do fechamento) e, embaixo, os técnicos livres naquele horário (um ou mais; o primeiro livre já vem marcado). Carrega só os agendamentos do mês que está na tela; trocar de mês limpa o dia escolhido.
+- **Onde é usado:** Agendar, Editar agendamento e Reagendar. Nessas telas o campo "Quando" (botão) substitui os campos soltos de dia, hora e técnicos da visita. O técnico de cada serviço continua podendo ser trocado no cartão do serviço, só entre os livres.
+- **Duração usada para achar vaga:** o serviço mais longo da visita (60 minutos se ainda não há serviço). A conferência por técnico e por serviço continua valendo ao salvar.
+- **Reagendar um cancelado:** salvar reagenda (vira "Reagendado"), inclusive no mesmo dia e hora, desde que o técnico esteja livre. Se o técnico do serviço está ocupado nesse horário, outro técnico livre assume; se ninguém está livre, o app não salva e mostra o motivo.

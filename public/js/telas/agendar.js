@@ -8,12 +8,14 @@
 //                   o lembrete passa a "agendado" (origemRetornoId).
 //
 // REGRAS DESTA TELA
-//   * UM dia e UMA hora por agendamento (dá para mudar depois).
+//   * UM dia e UMA hora por agendamento (dá para mudar depois). Dia, hora e técnicos da visita
+//     são escolhidos juntos no seletor de tela cheia (seletor-horario.js): só dias e horários
+//     livres, dentro do expediente da empresa, e a lista de técnicos livres naquele horário.
 //   * Pode agendar só com cliente, dia, hora e técnico. Aparelhos e serviços
 //     são opcionais aqui; o aparelho passa a ser obrigatório na CONCLUSÃO.
 //   * Cartões: um por aparelho e, dentro dele, um por serviço. Só dá para
 //     adicionar serviço depois que o aparelho está no cartão.
-//   * Cada serviço tem um ou mais técnicos (pelo menos um). Só aparecem na lista os
+//   * Cada serviço tem um ou mais técnicos (pelo menos um) e dá para trocá-los no cartão do serviço. Só aparecem na lista os
 //     técnicos LIVRES naquele dia e horário (o mesmo técnico pode fazer vários
 //     serviços da visita: os tempos se somam). Sem técnico livre: aviso e botão bloqueado.
 //   * Cliente, aparelhos e serviços podem ser editados/removidos aqui. "Remover"
@@ -21,7 +23,7 @@
 // =============================================================================
 
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, levarAte } from '../nucleo/ui.js';
-import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTexto, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
+import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
@@ -36,11 +38,13 @@ import { formatarTelefone } from '../dominio/telefone.js';
 import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora } from '../dominio/datas.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
+import { abrirSeletorDeHorario } from './seletor-horario.js';
+import { expedienteDaEmpresa } from '../dominio/expediente.js';
 import {
   estadoInicial, novoGrupo, novoServico, inicioDoEstado, todosOsServicos, textoDoRetorno, duracaoDoTipo, duracaoDoServicoNaTela,
   DURACOES_OFERECIDAS, textoDaDuracao, problemasDoAgendamento,
   tecnicosLivresParaServico, tecnicosLivresParaAgendamento, limparTecnicosOcupados, tecnicosSugeridos,
-  pendenciasDoAgendamento, montarLinhas, estadoDeLinhas, guardarRascunho, pegarRascunho, descartarRascunho,
+  duracaoNecessaria, pendenciasDoAgendamento, montarLinhas, estadoDeLinhas, guardarRascunho, pegarRascunho, descartarRascunho,
 } from './agendamento-comum.js';
 
 const MAXIMO_RESULTADOS = 8;
@@ -54,7 +58,8 @@ export default async function montar(ctx) {
   let desligar = () => {};
   let ouvintes = [];
 
-  let estado = estadoInicial({ data: hojeISO() });
+  // Agendamento novo: dia e hora começam vazios; a pessoa escolhe no seletor (só aparecem horários livres).
+  let estado = estadoInicial({ data: '', hora: '' });
   let servico = null; // serviço aberto na rota de edição
   let servicoComErro = null; // chave do cartão de serviço destacado em vermelho (falta o técnico)
   let linhasPreservadas = []; // ids de linhas abertas que não dá para mostrar (aparelho/tipo excluído)
@@ -262,18 +267,14 @@ export default async function montar(ctx) {
         <div data-erros-gerais></div>
         <div id="area-cliente" class="pilha"></div>
         <div id="area-aparelhos" class="pilha"></div>
-        <div class="grade-2">
-          ${campoTexto({ nome: 'data', rotulo: 'Dia', tipo: 'date', valor: estado.data })}
-          ${campoTexto({ nome: 'hora', rotulo: 'Hora', tipo: 'time', valor: estado.hora })}
-        </div>
-        <div id="area-tecnico"></div>
+        <div id="area-quando"></div>
         <div id="area-obs-agendamento"></div>
         <div id="area-pendencias" class="pilha pilha--pequena"></div>
         ${botao({ texto: editando ? 'Salvar alterações' : 'Agendar', tipo: 'submit', bloco: true, id: 'botao-salvar' })}
       </form>`);
     desenharCliente();
     desenharAparelhos();
-    desenharTecnico();
+    desenharQuando();
     desenharObsAgendamento();
     desenharPendencias();
 
@@ -468,21 +469,48 @@ export default async function montar(ctx) {
     return [...form.querySelectorAll('input[type="checkbox"]')].filter((c) => c.name === nome && c.checked).map((c) => c.value);
   }
 
-  // ---- Técnico do agendamento ----
-  function desenharTecnico() {
-    const area = raiz.querySelector('#area-tecnico');
+  // ---- Quando (dia, hora e técnicos da visita): um botão que abre o seletor ----
+  function desenharQuando() {
+    const area = raiz.querySelector('#area-quando');
     if (!area) return;
-    const livres = tecnicosLivresParaAgendamento(contexto());
     const inicio = inicioDoEstado(estado);
-    const temServicos = todosOsServicos(estado).length > 0;
-    if (!inicio) { mostrar(area, ''); return; }
-    mostrar(area, livres.length === 0
-      ? aviso({ tom: 'amarelo', titulo: 'Nenhum técnico livre', texto: 'Todos já têm serviço nesse dia e horário. Escolha outro horário.' })
-      : caixasDeTecnicos({
-        nome: 'tecnicoUids', rotulo: temServicos ? 'Técnicos do agendamento (sugeridos para novos serviços)' : 'Técnicos do agendamento',
-        livres, marcados: estado.tecnicoUids,
-        ajuda: `A lista mostra só os técnicos livres em ${formatarDataBR(inicio)} às ${formatarHora(inicio)}. Marque mais de um se forem juntos. Se mudar o dia ou a hora, a lista se atualiza.`,
-      }));
+    const nomes = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]?.nome).filter(Boolean);
+    mostrar(area, html`
+      <div class="campo" data-campo="data">
+        <span class="campo__rotulo">Quando</span>
+        <button type="button" class="quando-botao" id="botao-quando" data-acao="abrir-seletor">
+          <span class="quando-botao__principal">${inicio ? `${formatarDataBR(inicio)} às ${formatarHora(inicio)}` : 'Escolher dia e horário'}</span>
+          <span class="quando-botao__sub">${inicio ? (nomes.length > 0 ? nomes.join(', ') : 'Sem técnico escolhido') : 'Toque para ver os horários livres'}</span>
+        </button>
+      </div>`);
+  }
+
+  /** Abre o seletor de dia, hora e técnicos e aplica a escolha na tela. */
+  async function abrirSeletor() {
+    const antes = [...estado.tecnicoUids];
+    const escolha = await abrirSeletorDeHorario({
+      data: estado.data,
+      hora: estado.hora,
+      tecnicoUids: estado.tecnicoUids,
+      expediente: expedienteDaEmpresa(sessao.empresa),
+      duracaoMin: duracaoNecessaria(estado, tiposPorId()),
+      tecnicos,
+      agendamentoId,
+      // Só os agendamentos do mês que está na tela (com uma folga de 1 dia antes e 1 depois).
+      carregarMes: (ano, mes) => listarAgendados({ empresaId: usuario.empresaId, de: new Date(ano, mes, 0), ate: new Date(ano, mes + 1, 2) }),
+    });
+    if (!escolha || !ctx.ativo()) return;
+    const mesmos = (a, b) => a.length === b.length && a.every((uid) => b.includes(uid));
+    // Serviços que seguiam os técnicos da visita passam para os novos; os que tinham técnico só deles continuam.
+    for (const s of todosOsServicos(estado)) if (mesmos(s.tecnicoUids, antes)) s.tecnicoUids = [...escolha.tecnicoUids];
+    estado.data = escolha.data;
+    estado.hora = escolha.hora;
+    estado.tecnicoUids = [...escolha.tecnicoUids];
+    try { await carregarOcupacao(); } catch (erro) { toast(traduzirErro(erro), 'erro'); }
+    for (const s of todosOsServicos(estado)) {
+      if (s.tecnicoUids.length === 0) s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
+    }
+    if (ctx.ativo()) redesenharTudo();
   }
 
   function desenharPendencias() {
@@ -494,14 +522,14 @@ export default async function montar(ctx) {
     const problemas = pendenciasDoAgendamento(estado, contexto());
     mostrar(area, html`
       ${linhasPreservadas.length > 0 && aviso({ texto: `${linhasPreservadas.length} ${linhasPreservadas.length === 1 ? 'serviço usa um aparelho ou tipo que foi excluído' : 'serviços usam aparelho ou tipo que foi excluído'}. ${linhasPreservadas.length === 1 ? 'Ele continua' : 'Eles continuam'} no agendamento e só muda${linhasPreservadas.length === 1 ? '' : 'm'} de dia/hora.` })}
-      ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento estava cancelado. Escolha o novo dia e hora: ao salvar, ele volta para "Agendado".' })}
+      ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento estava cancelado. Confira o dia e a hora (pode manter os mesmos): ao salvar, ele volta para "Agendado".' })}
       ${fechadas > 0 && aviso({ texto: `${fechadas} ${fechadas === 1 ? 'serviço deste agendamento já foi concluído ou cancelado' : 'serviços deste agendamento já foram concluídos ou cancelados'} e não aparece${fechadas === 1 ? '' : 'm'} aqui.` })}
       ${problemas.map((p) => aviso({ tom: 'amarelo', texto: p }))}`);
   }
 
   function redesenharTudo() {
     desenharAparelhos();
-    desenharTecnico();
+    desenharQuando();
     desenharPendencias();
   }
 
@@ -520,17 +548,9 @@ export default async function montar(ctx) {
       else if (nome.startsWith('obsServico-')) { const s = acharServico(nome.slice(11)); if (s) s.obs = e.target.value; }
     });
 
-    ouvir(form, 'change', async (e) => {
+    ouvir(form, 'change', (e) => {
       const nome = e.target.name || '';
-      if (nome === 'data' || nome === 'hora') {
-        estado[nome] = e.target.value;
-        try { await carregarOcupacao(); } catch (erro) { toast(traduzirErro(erro), 'erro'); }
-        sugerirTecnicoDoAgendamento();
-        if (ctx.ativo()) redesenharTudo();
-      } else if (nome === 'tecnicoUids') {
-        estado.tecnicoUids = marcadosNaTela(form, nome);
-        desenharPendencias();
-      } else if (nome.startsWith('tec-')) {
+      if (nome.startsWith('tec-')) {
         const s = acharServico(nome.slice(4));
         if (s) {
           s.tecnicoUids = marcadosNaTela(form, nome);
@@ -543,6 +563,7 @@ export default async function montar(ctx) {
     });
 
     desligar = aoClicar(raiz, {
+      'abrir-seletor': abrirSeletor,
       'escolher-cliente': (el) => escolherCliente(el.dataset.id),
       'trocar-cliente': trocarCliente,
       'editar-cliente': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/editar?voltar=1`),
@@ -689,7 +710,9 @@ export default async function montar(ctx) {
   function mostrarProblema(form, problema) {
     const { alvo, texto } = problema;
     if (alvo.campo) {
-      mostrarErrosNosCampos(form, { [alvo.campo]: texto });
+      // Dia, hora e técnicos da visita ficam no mesmo campo "Quando".
+      const campo = ['hora', 'tecnicoUids'].includes(alvo.campo) ? 'data' : alvo.campo;
+      mostrarErrosNosCampos(form, { [campo]: texto });
       return;
     }
     if (alvo.servico) {
@@ -724,7 +747,8 @@ export default async function montar(ctx) {
       descricao: estado.observacao,
     }, { hojeISO: hojeISO(), exigirFuturo: !editando, exigirTipo: false });
     if (!valido) {
-      const { descricao, ...outros } = erros;
+      const { descricao, hora: erroHora, ...outros } = erros;
+      if (erroHora && !outros.data) outros.data = erroHora; // dia e hora ficam no mesmo campo "Quando"
       mostrarErrosNosCampos(form, descricao ? { ...outros, observacao: descricao } : outros);
       return;
     }

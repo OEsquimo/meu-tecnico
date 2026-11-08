@@ -83,7 +83,7 @@ export default async function montar(ctx) {
               ${opcoes.length > 0
     ? campoPilulas({ nome: `aparelho-${i}`, rotulo: 'Qual aparelho?', opcoes, valor: b.aparelhoId })
     : html`<div class="campo" data-campo="aparelho-${i}"><span class="campo__rotulo">Qual aparelho?</span><p class="campo__ajuda">${b.aparelhoId ? '' : 'Nenhum aparelho disponível. Cadastre um novo abaixo.'}</p></div>`}
-              ${botao({ texto: '+ Cadastrar aparelho novo', variante: 'secundario', pequeno: true, acao: 'novo-aparelho', dados: { indice: i } })}
+              <div class="informar__novo-aparelho">${botao({ texto: '+ Cadastrar aparelho novo', variante: 'secundario', pequeno: true, acao: 'novo-aparelho', dados: { indice: i } })}</div>
               ${b.aparelhoId && campoPilulas({
     nome: `servicos-${i}`, rotulo: 'Quais serviços foram feitos neste aparelho?', multiplo: true,
     opcoes: tipos.map((t) => ({ valor: t.id, rotulo: t.nome })), valor: b.tipoIds,

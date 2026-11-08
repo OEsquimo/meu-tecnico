@@ -3,6 +3,7 @@ PACOTE 6 (modo demonstração): cartão do cliente em Agendar, "Informar aparelh
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote6.py
 """
 from playwright.sync_api import sync_playwright
+from _quando import escolher_quando, tecnicos_no_horario
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -37,8 +38,7 @@ with sync_playwright() as p:
     pag.click("[data-acao=trocar-cliente]"); pag.wait_for_timeout(500)
     ok(pag.locator("[data-acao=escolher-cliente]").count() > 0, "'Não é o cliente?' reabre a busca")
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
-    pag.fill("input[name=data]", "2031-04-10"); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(500)
-    pag.fill("input[name=hora]", "09:00"); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(500)
+    escolher_quando(pag, "2031-04-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "Serviço a definir" in texto(), "agendado só com cliente, dia, hora e técnico")
     sid = pag.url.split("/servico/")[1]
@@ -65,9 +65,7 @@ with sync_playwright() as p:
     # ---- Técnico informa sozinho; o administrador é avisado ----
     ir("/agenda"); ir("/agendar")
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
-    pag.fill("input[name=data]", "2031-04-11"); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(500)
-    pag.fill("input[name=hora]", "10:00"); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(500)
-    pag.locator("#area-tecnico .tecnico-opcao", has_text="Rafael").first.click(); pag.wait_for_timeout(400)
+    escolher_quando(pag, "2031-04-11", "10:00", tecnico="Rafael")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     sid2 = pag.url.split("/servico/")[1]
     pag.goto(BASE + "#/entrar"); pag.reload(); pag.wait_for_timeout(800)
