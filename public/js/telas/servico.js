@@ -199,6 +199,15 @@ export default async function montar(ctx) {
       </div>`);
 
     desligar();
+    // Depois de excluir: se ainda sobrou serviço na visita, continua nela (usando um serviço que existe);
+    // se não sobrou nada, vai para o Início. Evita recarregar o endereço de um serviço já apagado.
+    function seguirDepoisDeExcluir(idsExcluidos) {
+      const restantes = linhas.filter((l) => !idsExcluidos.includes(l.id));
+      if (restantes.length === 0) { ir('/'); return; }
+      if (restantes.some((l) => l.id === s.id)) { ctx.recarregar(); return; }
+      ir(`/servico/${encodeURIComponent(restantes[0].id)}`, { substituir: true });
+    }
+
     desligar = aoClicar(raiz, {
       navegar: () => abrirNavegacao(s),
       'alternar-pago': (el) => comCarregando(el, async () => {
@@ -235,7 +244,7 @@ export default async function montar(ctx) {
           if (!await confirmar({ titulo: 'Excluir este serviço?', mensagem: 'Ele sai do agendamento. O cliente e os outros serviços não são afetados.', confirmar: 'Excluir serviço', cancelar: 'Voltar', perigo: true })) return;
           await excluirServicoAdicionado(usuario.empresaId, linha);
           toast('Serviço excluído.', 'sucesso');
-          ctx.recarregar();
+          seguirDepoisDeExcluir([linha.id]);
         } catch (e) { mostrarErro(e); }
       }),
       'editar-concluido': async (el) => {
@@ -258,7 +267,7 @@ export default async function montar(ctx) {
           try {
             await excluirServico(usuario.empresaId, linha.id, { permitirConcluido: true });
             toast('Serviço excluído.', 'sucesso');
-            if (linhas.length > 1) ctx.recarregar(); else ir('/historico');
+            seguirDepoisDeExcluir([linha.id]);
           } catch (e) { mostrarErro(e); }
         });
       },
@@ -293,7 +302,7 @@ export default async function montar(ctx) {
           try {
             await excluirAgendamentoCompleto(usuario.empresaId, linhas);
             toast('Agendamento excluído.', 'sucesso');
-            if (temConcluida) ctx.recarregar(); else ir('/agenda');
+            seguirDepoisDeExcluir(linhas.filter((l) => l.status !== STATUS.CONCLUIDO).map((l) => l.id));
           } catch (e) { mostrarErro(e); }
         });
       },

@@ -201,7 +201,7 @@ test('editar não conflita com o próprio agendamento', async () => {
   assert.equal((await listarLinhasDoAgendamento(E, { agendamentoId: id })).length, 1);
 });
 
-test('agendamento cancelado só é reagendado ao mudar data/hora (vira Reagendado); sem mudar, continua cancelado', async () => {
+test('agendamento cancelado é reagendado ao salvar (vira Reagendado); o técnico ocupado bloqueia', async () => {
   await novoBanco();
   const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
@@ -229,16 +229,30 @@ test('agendamento cancelado só é reagendado ao mudar data/hora (vira Reagendad
   assert.equal(de_novo[0].reagendado, false);
 });
 
-test('editar um cancelado SEM mudar data nem horário não reagenda (continua cancelado)', async () => {
+test('reagendar um cancelado com o MESMO dia e hora é permitido quando o técnico está livre (vira Reagendado)', async () => {
   await novoBanco();
   const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
   await cancelarAgendamentoCompleto(E, existentes);
   const canceladas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
-  await salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, observacao: 'trocar de peça', linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }, { aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
+  await salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
   const depois = await listarLinhasDoAgendamento(E, { agendamentoId: id });
-  assert.equal(depois.length, 2);
-  assert.ok(depois.every((l) => l.status === 'cancelado' && l.reagendado !== true));
+  assert.equal(depois.length, 1);
+  assert.equal(depois[0].status, 'agendado');
+  assert.equal(depois[0].reagendado, true);
+  assert.equal(formatarHora(depois[0].dataAgendada), formatarHora(existentes[0].dataAgendada), 'continua no mesmo horário');
+});
+
+test('reagendar um cancelado no mesmo dia e hora falha se o técnico já tem outro serviço nesse horário', async () => {
+  await novoBanco();
+  const id = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const existentes = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await cancelarAgendamentoCompleto(E, existentes);
+  const canceladas = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] })); // ocupa o horário
+  await assert.rejects(() => salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] })), /já tem outro serviço/);
+  const depois = await listarLinhasDoAgendamento(E, { agendamentoId: id });
+  assert.equal(depois[0].status, 'cancelado', 'não mudou nada');
 });
 
 test('concluído: o administrador pode excluir (confirmando); sem a confirmação o app recusa', async () => {

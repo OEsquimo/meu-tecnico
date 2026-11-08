@@ -5,6 +5,7 @@ aparelhos recolhidos na ficha e cliente com histórico arquivado.
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote3.py
 """
 from playwright.sync_api import sync_playwright
+from _quando import escolher_quando, tecnicos_no_horario
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -42,8 +43,7 @@ with sync_playwright() as p:
     ok(pag.locator("[data-acao=excluir]").count() == 1 and pag.locator("a:has-text('Editar')").count() >= 1, "cancelado: Editar e Excluir")
     ok(pag.locator("[data-acao=cancelar]").count() == 0, "cancelado não tem Cancelar")
     pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1000)
-    pag.fill("input[name=data]", "2031-07-10"); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(400)
-    pag.fill("input[name=hora]", "11:00"); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(400)
+    escolher_quando(pag, "2031-07-10", "11:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok(pag.locator(".selo--roxo:has-text('Reagendado')").count() >= 1, "novo horário: selo roxo 'Reagendado'")
     ok(pag.locator("[data-acao=cancelar]").count() == 1 and pag.locator("[data-acao=excluir]").count() == 1, "reagendado: Editar, Cancelar e Excluir")

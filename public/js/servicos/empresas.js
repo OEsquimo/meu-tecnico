@@ -75,6 +75,11 @@ export async function garantirTiposPadrao(empresaId) {
   return true;
 }
 
+/** Salva o horário de funcionamento (expediente) da empresa: { seg: { aberto, de, ate }, ... }. */
+export async function salvarExpediente(empresaId, expediente) {
+  await gravar([op.atualizar(`empresas/${empresaId}`, { expediente })]);
+}
+
 /** Salva as configurações da empresa (nome, aviso de retorno, texto do WhatsApp, permissão do técnico, cobrança: Pix, texto e tom). */
 export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
   await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca })]);

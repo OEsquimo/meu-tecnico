@@ -94,11 +94,20 @@ export function tecnicosLivresParaServico({ estado, servico, tecnicos, tiposPorI
   return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, minutosDoTecnicoNaVisita(estado, tiposPorId, t.uid, servico.chave) + minha, agendados, agendamentoId));
 }
 
+/**
+ * Quanto tempo a visita pede de um técnico, para oferecer horários no seletor: o serviço mais longo
+ * (ou a duração padrão, se ainda não há serviço). A conferência por serviço continua valendo ao salvar.
+ */
+export function duracaoNecessaria(estado, tiposPorId) {
+  const duracoes = todosOsServicos(estado).map((s) => duracaoDoServicoNaTela(s, tiposPorId));
+  return duracoes.length > 0 ? Math.max(...duracoes) : DURACAO_PADRAO_MIN;
+}
+
 /** Técnicos livres para o "técnico do agendamento" (quando ainda não há serviço). */
-export function tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId = null }) {
+export function tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId = null, duracaoMin = DURACAO_PADRAO_MIN }) {
   const inicio = inicioDoEstado(estado);
   if (!inicio) return [];
-  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, DURACAO_PADRAO_MIN, agendados, agendamentoId));
+  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, duracaoMin, agendados, agendamentoId));
 }
 
 /**
@@ -114,7 +123,7 @@ export function limparTecnicosOcupados({ estado, tecnicos, tiposPorId, agendados
     if (ficam.length !== s.tecnicoUids.length) { s.tecnicoUids = ficam; perdidos += 1; }
   }
   if (estado.tecnicoUids.length > 0) {
-    const livres = tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId });
+    const livres = tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId, duracaoMin: duracaoNecessaria(estado, tiposPorId) });
     estado.tecnicoUids = estado.tecnicoUids.filter((uid) => livres.some((t) => t.uid === uid));
   }
   return perdidos;

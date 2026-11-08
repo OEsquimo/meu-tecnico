@@ -5,6 +5,7 @@ cliente sem repetir.
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote1.py
 """
 from playwright.sync_api import sync_playwright
+from _quando import escolher_quando, tecnicos_no_horario
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -76,8 +77,7 @@ with sync_playwright() as p:
     pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
     ok("/editar" in pag.url, "Reagendar abre a edição")
     ok("estava cancelado" in texto(), "edição avisa que estava cancelado")
-    pag.fill("input[name=data]", "2031-06-10"); pag.dispatch_event("input[name=data]", "change"); pag.wait_for_timeout(500)
-    pag.fill("input[name=hora]", "10:00"); pag.dispatch_event("input[name=hora]", "change"); pag.wait_for_timeout(500)
+    escolher_quando(pag, "2031-06-10", "10:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "editar" not in pag.url, "salvou o reagendamento")
     ok("Reagendado" in texto() and "aguardando" not in texto().lower(), "ficou 'Reagendado'")
@@ -86,7 +86,7 @@ with sync_playwright() as p:
     pag.click("[data-acao=excluir]"); pag.wait_for_timeout(400)
     ok("Não apaga o cliente" in pag.inner_text("dialog"), "aviso diz que não apaga cliente nem concluídos")
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1500)
-    ok("/agenda" in pag.url, "excluir volta para a agenda")
+    ok(pag.url.endswith("#/") or pag.url.endswith("/"), "excluir (sem sobrar serviço) vai para o Início")
 
     # ---- Sem aparelho nem serviço repetido no agendamento ----
     ir("/agenda"); ir("/agendar")
