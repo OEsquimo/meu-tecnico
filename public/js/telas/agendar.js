@@ -441,7 +441,9 @@ export default async function montar(ctx) {
             ${botao({ texto: 'Remover', variante: 'perigo', pequeno: true, acao: 'remover-servico', dados: { servico: s.chave } })}
           </div>
         </div>
-        ${livres.length === 0
+        ${!inicioDoEstado(estado)
+    ? html`<div class="aviso-neutro" data-campo="tec-${s.chave}">Escolha o dia e o horário em "Quando" para ver os técnicos livres.</div>`
+    : livres.length === 0
     ? html`<div data-campo="tec-${s.chave}">${aviso({ tom: 'amarelo', texto: 'Nenhum técnico está livre nesse dia e horário. Mude o dia ou a hora.' })}</div>`
     : caixasDeTecnicos({ nome: `tec-${s.chave}`, rotulo: 'Técnicos deste serviço', livres, marcados: s.tecnicoUids })}
         ${observacaoRecolhivel({ nome: `obsServico-${s.chave}`, rotulo: 'Observações do serviço', valor: s.obs, aberta: s.obsAberta, tipo: 'servico', chave: s.chave })}
@@ -513,16 +515,22 @@ export default async function montar(ctx) {
     if (ctx.ativo()) redesenharTudo();
   }
 
+  /** O agendamento aberto está cancelado (salvar o reagenda)? */
+  function estaReagendando() {
+    const editaveis = linhasEditaveis(linhasExistentes);
+    return editaveis.length > 0 && editaveis.every((l) => l.status === STATUS.CANCELADO);
+  }
+
   function desenharPendencias() {
     const area = raiz.querySelector('#area-pendencias');
     if (!area) return;
     const editaveis = linhasEditaveis(linhasExistentes);
     const fechadas = linhasExistentes.filter((l) => !editaveis.includes(l)).length;
-    const reagendando = editaveis.length > 0 && editaveis.every((l) => l.status === STATUS.CANCELADO);
+    const reagendando = estaReagendando();
     const problemas = pendenciasDoAgendamento(estado, contexto());
     mostrar(area, html`
       ${linhasPreservadas.length > 0 && aviso({ texto: `${linhasPreservadas.length} ${linhasPreservadas.length === 1 ? 'serviço usa um aparelho ou tipo que foi excluído' : 'serviços usam aparelho ou tipo que foi excluído'}. ${linhasPreservadas.length === 1 ? 'Ele continua' : 'Eles continuam'} no agendamento e só muda${linhasPreservadas.length === 1 ? '' : 'm'} de dia/hora.` })}
-      ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento estava cancelado. Confira o dia e a hora (pode manter os mesmos): ao salvar, ele volta para "Agendado".' })}
+      ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento está cancelado. Confira o dia e a hora (pode manter os mesmos).' })}
       ${fechadas > 0 && aviso({ texto: `${fechadas} ${fechadas === 1 ? 'serviço deste agendamento já foi concluído ou cancelado' : 'serviços deste agendamento já foram concluídos ou cancelados'} e não aparece${fechadas === 1 ? '' : 'm'} aqui.` })}
       ${problemas.map((p) => aviso({ tom: 'amarelo', texto: p }))}`);
   }
@@ -733,6 +741,7 @@ export default async function montar(ctx) {
   // Salvar
   // ---------------------------------------------------------------------------
   async function enviar(form) {
+    const reagendouAgora = estaReagendando(); // antes de salvar: depois o agendamento já deixou de estar cancelado
     limparErrosGerais(form);
     const dados = lerCampos(form);
     estado.data = dados.data || estado.data;
@@ -778,7 +787,8 @@ export default async function montar(ctx) {
       // A linha aberta na URL pode ter sido removida da edição: vai para uma linha que existe.
       const restantes = await listarLinhasDoAgendamento(usuario.empresaId, { agendamentoId: id });
       const destino = restantes.find((l) => l.status === STATUS.AGENDADO) || restantes[0];
-      if (editando) toast('Agendamento atualizado.', 'sucesso');
+      if (reagendouAgora) toast('Agendamento reagendado.', 'sucesso');
+      else if (editando) toast('Agendamento atualizado.', 'sucesso');
       else toast(`Agendado para ${formatarDataHoraBR(new Date(`${limpos.data}T${limpos.hora}:00`))}.`, 'sucesso');
       ctx.ir(`/servico/${encodeURIComponent(destino?.id || params.id || id)}`, { substituir: true });
     });

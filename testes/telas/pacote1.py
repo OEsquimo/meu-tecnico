@@ -76,7 +76,7 @@ with sync_playwright() as p:
     ok(pag.locator("a:has-text('Reagendar'), button:has-text('Reagendar')").count() == 0, "não há botão Reagendar")
     pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
     ok("/editar" in pag.url, "Reagendar abre a edição")
-    ok("estava cancelado" in texto(), "edição avisa que estava cancelado")
+    ok("está cancelado" in texto() and "volta para" not in texto(), "edição avisa que o agendamento está cancelado")
     escolher_quando(pag, "2031-06-10", "10:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "editar" not in pag.url, "salvou o reagendamento")
