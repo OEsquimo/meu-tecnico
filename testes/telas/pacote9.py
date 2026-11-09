@@ -105,7 +105,7 @@ with sync_playwright() as p:
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir(url_visita.split("#")[1])
     pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
-    ok("estava cancelado" in texto() and "14/04/2031" in pag.inner_text("#botao-quando"), "reagendar abre com o dia e a hora de antes")
+    ok("está cancelado" in texto() and "14/04/2031" in pag.inner_text("#botao-quando"), "reagendar abre com o dia e a hora de antes")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "Reagendado" in texto() and "10:00" in texto(), "salvou no mesmo dia e hora: ficou 'Reagendado'")
     url_visita = pag.url

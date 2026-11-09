@@ -38,17 +38,18 @@
   text-decoration: none;
 }
 
+/* Hora (caixinha azul): no cartão da visita fica logo abaixo do status, à direita. */
 .servico-cartao__hora {
   flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   min-width: 56px;
-  padding: 6px 8px;
+  padding: 4px 10px;
   border-radius: var(--raio-pequeno);
   background: var(--cor-primaria-clara);
   color: var(--cor-primaria);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -57,20 +58,37 @@
   font-weight: 700;
 }
 
-/* Cartão da visita: topo (hora, cliente, endereço + Editar) e, abaixo, aparelhos e serviços. */
-.visita-cartao__topo {
+/* Cartão da visita: em cima o nome (à esquerda) e o status com a hora (à direita);
+   embaixo o endereço, com a largura toda; depois aparelhos e serviços. */
+.visita-cartao__corpo {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.visita-cartao__linha {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.visita-cartao__corpo {
+.visita-cartao__nome {
   flex: 1 1 auto;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.visita-cartao__topo > .selo {
+.visita-cartao__lado {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.visita-cartao__local {
+  margin-top: 4px;
 }
 
 .visita-bloco {
@@ -502,6 +520,16 @@
 }
 .calendario__dia--sem-vaga {
   opacity: 0.35;
+}
+
+/* Aviso cinza, só informativo (ainda não há dia e hora para conferir os técnicos). */
+.aviso-neutro {
+  padding: 12px 14px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-neutra-fundo);
+  color: var(--cor-texto-suave);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 /* Campo "Quando" de Agendar/Editar: um botão grande que abre o seletor. */

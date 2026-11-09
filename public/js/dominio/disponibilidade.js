@@ -35,3 +35,21 @@ export function diasComVaga({ expediente, ano, mes, duracaoMin, tecnicos, agenda
   }
   return dias;
 }
+
+/**
+ * Os dias LOTADOS de um mês: dias abertos, que ainda não acabaram, onde NÃO sobrou horário livre
+ * (nenhum horário do expediente tem técnico livre pelo tempo da visita). Dia fechado e dia que
+ * já passou não são "lotados". Devolve um Set de "AAAA-MM-DD".
+ */
+export function diasLotados({ expediente, ano, mes, duracaoMin, tecnicos, agendados, ignorarAgendamento = null, agora = new Date() }) {
+  const dias = new Set();
+  for (let d = 1; d <= diasNoMes(ano, mes); d += 1) {
+    const iso = paraISO(new Date(ano, mes, d));
+    if (!expedienteDoDia(expediente, iso)?.aberto) continue;
+    // Ainda há horário pela frente neste dia? (hoje, depois do expediente, o dia só "acabou")
+    const aindaTemHorario = horariosDoDia(expediente, iso, duracaoMin).some((hora) => combinarDataHora(iso, hora).getTime() > agora.getTime());
+    if (!aindaTemHorario) continue;
+    if (horariosLivresDoDia({ expediente, iso, duracaoMin, tecnicos, agendados, ignorarAgendamento, agora }).length === 0) dias.add(iso);
+  }
+  return dias;
+}

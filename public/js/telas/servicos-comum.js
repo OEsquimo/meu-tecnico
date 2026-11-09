@@ -123,19 +123,19 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
   const situacao = seloDoServico(linhas.find((l) => estaAtrasado(l)) || primeira);
   return html`
     <div class="cartao servico-cartao ${atrasado ? 'servico-cartao--atrasado' : ''}">
-      <div class="visita-cartao__topo">
-        <a class="servico-cartao__corpo visita-cartao__corpo" href="#/servico/${primeira.id}">
-          <div class="servico-cartao__hora">
-            ${formatarHora(primeira.dataAgendada)}
-            ${mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
+      <a class="visita-cartao__corpo" href="#/servico/${primeira.id}">
+        <div class="visita-cartao__linha">
+          <div class="item-lista__titulo visita-cartao__nome">${visita.clienteNome}</div>
+          <div class="visita-cartao__lado">
+            ${selo(situacao.texto, situacao.tom)}
+            <div class="servico-cartao__hora">
+              ${formatarHora(primeira.dataAgendada)}
+              ${mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
+            </div>
           </div>
-          <div class="expande">
-            <div class="item-lista__titulo">${visita.clienteNome}</div>
-            ${primeira.local && html`<div class="item-lista__sub">${primeira.local}</div>`}
-          </div>
-        </a>
-        ${selo(situacao.texto, situacao.tom)}
-      </div>
+        </div>
+        ${primeira.local && html`<div class="item-lista__sub visita-cartao__local">${primeira.local}</div>`}
+      </a>
       ${blocosPorAparelho(linhas).map((bloco) => html`
         <div class="visita-bloco">
           <div class="visita-bloco__titulo">${bloco.rotulo || 'Aparelho ainda não escolhido'}</div>

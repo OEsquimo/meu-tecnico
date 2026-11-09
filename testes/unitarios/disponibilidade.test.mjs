@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expedientePadrao, expedienteDaEmpresa, validarExpediente, horariosDoDia, horaParaMinutos, minutosParaHora } from '../../public/js/dominio/expediente.js';
-import { horariosLivresDoDia, diasComVaga } from '../../public/js/dominio/disponibilidade.js';
+import { horariosLivresDoDia, diasComVaga, diasLotados } from '../../public/js/dominio/disponibilidade.js';
 
 // 2031-04-14 é segunda-feira; 2031-04-13 é domingo.
 const SEG = '2031-04-14';
@@ -108,4 +108,35 @@ test('dias com vaga: dia cheio, domingo fechado e dia passado ficam de fora', ()
   assert.ok(!dias.has('2031-04-02'), 'dia passado');
   const comBruno = diasComVaga({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A, B], agendados, agora: new Date(2031, 3, 3) });
   assert.ok(comBruno.has('2031-04-15'), 'com outro técnico livre o dia volta a ter vaga');
+});
+
+test('dias lotados: só o dia aberto, futuro e sem nenhum horário livre; fechado e passado não contam', () => {
+  const e = expedientePadrao();
+  e.ter = { aberto: true, de: '09:00', ate: '10:00' }; // terça só tem o horário das 09:00
+  const agendados = [agendado('a', '2031-04-15', '09:00', 60)]; // terça 15 ocupada para a Ana
+  const agora = new Date(2031, 3, 3);
+  const lotados = diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A], agendados, agora });
+  assert.ok(lotados.has('2031-04-15'), 'terça cheia está lotada');
+  assert.ok(!lotados.has('2031-04-14'), 'segunda livre não é lotada');
+  assert.ok(!lotados.has('2031-04-13'), 'domingo fechado não é lotado');
+  assert.ok(!lotados.has('2031-04-02'), 'dia passado não é lotado');
+  // com outro técnico livre o dia deixa de estar lotado
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A, B], agendados, agora }).has('2031-04-15'));
+  // sem nenhum técnico, todo dia aberto e futuro está lotado
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [], agendados: [], agora }).has('2031-04-14'));
+});
+
+test('dias lotados: a conta usa a duração da visita (uma instalação de 3h pode não caber onde uma limpeza de 1h cabe)', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '12:00' };
+  const agendados = [agendado('a', SEG, '10:00', 60)]; // Ana ocupada das 10:00 às 11:00
+  const agora = new Date(2031, 3, 3);
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A], agendados, agora }).has(SEG), '1h cabe às 09:00 ou 11:00');
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 180, tecnicos: [A], agendados, agora }).has(SEG), '3h não cabe no dia');
+});
+
+test('dias lotados: hoje, depois do fim do expediente, o dia só acabou (não é lotado)', () => {
+  const e = expedientePadrao();
+  const noite = new Date(2031, 3, 14, 20, 0);
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A], agendados: [], agora: noite }).has(SEG));
 });

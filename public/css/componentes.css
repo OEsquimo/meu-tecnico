@@ -1040,11 +1040,11 @@ textarea.campo__entrada {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cor-primaria);
+  background: var(--cor-alerta-forte); /* ponto vermelho = dia lotado */
 }
 
 .calendario__dia--selecionado .calendario__ponto {
-  background: #fff;
+  background: #ffb3b3;
 }
 
 /* ---------- Faixa de aviso (sem internet / modo demonstração) ---------- */
