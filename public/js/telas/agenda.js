@@ -1,11 +1,13 @@
 // =============================================================================
 // TELA: Agenda
 // =============================================================================
-// Calendário do mês (pontinho nos dias com serviço) + lista dos serviços do dia
-// escolhido.
+// Calendário do mês (um ponto por dia: azul = tem agendamento e ainda cabe mais; vermelho = lotado)
+// + lista dos serviços do dia escolhido.
 //   * ADMINISTRADOR: vê os serviços de todos, com filtro por técnico, e tem o
 //     botão "Agendar" (já abre a tela de agendar com o dia escolhido).
-//   * TÉCNICO: vê só os serviços dele (a consulta já filtra no servidor).
+//   * TÉCNICO: vê só os serviços dele (a consulta já filtra no servidor) e só o ponto azul:
+//     ele não enxerga a agenda da empresa, então não sabe se o dia está lotado.
+//   * Com o filtro de técnico ligado, os pontos falam só daquele técnico (a disponibilidade dele).
 // Mostra só serviços AGENDADOS (os concluídos ficam no Histórico).
 // Cada VISITA vira um cartão só (cliente e endereço uma vez); os serviços ficam
 // dentro, por aparelho, cada um com seu técnico e seu "Concluir".
@@ -17,10 +19,17 @@ import { cabecalho, botao, estadoVazio, esqueletos, campoSelecao } from '../nucl
 import { icone } from '../nucleo/icones.js';
 import { listarAgendados, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
-import { gradeDoMes, agruparPorDia, mesVizinho, DIAS_DA_SEMANA } from '../dominio/agenda.js';
+import { agruparPorDia, mesVizinho } from '../dominio/agenda.js';
+import { pontosDoMes } from '../dominio/disponibilidade.js';
+import { expedienteDaEmpresa } from '../dominio/expediente.js';
+import { sessao } from '../nucleo/sessao.js';
+import { calendarioDoMes } from './calendario-comum.js';
 import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js';
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+
+/** Medida do "dia lotado" na Agenda: o menor serviço padrão (1 hora). */
+const DURACAO_MINIMA_MIN = 60;
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
@@ -50,8 +59,10 @@ export default async function montar(ctx) {
       await carregarEstilos();
       const tarefas = [listarAgendados({
         empresaId: usuario.empresaId,
-        de: new Date(ano, mes, 1),
-        ate: new Date(ano, mes + 1, 1),
+        // Com um dia de margem de cada lado: um serviço que começa no fim de um dia e invade o seguinte
+        // também entra na conta do ponto vermelho.
+        de: new Date(ano, mes, 0),
+        ate: new Date(ano, mes + 1, 2),
         tecnicoUid: usuario.admin ? null : usuario.uid,
       })];
       // A lista de técnicos só é buscada uma vez; se falhar, o filtro simplesmente some.
@@ -95,10 +106,10 @@ export default async function montar(ctx) {
             <div class="agenda-mes__titulo" aria-live="polite">${formatarMesAno(ano, mes)}</div>
             <button type="button" class="agenda-mes__botao agenda-mes__botao--proximo" data-acao="mes-seguinte" aria-label="Próximo mês">${icone('voltar', 22)}</button>
           </div>
-          <div class="calendario">
-            ${DIAS_DA_SEMANA.map((d) => html`<div class="calendario__semana" aria-hidden="true">${d}</div>`)}
-            ${gradeDoMes(ano, mes).map((c) => celula(c, grupos))}
-          </div>
+          ${calendarioDoMes({
+    ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(),
+    complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} visita(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
+  })}
         </section>
 
         <section class="pilha pilha--pequena" aria-label="Serviços do dia">
@@ -118,16 +129,22 @@ export default async function montar(ctx) {
     if (filtro) aoEnviar(filtro, () => {});
   }
 
-  /** Uma célula do calendário: dia vazio, ou botão com pontinho se tem serviço. */
-  function celula(c, grupos) {
-    if (!c.iso) return html`<span class="calendario__dia calendario__dia--vazio" aria-hidden="true"></span>`;
-    const tem = !!grupos[c.iso];
-    const classes = ['calendario__dia'];
-    if (c.iso === hoje) classes.push('calendario__dia--hoje');
-    if (c.iso === diaEscolhido) classes.push('calendario__dia--selecionado');
-    return html`<button type="button" class="${classes.join(' ')}" data-acao="dia" data-dia="${c.iso}"
-      aria-label="${formatarDiaExtenso(c.iso)}${tem ? `, ${agruparAgendamentos(grupos[c.iso]).length} visita(s)` : ''}" aria-pressed="${c.iso === diaEscolhido ? 'true' : 'false'}">
-      ${c.dia}${tem && html`<span class="calendario__ponto"></span>`}</button>`;
+  /**
+   * Os pontos do mês. O vermelho (dia lotado) é calculado só para o administrador e só com a lista de
+   * técnicos carregada; a medida é 1 hora (nem um serviço de 1h cabe). Com o filtro de técnico ligado,
+   * vale só para aquele técnico. Visitas de qualquer técnico entram na conta de quem está ocupado.
+   */
+  function pontosDoCalendario() {
+    return pontosDoMes({
+      expediente: expedienteDaEmpresa(sessao.empresa),
+      ano,
+      mes,
+      duracaoMin: DURACAO_MINIMA_MIN,
+      tecnicos,
+      agendados: servicosDoMes,
+      filtroTecnico,
+      mostrarLotado: usuario.admin,
+    });
   }
 
   /** Muda de mês: escolhe hoje (se for o mês atual) ou o dia 1, e busca os dados. */

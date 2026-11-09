@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expedientePadrao, expedienteDaEmpresa, validarExpediente, horariosDoDia, horaParaMinutos, minutosParaHora } from '../../public/js/dominio/expediente.js';
-import { horariosLivresDoDia, diasComVaga, diasLotados } from '../../public/js/dominio/disponibilidade.js';
+import { horariosLivresDoDia, diasComVaga, diasLotados, pontosDoMes } from '../../public/js/dominio/disponibilidade.js';
 
 // 2031-04-14 é segunda-feira; 2031-04-13 é domingo.
 const SEG = '2031-04-14';
@@ -139,4 +139,77 @@ test('dias lotados: hoje, depois do fim do expediente, o dia só acabou (não é
   const e = expedientePadrao();
   const noite = new Date(2031, 3, 14, 20, 0);
   assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A], agendados: [], agora: noite }).has(SEG));
+});
+
+// ---------- Pontos do calendário (um por dia; o mesmo na Agenda e na escolha de dia e hora) ----------
+const base = (extra = {}) => ({ expediente: expedientePadrao(), ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A, B], agendados: [], agora: new Date(2031, 3, 3), ...extra });
+
+test('pontos: dia com visita que ainda comporta mais é AZUL; dia sem visita não tem ponto', () => {
+  const p = pontosDoMes(base({ agendados: [agendado('a', SEG, '09:00', 60)], mostrarLotado: true }));
+  assert.equal(p.get(SEG), 'azul');
+  assert.equal(p.has('2031-04-15'), false);
+  assert.equal(p.size, 1);
+});
+
+test('pontos: dia lotado é VERMELHO e o vermelho substitui o azul (um ponto só por dia)', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '10:00' };
+  const agendados = [agendado('a', SEG, '09:00', 60, '1'), agendado('b', SEG, '09:00', 60, '2')];
+  const p = pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true }));
+  assert.equal(p.get(SEG), 'vermelho');
+  assert.equal(p.size, 1);
+});
+
+test('pontos: sem permissão para ver o lotado (técnico comum) só existe o azul, nunca o vermelho', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '10:00' };
+  const agendados = [agendado('a', SEG, '09:00', 60, '1'), agendado('b', SEG, '09:00', 60, '2')];
+  const p = pontosDoMes(base({ expediente: e, agendados, mostrarLotado: false }));
+  assert.equal(p.get(SEG), 'azul');
+});
+
+test('pontos: sem lista de técnicos não se avisa "lotado" (evita falso vermelho)', () => {
+  const p = pontosDoMes(base({ tecnicos: [], agendados: [agendado('a', SEG, '09:00', 60)], mostrarLotado: true }));
+  assert.equal(p.get(SEG), 'azul');
+  assert.equal([...p.values()].includes('vermelho'), false);
+});
+
+test('pontos: visita em dia já passado (atrasada) e em dia fechado continuam AZUIS; passado e fechado nunca são vermelhos', () => {
+  const p = pontosDoMes(base({ agendados: [agendado('a', '2031-04-02', '09:00', 60), agendado('a', DOM, '09:00', 60)], mostrarLotado: true }));
+  assert.equal(p.get('2031-04-02'), 'azul');
+  assert.equal(p.get(DOM), 'azul');
+});
+
+test('pontos: só serviço AGENDADO conta; concluído, cancelado e visita de outro mês não dão ponto', () => {
+  const concluido = { ...agendado('a', SEG, '09:00', 60), status: 'concluido' };
+  const cancelado = { ...agendado('a', SEG, '10:00', 60), status: 'cancelado' };
+  const outroMes = agendado('a', '2031-05-05', '09:00', 60);
+  const p = pontosDoMes(base({ agendados: [concluido, cancelado, outroMes], mostrarLotado: true }));
+  assert.equal(p.size, 0);
+});
+
+test('pontos: com filtro de técnico o ponto fala só daquele técnico', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '10:00' };
+  e.ter = { aberto: true, de: '09:00', ate: '10:00' };
+  // segunda: Ana ocupada às 09:00, Bruno livre. terça: só Bruno tem visita.
+  const agendados = [agendado('a', SEG, '09:00', 60, '1'), agendado('b', '2031-04-15', '09:00', 60, '2')];
+  const todos = pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true }));
+  assert.equal(todos.get(SEG), 'azul', 'para a empresa, segunda ainda comporta (Bruno livre)');
+  const ana = pontosDoMes(base({ expediente: e, agendados, filtroTecnico: 'a', mostrarLotado: true }));
+  assert.equal(ana.get(SEG), 'vermelho', 'para a Ana, segunda está lotada (09:00 era o único horário)');
+  assert.equal(ana.has('2031-04-15'), false, 'a visita de terça é do Bruno: não aparece para a Ana');
+  const bruno = pontosDoMes(base({ expediente: e, agendados, filtroTecnico: 'b', mostrarLotado: true }));
+  assert.equal(bruno.has(SEG), false, 'o Bruno não tem visita na segunda');
+  assert.equal(bruno.get('2031-04-15'), 'vermelho', 'terça é o único horário do dia e ele está nele: lotada para ele');
+  // técnico do filtro que não está na lista: nada de vermelho
+  assert.equal([...pontosDoMes(base({ agendados, filtroTecnico: 'zzz', mostrarLotado: true })).values()].includes('vermelho'), false);
+});
+
+test('pontos: a visita em edição não deixa o próprio horário vermelho', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '10:00' };
+  const agendados = [agendado('a', SEG, '09:00', 60, 'edit'), agendado('b', SEG, '09:00', 60, 'outro')];
+  assert.equal(pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true })).get(SEG), 'vermelho');
+  assert.equal(pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true, ignorarAgendamento: 'edit' })).get(SEG), 'azul');
 });

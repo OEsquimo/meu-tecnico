@@ -2,8 +2,9 @@
 // SELETOR DE DIA, HORA E TÉCNICOS (tela cheia)
 // =============================================================================
 // Usado em Agendar, Editar agendamento e Reagendar. Uma tela só, numa coluna:
-//   1) calendário do mês (dia com vaga: normal, sem ponto; dia LOTADO: ponto vermelho, e ao tocar avisa
-//      que não há horário livre; dia fechado ou que já passou: apagado e desligado);
+//   1) calendário do mês (o mesmo da Agenda: ponto azul = dia com agendamento que ainda comporta mais;
+//      ponto vermelho = dia LOTADO, e ao tocar avisa que não há horário livre; dia fechado ou que já
+//      passou: apagado e desligado);
 //   2) horários livres do dia escolhido (dentro do expediente da empresa);
 //   3) técnicos livres naquele horário (marca um ou mais).
 // Devolve { data, hora, tecnicoUids } ou null se a pessoa fechar sem confirmar.
@@ -14,8 +15,9 @@
 import { html, aoClicar } from '../nucleo/ui.js';
 import { botao } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
-import { gradeDoMes, mesVizinho, DIAS_DA_SEMANA } from '../dominio/agenda.js';
-import { diasComVaga, diasLotados, horariosLivresDoDia } from '../dominio/disponibilidade.js';
+import { mesVizinho } from '../dominio/agenda.js';
+import { calendarioDoMes } from './calendario-comum.js';
+import { diasComVaga, horariosLivresDoDia, pontosDoMes } from '../dominio/disponibilidade.js';
 import { ehISOValido, formatarDiaExtenso, formatarMesAno, hojeISO } from '../dominio/datas.js';
 
 /**
@@ -96,27 +98,13 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
     }
 
     function calendario() {
-      const comVaga = carregando || erroDeCarga ? new Set() : diasComVaga({ ...contaBase(), ano, mes });
-      const lotados = carregando || erroDeCarga ? new Set() : diasLotados({ ...contaBase(), ano, mes });
-      const celulas = gradeDoMes(ano, mes);
-      return html`
-        <div class="calendario" role="grid">
-          ${DIAS_DA_SEMANA.map((d) => html`<div class="calendario__semana" aria-hidden="true">${d}</div>`)}
-          ${celulas.map((c) => {
-    if (!c.iso) return html`<span class="calendario__dia calendario__dia--vazio" aria-hidden="true"></span>`;
-    const tem = comVaga.has(c.iso);
-    const lotado = lotados.has(c.iso);
-    const ligado = tem || lotado; // dia fechado ou passado fica desligado
-    const classes = ['calendario__dia'];
-    if (c.iso === hoje) classes.push('calendario__dia--hoje');
-    if (c.iso === diaEscolhido) classes.push('calendario__dia--selecionado');
-    if (lotado) classes.push('calendario__dia--lotado');
-    if (!ligado) classes.push('calendario__dia--sem-vaga');
-    const rotulo = tem ? ', com horário livre' : (lotado ? ', sem horário livre' : '');
-    return html`<button type="button" class="${classes.join(' ')}" data-acao="seletor-dia" data-iso="${c.iso}" ${ligado ? '' : html`disabled`} aria-pressed="${c.iso === diaEscolhido}" aria-label="${c.dia}${rotulo}">
-      ${c.dia}${lotado && html`<span class="calendario__ponto"></span>`}</button>`;
-  })}
-        </div>`;
+      const pronto = !carregando && !erroDeCarga;
+      const pontos = pronto ? pontosDoMes({ ...contaBase(), ano, mes, mostrarLotado: true }) : new Map();
+      const comVaga = pronto ? diasComVaga({ ...contaBase(), ano, mes }) : new Set();
+      // Dia fechado ou que já passou: apagado. Dia com vaga ou lotado: dá para tocar.
+      const desligado = (iso) => !(comVaga.has(iso) || pontos.get(iso) === 'vermelho');
+      const complemento = (iso, ponto) => (comVaga.has(iso) ? ', com horário livre' : (ponto === 'vermelho' ? ', dia lotado, sem horário livre' : ''));
+      return calendarioDoMes({ ano, mes, hoje, escolhido: diaEscolhido, pontos, acao: 'seletor-dia', desligado, complemento });
     }
 
     function desenhar() {
