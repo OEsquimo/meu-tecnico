@@ -1040,10 +1040,19 @@ textarea.campo__entrada {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cor-alerta-forte); /* ponto vermelho = dia lotado */
+  background: var(--cor-primaria);
 }
 
 .calendario__dia--selecionado .calendario__ponto {
+  background: #fff;
+}
+
+/* Seletor de dia e hora: o ponto VERMELHO marca o dia lotado (na Agenda o ponto azul marca dia com visita). */
+.calendario__ponto--lotado {
+  background: var(--cor-alerta-forte);
+}
+
+.calendario__dia--selecionado .calendario__ponto--lotado {
   background: #ffb3b3;
 }
 

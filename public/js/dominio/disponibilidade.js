@@ -9,6 +9,7 @@
 import { combinarDataHora, paraISO, diasNoMes } from './datas.js';
 import { tecnicosLivres } from './agenda.js';
 import { expedienteDoDia, horariosDoDia } from './expediente.js';
+import { STATUS, tecnicosDoServico } from './servicos.js';
 
 /**
  * Horários livres de um dia.
@@ -52,4 +53,34 @@ export function diasLotados({ expediente, ano, mes, duracaoMin, tecnicos, agenda
     if (horariosLivresDoDia({ expediente, iso, duracaoMin, tecnicos, agendados, ignorarAgendamento, agora }).length === 0) dias.add(iso);
   }
   return dias;
+}
+
+/**
+ * Os pontos do calendário de um mês (o MESMO na Agenda e na escolha de dia e hora): um ponto por dia.
+ *   - VERMELHO: dia lotado (não cabe mais nada). Só é calculado quando `mostrarLotado` é verdadeiro
+ *     (administrador) e há técnicos carregados — se a lista de técnicos não veio, não se avisa "lotado"
+ *     (melhor não avisar do que avisar errado). Com `filtroTecnico`, vale só para aquele técnico.
+ *   - AZUL: o dia tem agendamento (serviço agendado) e ainda cabe outro serviço. Aparece em qualquer dia
+ *     (também em dia já passado, que é visita atrasada, ou em dia hoje fechado), e com `filtroTecnico`
+ *     só conta as visitas daquele técnico.
+ *   - sem ponto: dia sem agendamento.
+ * O vermelho substitui o azul (nunca aparecem os dois no mesmo dia).
+ * @returns {Map<string, 'azul'|'vermelho'>} "AAAA-MM-DD" -> cor
+ */
+export function pontosDoMes({ expediente, ano, mes, duracaoMin = 60, tecnicos = [], agendados = [], filtroTecnico = '', mostrarLotado = false, ignorarAgendamento = null, agora = new Date() }) {
+  const pontos = new Map();
+  const prefixo = `${ano}-${String(mes + 1).padStart(2, '0')}-`;
+  for (const s of agendados) {
+    if (s.status !== STATUS.AGENDADO || !(s.dataAgendada instanceof Date)) continue;
+    if (filtroTecnico && !tecnicosDoServico(s).includes(filtroTecnico)) continue;
+    const iso = paraISO(s.dataAgendada);
+    if (iso.startsWith(prefixo)) pontos.set(iso, 'azul');
+  }
+  if (mostrarLotado && tecnicos.length > 0) {
+    const contaveis = filtroTecnico ? tecnicos.filter((t) => t.uid === filtroTecnico) : tecnicos;
+    if (contaveis.length > 0) {
+      for (const iso of diasLotados({ expediente, ano, mes, duracaoMin, tecnicos: contaveis, agendados, ignorarAgendamento, agora })) pontos.set(iso, 'vermelho');
+    }
+  }
+  return pontos;
 }
