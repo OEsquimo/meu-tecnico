@@ -3,7 +3,7 @@ PACOTE 7 (modo demonstração): depois de concluir um serviço, volta para a vis
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote7.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, tecnicos_no_horario
+from _quando import escolher_quando, tecnicos_no_horario, informar
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -25,9 +25,7 @@ with sync_playwright() as p:
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
     escolher_quando(pag, "2031-05-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
-    pag.locator("a:has-text('Informar aparelho e serviço')").click(); pag.wait_for_timeout(1000)
-    pag.locator("input[name=servicos-0]").nth(0).check(force=True); pag.locator("input[name=servicos-0]").nth(1).check(force=True)
-    pag.click("#form-informar [type=submit]"); pag.wait_for_timeout(1500)
+    informar(pag, servicos=("Limpeza", "Manutenção"))
     ok(pag.locator("a:has-text('Concluir serviço')").count() == 2, "visita com 2 serviços, cada um com Concluir")
 
     def concluir_primeiro():

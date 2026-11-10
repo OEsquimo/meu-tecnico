@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, adicionarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -53,6 +53,10 @@ export default async function montar(ctx) {
       }
       if (!ctx.ativo()) return;
       desenhar(servico, linhas, valores);
+      if (ctx.consulta?.get('informar') === '1' && linhas.some((l) => l.status === STATUS.AGENDADO)) {
+        history.replaceState(null, '', `#/servico/${encodeURIComponent(servico.id)}`); // tira o "?informar=1" para não reabrir ao voltar
+        setTimeout(() => raiz.querySelector('[data-acao="adicionar-servico"]')?.click(), 0);
+      }
       // O administrador abriu: o aviso de "incluído em campo" some do Início (sem atrapalhar a tela se falhar).
       if (usuario.admin) marcarIncluidosComoVistos(usuario.empresaId, linhas).catch(() => {});
     } catch (erro) {
@@ -111,7 +115,7 @@ export default async function montar(ctx) {
         ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
         ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
         ${agendada && (precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar aparelho e serviço', iconeNome: 'editar', href: `#/informar/${l.id}`, bloco: true })
+    ? botao({ texto: 'Informar aparelho e serviço', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true })
     : botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true }))}
         ${agendada && !usuario.admin && l.adicionadoPeloTecnico === true && html`
           <div class="acoes-cartao">
@@ -137,6 +141,7 @@ export default async function montar(ctx) {
     const concluidasComValor = linhas.filter((l) => valores[l.id]).length;
     const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
     const agendado = abertas.length > 0;
+    const temServicoReal = abertas.some((l) => !ehLinhaSemServico(l));
     // Cancelado (e nada mais aberto): espera uma nova data. Concluídos ficam sempre guardados.
     const canceladas = linhas.filter((l) => l.status === STATUS.CANCELADO);
     const aguardando = !agendado && canceladas.length > 0;
@@ -181,17 +186,20 @@ export default async function montar(ctx) {
         ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita. Toque em Editar e escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado. Toque em Editar e escolha uma nova data para reagendar, ou exclua se não for mais acontecer.' })}
         ${cobraveis.length > 1 && botao({ texto: 'Cobrar tudo desta visita', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: cobraveis.map((c) => c.id).join(',') }, bloco: true })}
         ${tituloSecao('Aparelhos e serviços')}
-        ${grupos.map(([aparelhoId, lista]) => html`
+        ${grupos.map(([aparelhoId, lista]) => (!aparelhoId && lista.every((l) => l.status === STATUS.AGENDADO && ehLinhaSemServico(l)) ? html`
+          <section class="cartao visita-aparelho" data-vazio="1">
+            <div class="item-lista__titulo">Aparelho e serviço ainda não foram informados</div>
+            ${botao({ texto: 'Informar aparelho e serviço', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true })}
+          </section>` : html`
           <section class="cartao visita-aparelho">
             <div>
               <div class="item-lista__titulo">${aparelhoId ? (lista[0].aparelhoResumo || 'Aparelho') : 'Aparelho ainda não escolhido'}</div>
-              ${!aparelhoId && html`<div class="item-lista__sub">Escolha ou cadastre o aparelho ao concluir o serviço.</div>`}
               ${lista[0].obsAparelho && html`<div class="visita-obs">${lista[0].obsAparelho}</div>`}
             </div>
             ${lista.map((l) => cartaoDaLinha(l, valores, cobraveis, repetidos))}
-          </section>`)}
+          </section>`))}
 
-        ${agendado ? botao({ texto: 'Adicionar serviço na visita', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}
+        ${temServicoReal ? botao({ texto: 'Adicionar aparelhos e serviços', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}
         ${usuario.admin && (agendado || aguardando) ? html`
           <div class="acoes-cartao">
             ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${s.id}/editar`, pequeno: true })}
@@ -338,17 +346,15 @@ export default async function montar(ctx) {
           opcoes: tipos.map((t) => ({ id: t.id, rotulo: `${t.nome} · ${textoDoRetorno(t)}` })),
         });
         if (!tipoId) return;
-        const referencia = abertas.find((l) => servicoTemTecnico(l, usuario.uid)) || abertas[0] || base;
-        await adicionarServicoNaVisita({
+        await informarServicoNaVisita({
           empresaId: usuario.empresaId,
-          base: referencia,
           aparelho: aparelhos.find((a) => a.id === escolhaAparelho),
           tipo: sessao.tipos.find((t) => t.id === tipoId),
           // O técnico que adiciona fica com o serviço; o administrador mantém o técnico da visita.
           tecnico: usuario.admin ? null : { uid: usuario.uid, nome: usuario.nome },
           linhasDaVisita: abertas,
         });
-        toast('Serviço adicionado.', 'sucesso');
+        toast('Serviço informado.', 'sucesso');
         ctx.recarregar();
       } catch (e) { mostrarErro(e); }
     });

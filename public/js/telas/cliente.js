@@ -170,7 +170,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
                               ${l.aparelhoResumo && html`<div class="item-lista__sub">${l.aparelhoResumo}</div>`}
                             </div>
                             ${precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/informar/${encodeURIComponent(l.id)}`, pequeno: true })
+    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${encodeURIComponent(l.id)}?informar=1`, pequeno: true })
     : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}
                           </div>`)}
                       </div>`}

@@ -19,6 +19,7 @@ import { icone } from '../nucleo/icones.js';
 import { mesVizinho } from '../dominio/agenda.js';
 import { calendarioDoMes } from './calendario-comum.js';
 import { diaTemInicioPelaFrente, diasComVaga, diasLotados, horariosLivresDoDia, pontosDoMes } from '../dominio/disponibilidade.js';
+import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { fimDepoisDoExpediente } from '../dominio/expediente.js';
 import { ehISOValido, formatarDiaExtenso, formatarMesAno, hojeISO } from '../dominio/datas.js';
 
@@ -29,12 +30,13 @@ import { ehISOValido, formatarDiaExtenso, formatarMesAno, hojeISO } from '../dom
  * @param {string[]} p.tecnicoUids   técnicos já escolhidos
  * @param {object} p.expediente      horário de funcionamento (dominio/expediente.js)
  * @param {number} p.duracaoMin      quanto tempo o técnico fica ocupado
+ * @param {number} p.duracaoMinima   o menor serviço cadastrado (a medida do "dia lotado", igual à da Agenda)
  * @param {Array<{uid:string,nome:string}>} p.tecnicos  todos os técnicos que podem atender
  * @param {string|null} p.agendamentoId  agendamento em edição (não conta como ocupado)
  * @param {(ano:number, mes:number) => Promise<object[]>} p.carregarMes  agendados em volta do mês
  * @param {() => Date} [p.agora]     relógio (para testes)
  */
-export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, duracaoMin, tecnicos, agendamentoId = null, carregarMes, agora = () => new Date() }) {
+export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, duracaoMin, duracaoMinima = DURACAO_PADRAO_MIN, tecnicos, agendamentoId = null, carregarMes, agora = () => new Date() }) {
   return new Promise((resolver) => {
     const hoje = hojeISO(agora());
     const inicial = ehISOValido(data) && data >= hoje ? data : hoje;
@@ -101,7 +103,7 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
 
     function calendario() {
       const pronto = !carregando && !erroDeCarga;
-      const pontos = pronto ? pontosDoMes({ ...contaBase(), ano, mes, mostrarLotado: true }) : new Map();
+      const pontos = pronto ? pontosDoMes({ ...contaBase(), duracaoMinima, ano, mes, mostrarLotado: true }) : new Map();
       const comVaga = pronto ? diasComVaga({ ...contaBase(), ano, mes }) : new Set();
       // Dia fechado ou que já passou: apagado. Os demais dá para tocar (se não couber este serviço, a tela explica).
       const desligado = (iso) => !diaTemInicioPelaFrente(expediente, iso, agora());
@@ -116,7 +118,7 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
       const mesAnterior = mesVizinho(ano, mes, -1);
       const antesDeHoje = `${mesAnterior.ano}-${String(mesAnterior.mes + 1).padStart(2, '0')}` < hoje.slice(0, 7);
       const diaLotadoEscolhido = Boolean(diaEscolhido) && !carregando && !erroDeCarga
-        && diasLotados({ ...contaBase(), ano, mes }).has(diaEscolhido);
+        && diasLotados({ ...contaBase(), duracaoMinima, ano, mes }).has(diaEscolhido);
       const horaExtra = horaEscolhida ? fimDepoisDoExpediente(expediente, diaEscolhido, horaEscolhida, duracaoMin) : null;
       const semVagaNoMes = !carregando && !erroDeCarga && diasComVaga({ ...contaBase(), ano, mes }).size === 0;
       janela.innerHTML = String(html`

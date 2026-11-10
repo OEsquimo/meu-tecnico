@@ -20,7 +20,7 @@ import { icone } from '../nucleo/icones.js';
 import { listarAgendados, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { agruparPorDia, mesVizinho } from '../dominio/agenda.js';
-import { pontosDoMes } from '../dominio/disponibilidade.js';
+import { menorDuracaoDosTipos, pontosDoMes } from '../dominio/disponibilidade.js';
 import { expedienteDaEmpresa } from '../dominio/expediente.js';
 import { sessao } from '../nucleo/sessao.js';
 import { calendarioDoMes } from './calendario-comum.js';
@@ -134,6 +134,7 @@ export default async function montar(ctx) {
       expediente: expedienteDaEmpresa(sessao.empresa),
       ano,
       mes,
+      duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
       tecnicos,
       agendados: servicosDoMes,
       filtroTecnico,

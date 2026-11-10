@@ -147,7 +147,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
                 ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
               </div>
               ${acoes && (precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/informar/${l.id}`, pequeno: true })
+    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${l.id}?informar=1`, pequeno: true })
     : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true }))}
             </div>`)}
         </div>`)}

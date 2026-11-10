@@ -3,7 +3,7 @@ PACOTE 8 (modo demonstração): espaço do botão "Cadastrar aparelho novo", apa
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote8.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, tecnicos_no_horario
+from _quando import escolher_quando, tecnicos_no_horario, informar
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -26,18 +26,7 @@ with sync_playwright() as p:
     escolher_quando(pag, "2031-06-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     sid = pag.url.split("/servico/")[1]
-    pag.locator("a:has-text('Informar aparelho e serviço')").click(); pag.wait_for_timeout(1000)
-
-    # ---- Espaço em volta do botão "+ Cadastrar aparelho novo" ----
-    cx = pag.locator(".informar__novo-aparelho")
-    ok(cx.count() == 1, "botão 'Cadastrar aparelho novo' dentro do bloco com respiro")
-    box = cx.bounding_box(); btn = cx.locator("button, a").first.bounding_box()
-    prev = pag.locator("[data-bloco='0'] [data-campo='aparelho-0']").bounding_box()
-    ok(box["y"] - (prev["y"] + prev["height"]) >= 10, "espaço acima do botão (>= 10px)")
-    ok(pag.evaluate("(() => { const b = document.querySelector('.informar__novo-aparelho'); const n = b.nextElementSibling; return !n || n.getBoundingClientRect().top - b.getBoundingClientRect().bottom >= 10; })()"), "espaço abaixo do botão (>= 10px)")
-
-    pag.locator("input[name=servicos-0]").nth(0).check(force=True); pag.locator("input[name=servicos-0]").nth(1).check(force=True)
-    pag.click("#form-informar [type=submit]"); pag.wait_for_timeout(1500)
+    informar(pag, servicos=("Limpeza", "Manutenção"))
 
     # ---- Aparelho no topo de "Concluir serviço" ----
     pag.locator("a:has-text('Concluir serviço')").first.click(); pag.wait_for_timeout(1000)

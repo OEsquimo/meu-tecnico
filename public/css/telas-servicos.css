@@ -439,10 +439,6 @@
   cursor: pointer;
 }
 
-/* Tela "Aparelhos e serviços": respiro em volta do botão "+ Cadastrar aparelho novo". */
-.informar__novo-aparelho {
-  margin: 12px 0 var(--espaco);
-}
 /* Aparelho logo abaixo do serviço e do cliente, no topo de "Concluir serviço". */
 .cabecalho__aparelho {
   margin-top: 0.125rem;

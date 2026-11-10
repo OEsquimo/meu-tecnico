@@ -111,3 +111,10 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Agendar:** não há mais aviso amarelo embaixo repetindo "Escolha o cliente." / "Escolha o dia e a hora."; o cartão "Escolher dia e horário" fica amarelo, com ícone de aviso, até a escolha. Tocar em Agendar sem escolher mostra o erro no campo.
 - **Detalhe da visita:** não repete o que o cabeçalho e o cartão de cima já dizem (nome do serviço e situação numa visita de um serviço só; técnicos quando todos os serviços têm os mesmos).
 - **Equipe:** o texto agora diz que os valores só aparecem para quem o administrador liberar. **Termos de uso** e **Política de privacidade** ficam só em Minha conta. Configurações: "Voltar ao lembrete padrão" e "Voltar à cobrança padrão".
+
+## Pacote 10d — dia vermelho pelo menor serviço e "Informar serviço" simples
+
+- **Vermelho:** o dia fica vermelho quando não cabe nem o MENOR serviço cadastrado (ativo; 60 min se não há tipos). A mesma regra vale na Agenda e no seletor, e não depende do serviço que está sendo agendado. Hora extra continua permitida (o serviço pode começar até 30 min antes de fechar e terminar depois).
+- **Informar serviço:** a visita sem aparelho/serviço mostra o texto "Aparelho e serviço ainda não foram informados" e o botão "Informar aparelho e serviço" (nos cartões da Agenda/Início e na ficha do cliente o botão segue "Informar serviço"), que abre as mesmas perguntas do "Adicionar aparelhos e serviços" ("Em qual aparelho?" → "Qual serviço?"). A tela antiga `/informar/:id` foi removida; o endereço redireciona para `#/servico/:id?informar=1`, que abre a primeira pergunta. A linha "Serviço a definir" é consumida (preenchida) pelo primeiro serviço informado.
+- **"Adicionar aparelhos e serviços"** só aparece quando a visita já tem pelo menos um serviço de verdade.
+- **Excluir serviço e aparelho** continua só no Editar do agendamento: não há botão "Excluir" dentro do serviço nem "Remover da visita" no aparelho.

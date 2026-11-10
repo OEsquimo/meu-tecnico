@@ -55,7 +55,7 @@ with sync_playwright() as p:
     agendar_data("2031-03-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url, "agenda só com cliente, dia, hora e técnico")
-    ok("Serviço a definir" in pag.inner_text("#conteudo"), "mostra 'Serviço a definir'")
+    ok("ainda não foram informados" in pag.inner_text("#conteudo"), "mostra 'Aparelho e serviço ainda não foram informados'")
     url_a_definir = pag.url
     sid_a_definir = pag.url.split("/servico/")[1]
 
@@ -149,7 +149,9 @@ with sync_playwright() as p:
     ir(pag, f"/concluir/{sid_a_definir}")
     ok("Antes de concluir" in pag.inner_text("#conteudo") and pag.locator("input[name=tipoServicoId]").count() == 0, "serviço sem aparelho/tipo: aviso amigável (sem lista de serviços) em vez do formulário")
     pag.locator("a:has-text('Informar aparelhos e serviços')").click(); pag.wait_for_timeout(900)
-    ok("#/informar/" in pag.url, "o aviso leva à tela Aparelhos e serviços")
+    pag.wait_for_timeout(600)
+    ok("/servico/" in pag.url and "/informar/" not in pag.url and pag.locator("dialog[open]").count() == 1, "o aviso leva às perguntas simples na visita")
+    pag.keyboard.press("Escape"); pag.wait_for_timeout(300)
 
     # 6) tipo de serviço tem duração editável
     ir(pag, "/tipos-servico/novo")
