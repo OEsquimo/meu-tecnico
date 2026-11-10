@@ -26,6 +26,7 @@ import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, li
 import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import { traduzirErro } from '../nucleo/erros.js';
+import { icone } from '../nucleo/icones.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
@@ -48,6 +49,8 @@ import {
 } from './agendamento-comum.js';
 
 const MAXIMO_RESULTADOS = 8;
+
+const PENDENCIAS_JA_VISIVEIS = new Set(['Escolha o cliente.', 'Escolha o dia e a hora.']);
 
 export default async function montar(ctx) {
   const { raiz, params, consulta } = ctx;
@@ -480,8 +483,8 @@ export default async function montar(ctx) {
     mostrar(area, html`
       <div class="campo" data-campo="data">
         <span class="campo__rotulo">Quando</span>
-        <button type="button" class="quando-botao" id="botao-quando" data-acao="abrir-seletor">
-          <span class="quando-botao__principal">${inicio ? `${formatarDataBR(inicio)} às ${formatarHora(inicio)}` : 'Escolher dia e horário'}</span>
+        <button type="button" class="quando-botao ${inicio ? '' : 'quando-botao--pendente'}" id="botao-quando" data-acao="abrir-seletor">
+          <span class="quando-botao__principal">${inicio ? `${formatarDataBR(inicio)} às ${formatarHora(inicio)}` : html`Escolher dia e horário <span class="quando-botao__icone" aria-hidden="true">${icone('alerta', 20)}</span>`}</span>
           <span class="quando-botao__sub">${inicio ? (nomes.length > 0 ? nomes.join(', ') : 'Sem técnico escolhido') : 'Toque para ver os horários livres'}</span>
         </button>
       </div>`);
@@ -527,7 +530,9 @@ export default async function montar(ctx) {
     const editaveis = linhasEditaveis(linhasExistentes);
     const fechadas = linhasExistentes.filter((l) => !editaveis.includes(l)).length;
     const reagendando = estaReagendando();
-    const problemas = pendenciasDoAgendamento(estado, contexto());
+    // "Escolha o cliente" e "Escolha o dia e a hora" já estão à vista no próprio campo (o do "Quando" fica amarelo):
+    // repetir o aviso embaixo seria redundante. Eles aparecem como erro no campo só quando a pessoa toca em Agendar.
+    const problemas = pendenciasDoAgendamento(estado, contexto()).filter((p) => !PENDENCIAS_JA_VISIVEIS.has(p));
     mostrar(area, html`
       ${linhasPreservadas.length > 0 && aviso({ texto: `${linhasPreservadas.length} ${linhasPreservadas.length === 1 ? 'serviço usa um aparelho ou tipo que foi excluído' : 'serviços usam aparelho ou tipo que foi excluído'}. ${linhasPreservadas.length === 1 ? 'Ele continua' : 'Eles continuam'} no agendamento e só muda${linhasPreservadas.length === 1 ? '' : 'm'} de dia/hora.` })}
       ${reagendando && aviso({ tom: 'amarelo', texto: 'Este agendamento está cancelado. Confira o dia e a hora (pode manter os mesmos).' })}

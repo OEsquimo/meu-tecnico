@@ -126,6 +126,10 @@
   min-width: 0;
 }
 
+.cabecalho--centro .cabecalho__textos {
+  text-align: center;
+}
+
 .cabecalho__sub {
   font-size: 13px;
   font-weight: 600;
@@ -1079,3 +1083,6 @@ body.modo-demonstracao::before {
   font-weight: 700;
   text-align: center;
 }
+
+/* Aviso discreto de hora extra no seletor de horário */
+.seletor__aviso-extra { margin: var(--espaco-2, 8px) 0 0; font-size: 0.8125rem; color: var(--cor-texto-suave, #5b6b7a); }

@@ -54,16 +54,29 @@ export function expedienteDoDia(expediente, iso) {
 }
 
 /**
- * Horários de início oferecidos num dia: do abrir até o fechar, de 30 em 30 minutos,
- * só os que terminam até a hora de fechar (considerando a duração do serviço).
+ * Horários de início oferecidos num dia: do abrir até 30 minutos antes de fechar, de 30 em 30 minutos.
+ * O serviço pode terminar depois do fechamento (hora extra): ele não fica "pela metade" só porque
+ * passou da hora. Por isso a duração do serviço NÃO limita o horário de início.
  */
-export function horariosDoDia(expediente, iso, duracaoMin) {
+export function horariosDoDia(expediente, iso) {
   const dia = expedienteDoDia(expediente, iso);
   if (!dia?.aberto) return [];
   const fim = horaParaMinutos(dia.ate);
   const horarios = [];
-  for (let inicio = horaParaMinutos(dia.de); inicio + duracaoMin <= fim; inicio += PASSO_AGENDA_MIN) horarios.push(minutosParaHora(inicio));
+  for (let inicio = horaParaMinutos(dia.de); inicio + PASSO_AGENDA_MIN <= fim; inicio += PASSO_AGENDA_MIN) horarios.push(minutosParaHora(inicio));
   return horarios;
+}
+
+/**
+ * Esse horário de início passa do fechamento (hora extra)? Devolve o texto do fim ("20:00", ou
+ * "depois da meia-noite" quando o serviço passa de 24h) ou null quando termina dentro do expediente.
+ */
+export function fimDepoisDoExpediente(expediente, iso, hora, duracaoMin) {
+  const dia = expedienteDoDia(expediente, iso);
+  if (!dia?.aberto || !hora) return null;
+  const fim = horaParaMinutos(hora) + Number(duracaoMin);
+  if (fim <= horaParaMinutos(dia.ate)) return null;
+  return fim >= 24 * 60 ? 'depois da meia-noite' : minutosParaHora(fim);
 }
 
 /**

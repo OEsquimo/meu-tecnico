@@ -65,7 +65,7 @@ with sync_playwright() as p:
     ok(pag.locator(f"{SELETOR} [data-iso='2031-04-13']").is_enabled(), "domingo aberto no horário de funcionamento tem vaga")
     pag.click(f"{SELETOR} [data-acao=seletor-dia][data-iso='2031-04-14']")
     horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]").all_inner_texts()
-    ok(horas[0] == "09:00" and horas[-1] == "11:00", f"segunda só oferece 09:00 a 11:00 (horário salvo): {horas[:1]}..{horas[-1:]}")
+    ok(horas[0] == "09:00" and horas[-1] == "11:30", f"segunda só oferece 09:00 a 11:30 (horário salvo: abre 09:00 e fecha 12:00; o último início é 30 min antes de fechar): {horas[:1]}..{horas[-1:]}")
     ok(pag.locator(f"{SELETOR} [data-secao=tecnicos]").count() == 0 and pag.locator(f"{SELETOR} [data-acao=seletor-confirmar]").is_disabled(), "sem horário escolhido não há técnicos e Confirmar fica desligado")
     pag.click(f"{SELETOR} [data-acao=seletor-hora][data-hora='10:00']")
     ok(pag.locator(f"{SELETOR} [data-secao=tecnicos]").count() == 1 and pag.locator(f"{SELETOR} input[name=seletor-tec]").count() >= 2, "escolhido o horário, aparece a lista de técnicos livres")

@@ -51,6 +51,17 @@ export function mesVizinho(ano, mes, passo) {
 
 const MINUTO = 60000;
 
+/** Meia-noite que encerra o dia de `data` (00:00 do dia seguinte). */
+function fimDoDia(data) {
+  return new Date(data.getFullYear(), data.getMonth(), data.getDate() + 1);
+}
+
+/** O serviço pode passar do fechamento (hora extra), mas a ocupação vale só até a meia-noite do dia em que ele começa: no dia seguinte o técnico está livre. */
+function limitarAoDia(inicio, fim) {
+  const limite = fimDoDia(inicio);
+  return fim.getTime() > limite.getTime() ? limite : fim;
+}
+
 /**
  * Fim de uma linha agendada para um técnico. Usa o tempo TOTAL daquele técnico nesta visita
  * (`ocupacaoPorTecnico[uid]`, a soma dos serviços dele) quando existe; senão `ocupacaoMin`
@@ -60,7 +71,7 @@ export function fimDoServico(servico, tecnicoUid = null) {
   const doTecnico = tecnicoUid && servico.ocupacaoPorTecnico ? Number(servico.ocupacaoPorTecnico[tecnicoUid]) : NaN;
   const total = Number.isFinite(doTecnico) && doTecnico > 0 ? doTecnico : Number(servico.ocupacaoMin);
   const minutos = Number.isFinite(total) && total > 0 ? Math.max(total, duracaoDoServico(servico)) : duracaoDoServico(servico);
-  return new Date(servico.dataAgendada.getTime() + minutos * MINUTO);
+  return limitarAoDia(servico.dataAgendada, new Date(servico.dataAgendada.getTime() + minutos * MINUTO));
 }
 
 /** Os dois intervalos [aIni,aFim) e [bIni,bFim) se sobrepõem? (encostar não conta) */
@@ -77,7 +88,7 @@ export function intervalosSeSobrepoem(aIni, aFim, bIni, bFim) {
  * @param {string|null} ignorarAgendamento chave do agendamento em edição (não conta como conflito)
  */
 export function tecnicoEstaLivre(tecnicoUid, inicio, duracaoMin, agendados, ignorarAgendamento = null) {
-  const fim = new Date(inicio.getTime() + duracaoMin * MINUTO);
+  const fim = limitarAoDia(inicio, new Date(inicio.getTime() + duracaoMin * MINUTO));
   return !agendados.some((s) => s.status === STATUS.AGENDADO
     && tecnicosDoServico(s).includes(tecnicoUid)
     && s.dataAgendada instanceof Date

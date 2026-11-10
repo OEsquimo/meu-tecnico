@@ -24,8 +24,6 @@ export default async function montar({ raiz, sessao }) {
     { titulo: 'Meu plano', sub: textoPlano || 'Plano, limite e pagamento', href: '#/plano' },
     { titulo: 'Backup', sub: 'Salvar ou restaurar seus dados', href: '#/backup' },
     { titulo: 'Minha conta', sub: 'Login, senha e exclusão da conta', href: '#/conta' },
-    { titulo: 'Termos de uso', sub: '', href: '#/termos' },
-    { titulo: 'Política de privacidade', sub: '', href: '#/privacidade' },
   ];
 
   mostrar(raiz, html`
