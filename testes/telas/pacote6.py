@@ -3,7 +3,7 @@ PACOTE 6 (modo demonstração): cartão do cliente em Agendar, "Informar aparelh
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote6.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, tecnicos_no_horario
+from _quando import escolher_quando, tecnicos_no_horario, informar
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -40,26 +40,26 @@ with sync_playwright() as p:
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
     escolher_quando(pag, "2031-04-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
-    ok("/servico/" in pag.url and "Serviço a definir" in texto(), "agendado só com cliente, dia, hora e técnico")
+    ok("/servico/" in pag.url and "ainda não foram informados" in texto(), "agendado só com cliente, dia, hora e técnico")
     sid = pag.url.split("/servico/")[1]
 
     # ---- Linha "a definir": botão Informar, aviso amigável no Concluir ----
-    ok(pag.locator("a:has-text('Informar aparelho e serviço')").count() == 1 and pag.locator("a:has-text('Concluir serviço')").count() == 0, "detalhe: 'Informar aparelho e serviço' no lugar de Concluir")
+    ok("Aparelho e serviço ainda não foram informados" in texto() and pag.locator("button:has-text('Informar aparelho e serviço')").count() == 1 and pag.locator("a:has-text('Concluir serviço')").count() == 0, "detalhe: texto único e botão 'Informar aparelho e serviço' no lugar de Concluir")
+    ok("Serviço a definir" not in texto() and pag.locator("text=Adicionar aparelhos e serviços").count() == 0, "sem 'Serviço a definir' e sem 'Adicionar' duplicado na visita vazia")
     ir(f"/concluir/{sid}")
     ok("Antes de concluir" in texto() and "Informar aparelhos e serviços" in texto(), "Concluir sem dados: aviso amigável")
     ok(pag.locator("input[name=tipoServicoId]").count() == 0, "Concluir não lista todos os serviços")
 
     # ---- Informar: aparelho primeiro, depois serviços ----
-    pag.locator("a:has-text('Informar aparelhos e serviços')").click(); pag.wait_for_timeout(1000)
-    ok("/informar/" in pag.url, "abre a tela Aparelhos e serviços")
-    ok(pag.locator("input[name=servicos-0]").count() > 1, "cliente com um só aparelho: já vem escolhido e mostra os serviços")
-    pag.click("#form-informar [type=submit]"); pag.wait_for_timeout(500)
-    ok("pelo menos um serviço" in texto(), "sem serviço marcado: mensagem pede o serviço")
-    pag.locator("input[name=servicos-0]").nth(0).check(force=True); pag.locator("input[name=servicos-0]").nth(1).check(force=True)
-    pag.click("#form-informar [type=submit]"); pag.wait_for_timeout(1500)
-    ok("/servico/" in pag.url and pag.locator("a:has-text('Concluir serviço')").count() == 2, "salvo: dois serviços, cada um com Concluir")
-    ok("Serviço a definir" not in texto(), "'Serviço a definir' saiu")
-    ok(pag.locator("a:has-text('Informar aparelho e serviço')").count() == 0, "sem mais 'Informar'")
+    pag.locator("a:has-text('Informar aparelhos e serviços')").click(); pag.wait_for_timeout(1500)
+    ok("/servico/" in pag.url and "/informar/" not in pag.url and pag.locator("dialog[open]").count() == 1, "o aviso abre os diálogos simples na visita (sem a tela antiga)")
+    pag.locator("dialog [data-escolha]").first.click(); pag.wait_for_timeout(400)
+    pag.locator("dialog [data-escolha]", has_text="Limpeza").first.click(); pag.wait_for_timeout(1200)
+    ok(pag.locator("a:has-text('Concluir serviço')").count() == 1, "informado o 1º serviço: Concluir")
+    ok("Serviço a definir" not in texto() and "ainda não foram informados" not in texto(), "a linha 'a definir' foi consumida")
+    informar(pag, servicos=("Manutenção",), primeiro="button:has-text('Adicionar aparelhos e serviços')")
+    ok(pag.locator("a:has-text('Concluir serviço')").count() == 2, "salvo: dois serviços, cada um com Concluir")
+    ok(pag.locator("button:has-text('Informar aparelho e serviço')").count() == 0, "sem mais 'Informar'")
     ok(sem_rolagem(), "detalhe sem rolagem lateral")
 
     # ---- Técnico informa sozinho; o administrador é avisado ----
@@ -71,10 +71,8 @@ with sync_playwright() as p:
     pag.goto(BASE + "#/entrar"); pag.reload(); pag.wait_for_timeout(800)
     entrar(pag, "tecnico@meutecnico.app")
     ir(f"/servico/{sid2}")
-    ok(pag.locator("a:has-text('Informar aparelho e serviço')").count() == 1, "técnico vê 'Informar aparelho e serviço'")
-    pag.locator("a:has-text('Informar aparelho e serviço')").click(); pag.wait_for_timeout(1000)
-    pag.locator("input[name=servicos-0]").nth(0).check(force=True)
-    pag.click("#form-informar [type=submit]"); pag.wait_for_timeout(1800)
+    ok(pag.locator("button:has-text('Informar aparelho e serviço')").count() == 1, "técnico vê 'Informar aparelho e serviço'")
+    informar(pag, servicos=("Limpeza",))
     ok("/servico/" in pag.url and pag.locator("a:has-text('Concluir serviço')").count() == 1, "técnico informou: agora tem Concluir")
     ok("Incluído pelo técnico" in texto(), "marcado 'Incluído pelo técnico'")
     ok(pag.locator("[data-acao=editar-adicionado]").count() == 1, "técnico pode editar o que informou")

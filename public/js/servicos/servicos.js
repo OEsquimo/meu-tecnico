@@ -18,7 +18,7 @@ import { ler, listar, gravar, operacao as op, novoId, AGORA } from '../nucleo/ba
 import { invalidarCache } from '../nucleo/cache.js';
 import { ErroApp } from '../nucleo/erros.js';
 import { PAGINA_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
-import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
+import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, ehLinhaSemServico, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
@@ -425,6 +425,51 @@ export async function informarAparelhosEServicos({ empresaId, servico, itens, te
   })]);
   invalidarCache(`${empresaId}:servicos`);
   return novos.length;
+}
+
+/**
+ * "Informar serviço" numa visita: escolhe o aparelho e o serviço. Se a visita ainda tem uma linha
+ * "Serviço a definir" (agendada sem aparelho/serviço), essa linha é CONSUMIDA (recebe o aparelho e o serviço, e a
+ * duração do serviço); senão o serviço entra como linha nova. O técnico que informa deixa tudo "incluído pelo técnico".
+ * `linhasDaVisita` = todas as linhas da visita. Devolve o id da linha que recebeu o serviço.
+ */
+export async function informarServicoNaVisita({ empresaId, linhasDaVisita, aparelho, tipo, tecnico = null }) {
+  if (!aparelho) throw new ErroApp('Escolha ou cadastre o aparelho.', 'sem-aparelho');
+  if (!tipo) throw new ErroApp('Escolha o tipo de serviço.', 'sem-tipo');
+  const abertas = linhasDaVisita.filter((l) => l.status === STATUS.AGENDADO);
+  if (abertas.length === 0) throw new ErroApp('Este agendamento já foi fechado.', 'servico-fechado');
+  if (abertas.some((l) => l.aparelhoId === aparelho.id && l.tipoServicoId === tipo.id)) {
+    throw new ErroApp('Este serviço já está neste aparelho, nesta visita.', 'servico-repetido');
+  }
+  // A linha "a definir" que recebe o serviço: a do mesmo aparelho, senão a sem aparelho, senão qualquer uma.
+  const semServico = abertas.filter(ehLinhaSemServico);
+  const alvo = semServico.find((l) => l.aparelhoId === aparelho.id) || semServico.find((l) => !l.aparelhoId) || semServico[0];
+  if (!alvo) {
+    const referencia = abertas.find((l) => tecnico && tecnicosDoServico(l).includes(tecnico.uid)) || abertas[0];
+    return adicionarServicoNaVisita({ empresaId, base: referencia, aparelho, tipo, tecnico, linhasDaVisita });
+  }
+  const duracao = tipo.duracaoMin ?? DURACAO_PADRAO_MIN;
+  const preenchida = { ...alvo, duracaoMin: duracao };
+  const minutos = minutosPorTecnico(abertas.map((l) => (l.id === alvo.id ? preenchida : l)));
+  const operacoes = abertas.map((l) => {
+    const linha = l.id === alvo.id ? preenchida : l;
+    const campos = { ...ocupacaoDaLinha({ ...linha, duracaoMin: duracaoDoServico(linha) }, minutos), atualizadoEm: AGORA };
+    if (l.id === alvo.id) {
+      Object.assign(campos, {
+        aparelhoId: aparelho.id,
+        aparelhoResumo: resumoDoAparelho(aparelho),
+        tipoServicoId: tipo.id,
+        tipoServicoNome: tipo.nome,
+        geraRetorno: tipo.geraRetorno === true,
+        duracaoMin: duracao,
+        ...(tecnico ? { adicionadoPeloTecnico: true, vistoPeloAdmin: false } : {}),
+      });
+    }
+    return op.atualizar(`${caminho(empresaId)}/${l.id}`, campos);
+  });
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return alvo.id;
 }
 
 /** Serviços que o técnico acrescentou em campo e que o administrador ainda não viu (só administrador). */

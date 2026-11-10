@@ -25,6 +25,7 @@
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, levarAte } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
+import { menorDuracaoDosTipos } from '../dominio/disponibilidade.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { icone } from '../nucleo/icones.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
@@ -499,6 +500,7 @@ export default async function montar(ctx) {
       tecnicoUids: estado.tecnicoUids,
       expediente: expedienteDaEmpresa(sessao.empresa),
       duracaoMin: duracaoNecessaria(estado, tiposPorId()),
+      duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
       tecnicos,
       agendamentoId,
       // Só os agendamentos do mês que está na tela (com uma folga de 1 dia antes e 1 depois).

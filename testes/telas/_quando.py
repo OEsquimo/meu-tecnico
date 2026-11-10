@@ -50,3 +50,12 @@ def tecnicos_no_horario(pag, data, hora):
     pag.click(f"{SELETOR} [data-acao=seletor-fechar]")
     pag.wait_for_selector(SELETOR, state="detached")
     return nomes
+
+
+def informar(pag, servicos=("Limpeza",), primeiro="button:has-text('Informar')"):
+    """Informa aparelho (o 1º da lista) e serviços pelos diálogos simples da visita."""
+    for i, nome in enumerate(servicos):
+        alvo = primeiro if i == 0 else "button:has-text('Adicionar aparelhos e serviços')"
+        pag.locator(alvo).first.click(); pag.wait_for_timeout(400)
+        pag.locator("dialog [data-escolha]").first.click(); pag.wait_for_timeout(400)
+        pag.locator("dialog [data-escolha]", has_text=nome).first.click(); pag.wait_for_timeout(1200)

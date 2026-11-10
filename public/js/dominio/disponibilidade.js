@@ -9,7 +9,8 @@
 
 import { combinarDataHora, paraISO, diasNoMes } from './datas.js';
 import { tecnicosLivres } from './agenda.js';
-import { expedienteDoDia, horariosDoDia, PASSO_AGENDA_MIN } from './expediente.js';
+import { expedienteDoDia, horariosDoDia } from './expediente.js';
+import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { STATUS, tecnicosDoServico } from './servicos.js';
 
 /**
@@ -39,17 +40,27 @@ export function diasComVaga({ expediente, ano, mes, duracaoMin, tecnicos, agenda
 }
 
 /**
- * Os dias LOTADOS de um mês: dias abertos, que ainda não acabaram, onde NÃO dá mais para COMEÇAR
- * nenhum serviço (nenhum horário de início, até 30 minutos antes de fechar, tem técnico livre).
- * É a mesma regra na Agenda e no seletor, e não depende do tamanho do serviço que se está montando.
- * Dia fechado e dia que já passou não são "lotados". Devolve um Set de "AAAA-MM-DD".
+ * A menor duração entre os tipos de serviço ativos (a medida do "dia lotado").
+ * Sem nenhum tipo cadastrado, usa a duração padrão (1 hora).
  */
-export function diasLotados({ expediente, ano, mes, tecnicos, agendados, ignorarAgendamento = null, agora = new Date() }) {
+export function menorDuracaoDosTipos(tipos = []) {
+  const duracoes = tipos.filter((t) => t && t.ativo !== false).map((t) => Number(t.duracaoMin)).filter((n) => Number.isFinite(n) && n > 0);
+  return duracoes.length > 0 ? Math.min(...duracoes) : DURACAO_PADRAO_MIN;
+}
+
+/**
+ * Os dias LOTADOS de um mês: dias abertos, que ainda não acabaram, onde não cabe nem o MENOR serviço
+ * (`duracaoMinima`): nenhum horário de início, até 30 minutos antes de fechar, tem técnico livre por esse
+ * tempo. O serviço pode passar do fechamento (hora extra). É a mesma regra na Agenda e no seletor, e não
+ * depende do tamanho do serviço que se está montando. Dia fechado e dia que já passou não são "lotados".
+ * Devolve um Set de "AAAA-MM-DD".
+ */
+export function diasLotados({ expediente, ano, mes, tecnicos, agendados, duracaoMinima = DURACAO_PADRAO_MIN, ignorarAgendamento = null, agora = new Date() }) {
   const dias = new Set();
   for (let d = 1; d <= diasNoMes(ano, mes); d += 1) {
     const iso = paraISO(new Date(ano, mes, d));
     if (!diaTemInicioPelaFrente(expediente, iso, agora)) continue;
-    if (horariosLivresDoDia({ expediente, iso, duracaoMin: PASSO_AGENDA_MIN, tecnicos, agendados, ignorarAgendamento, agora }).length === 0) dias.add(iso);
+    if (horariosLivresDoDia({ expediente, iso, duracaoMin: duracaoMinima, tecnicos, agendados, ignorarAgendamento, agora }).length === 0) dias.add(iso);
   }
   return dias;
 }
@@ -72,7 +83,7 @@ export function diaTemInicioPelaFrente(expediente, iso, agora = new Date()) {
  * O vermelho substitui o azul (nunca aparecem os dois no mesmo dia).
  * @returns {Map<string, 'azul'|'vermelho'>} "AAAA-MM-DD" -> cor
  */
-export function pontosDoMes({ expediente, ano, mes, tecnicos = [], agendados = [], filtroTecnico = '', mostrarLotado = false, ignorarAgendamento = null, agora = new Date() }) {
+export function pontosDoMes({ expediente, ano, mes, duracaoMinima, tecnicos = [], agendados = [], filtroTecnico = '', mostrarLotado = false, ignorarAgendamento = null, agora = new Date() }) {
   const pontos = new Map();
   const prefixo = `${ano}-${String(mes + 1).padStart(2, '0')}-`;
   for (const s of agendados) {
@@ -84,7 +95,7 @@ export function pontosDoMes({ expediente, ano, mes, tecnicos = [], agendados = [
   if (mostrarLotado && tecnicos.length > 0) {
     const contaveis = filtroTecnico ? tecnicos.filter((t) => t.uid === filtroTecnico) : tecnicos;
     if (contaveis.length > 0) {
-      for (const iso of diasLotados({ expediente, ano, mes, tecnicos: contaveis, agendados, ignorarAgendamento, agora })) pontos.set(iso, 'vermelho');
+      for (const iso of diasLotados({ expediente, ano, mes, duracaoMinima, tecnicos: contaveis, agendados, ignorarAgendamento, agora })) pontos.set(iso, 'vermelho');
     }
   }
   return pontos;

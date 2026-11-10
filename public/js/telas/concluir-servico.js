@@ -118,7 +118,7 @@ export default async function montar(ctx) {
     icone: 'info',
     titulo: 'Antes de concluir',
     texto: 'Escolha ou cadastre o aparelho e selecione o serviço feito. É rapidinho!',
-    acao: botao({ texto: 'Informar aparelhos e serviços', href: `#/informar/${s.id}` }),
+    acao: botao({ texto: 'Informar aparelhos e serviços', href: `#/servico/${s.id}?informar=1` }),
   })}`);
       return;
     }

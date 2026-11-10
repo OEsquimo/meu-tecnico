@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expedientePadrao, expedienteDaEmpresa, validarExpediente, horariosDoDia, horaParaMinutos, minutosParaHora, fimDepoisDoExpediente } from '../../public/js/dominio/expediente.js';
-import { horariosLivresDoDia, diasComVaga, diasLotados, pontosDoMes } from '../../public/js/dominio/disponibilidade.js';
+import { horariosLivresDoDia, diasComVaga, diasLotados, pontosDoMes, menorDuracaoDosTipos } from '../../public/js/dominio/disponibilidade.js';
 import { tecnicoEstaLivre } from '../../public/js/dominio/agenda.js';
 
 // 2031-04-14 é segunda-feira; 2031-04-13 é domingo.
@@ -152,17 +152,29 @@ test('dias lotados: só o dia aberto, futuro e sem nenhum horário livre; fechad
   assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [], agendados: [], agora }).has('2031-04-14'));
 });
 
-test('dias lotados: a regra é a mesma para qualquer serviço (não depende da duração) — lotado = não dá para começar nenhum', () => {
+test('dias lotados: lotado = não cabe nem o MENOR serviço (a regra não depende do serviço em montagem)', () => {
   const e = expedientePadrao();
   e.seg = { aberto: true, de: '09:00', ate: '12:00' }; // inícios: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30
   const agora = new Date(2031, 3, 3);
   const comBrecha = [agendado('a', SEG, '10:00', 60)]; // Ana ocupada das 10:00 às 11:00; ela ainda pode começar às 09:00
-  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: comBrecha, agora }).has(SEG));
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMinima: 60, tecnicos: [A], agendados: comBrecha, agora }).has(SEG));
   const cheio = [agendado('a', SEG, '09:00', 180)]; // Ana ocupada das 09:00 às 12:00: nenhum início livre
-  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: cheio, agora }).has(SEG));
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMinima: 60, tecnicos: [A], agendados: cheio, agora }).has(SEG));
+  // Ana ocupada das 09:30 às 12:00: só cabe um serviço de 30 min às 09:00. Com o menor serviço de 1 hora o dia está lotado...
+  const sobraMeia = [agendado('a', SEG, '09:30', 150)];
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMinima: 60, tecnicos: [A], agendados: sobraMeia, agora }).has(SEG));
+  // ...mas se existir um serviço de 30 minutos cadastrado, ainda cabe e o dia não está lotado
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMinima: 30, tecnicos: [A], agendados: sobraMeia, agora }).has(SEG));
   // um serviço que começa às 11:30 e passa do fechamento (hora extra) ainda deixa o dia lotado
-  const ate1130 = [agendado('a', SEG, '09:00', 150), agendado('a', SEG, '11:30', 120, 'y')];
-  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: ate1130, agora }).has(SEG));
+  const ate1130 = [agendado('a', SEG, '09:00', 150), agendado('a', SEG, '11:30', 120, 'y')]; // 09:00–11:30 e 11:30 em diante
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMinima: 60, tecnicos: [A], agendados: ate1130, agora }).has(SEG));
+});
+
+test('menor serviço cadastrado: o menor entre os tipos ativos; sem tipo, 1 hora', () => {
+  assert.equal(menorDuracaoDosTipos([{ duracaoMin: 120 }, { duracaoMin: 45 }, { duracaoMin: 90, ativo: true }]), 45);
+  assert.equal(menorDuracaoDosTipos([{ duracaoMin: 30, ativo: false }, { duracaoMin: 90 }]), 90, 'tipo desativado não conta');
+  assert.equal(menorDuracaoDosTipos([]), 60);
+  assert.equal(menorDuracaoDosTipos([{ duracaoMin: 'x' }, {}]), 60);
 });
 
 test('dias lotados: hoje, depois do fim do expediente, o dia só acabou (não é lotado)', () => {
@@ -172,7 +184,7 @@ test('dias lotados: hoje, depois do fim do expediente, o dia só acabou (não é
 });
 
 // ---------- Pontos do calendário (um por dia; o mesmo na Agenda e na escolha de dia e hora) ----------
-const base = (extra = {}) => ({ expediente: expedientePadrao(), ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A, B], agendados: [], agora: new Date(2031, 3, 3), ...extra });
+const base = (extra = {}) => ({ expediente: expedientePadrao(), ano: 2031, mes: 3, duracaoMin: 60, duracaoMinima: 60, tecnicos: [A, B], agendados: [], agora: new Date(2031, 3, 3), ...extra });
 
 test('pontos: dia com visita que ainda comporta mais é AZUL; dia sem visita não tem ponto', () => {
   const p = pontosDoMes(base({ agendados: [agendado('a', SEG, '09:00', 60)], mostrarLotado: true }));
@@ -251,5 +263,5 @@ test('pontos: a cor do dia NÃO depende da duração do serviço (Agenda e selet
   const curto = pontosDoMes(base({ expediente: e, agendados, duracaoMin: 30, mostrarLotado: true }));
   const longo = pontosDoMes(base({ expediente: e, agendados, duracaoMin: 480, mostrarLotado: true }));
   assert.deepEqual([...curto], [...longo]);
-  assert.equal(curto.get(SEG), 'azul', 'ainda dá para começar às 11:00');
+  assert.equal(curto.get(SEG), 'azul', 'ainda cabe o menor serviço (1 h) às 11:00');
 });
