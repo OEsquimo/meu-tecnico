@@ -556,3 +556,18 @@
   font-size: 14px;
   color: var(--cor-texto-suave);
 }
+
+/* "Quando" ainda sem dia e hora: cartão amarelo com ícone de aviso (no lugar de um aviso separado embaixo). */
+.quando-botao--pendente {
+  background: var(--cor-aviso-fundo);
+  border-color: var(--cor-aviso);
+}
+.quando-botao--pendente .quando-botao__sub {
+  color: var(--cor-aviso);
+}
+.quando-botao__icone {
+  display: inline-flex;
+  vertical-align: -3px;
+  margin-left: 6px;
+  color: var(--cor-aviso);
+}

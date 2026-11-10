@@ -71,7 +71,8 @@ export default async function montar(ctx) {
     return [...mapa.entries()];
   }
 
-  function cartaoDaLinha(l, valores, cobraveis) {
+  /** `repetidos`: o que o cabeçalho e o cartão de cima já dizem (título do serviço, técnicos, situação) e não precisa se repetir na linha. */
+  function cartaoDaLinha(l, valores, cobraveis, repetidos = {}) {
     const sit = seloDoServico(l);
     const agendada = l.status === STATUS.AGENDADO;
     const concluida = l.status === STATUS.CONCLUIDO;
@@ -81,11 +82,11 @@ export default async function montar(ctx) {
       <div class="visita-servico ${concluida ? 'visita-servico--concluido' : ''} ${l.status === STATUS.CANCELADO ? 'visita-servico--cancelado' : ''}" data-linha="${l.id}">
         <div class="visita-servico__topo">
           <div class="expande">
-            <div class="item-lista__titulo">${l.tipoServicoNome}</div>
-            <div class="item-lista__sub">${textoDosTecnicos(l) ? `${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}` : 'Sem técnico'}</div>
+            ${!repetidos.titulo && html`<div class="item-lista__titulo">${l.tipoServicoNome}</div>`}
+            ${!repetidos.tecnicos && html`<div class="item-lista__sub">${textoDosTecnicos(l) ? `${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}` : 'Sem técnico'}</div>`}
           </div>
           ${!ehLinhaSemServico(l) && selo(textoDoRetorno(sessao.tipos.find((t) => t.id === l.tipoServicoId) || { geraRetorno: l.geraRetorno, retornoPadraoMeses: l.retornoMeses }), l.geraRetorno ? 'azul' : '')}
-          ${selo(sit.texto, sit.tom)}
+          ${!repetidos.situacao && selo(sit.texto, sit.tom)}
           ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
         </div>
         ${nota && html`<div class="visita-obs">${nota}</div>`}
@@ -148,6 +149,8 @@ export default async function montar(ctx) {
     const observacao = s.obsAgendamento || '';
     const unico = linhas.length === 1 && !ehLinhaSemServico(linhas[0]);
     const grupos = porAparelho(linhas);
+    // O que já aparece no cabeçalho e no cartão de cima não se repete nas linhas (visita com um serviço só: título e situação; todos com os mesmos técnicos: técnicos).
+    const repetidos = { titulo: unico, situacao: unico, tecnicos: Boolean(tecnicos) && linhas.every((l) => textoDosTecnicos(l) === textoDosTecnicos(linhas[0])) };
     const cobraveis = usuario.admin ? linhasCobraveis(linhas, valores) : [];
     // Se já há botão de cobrança (abre o WhatsApp do cliente com a mensagem pronta), o "WhatsApp" simples sai.
     const temCobranca = cobraveis.length > 0;
@@ -185,7 +188,7 @@ export default async function montar(ctx) {
               ${!aparelhoId && html`<div class="item-lista__sub">Escolha ou cadastre o aparelho ao concluir o serviço.</div>`}
               ${lista[0].obsAparelho && html`<div class="visita-obs">${lista[0].obsAparelho}</div>`}
             </div>
-            ${lista.map((l) => cartaoDaLinha(l, valores, cobraveis))}
+            ${lista.map((l) => cartaoDaLinha(l, valores, cobraveis, repetidos))}
           </section>`)}
 
         ${agendado ? botao({ texto: 'Adicionar serviço na visita', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}

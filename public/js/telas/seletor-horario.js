@@ -2,10 +2,11 @@
 // SELETOR DE DIA, HORA E TÉCNICOS (tela cheia)
 // =============================================================================
 // Usado em Agendar, Editar agendamento e Reagendar. Uma tela só, numa coluna:
-//   1) calendário do mês (o mesmo da Agenda: ponto azul = dia com agendamento que ainda comporta mais;
-//      ponto vermelho = dia LOTADO, e ao tocar avisa que não há horário livre; dia fechado ou que já
-//      passou: apagado e desligado);
-//   2) horários livres do dia escolhido (dentro do expediente da empresa);
+//   1) calendário do mês (o mesmo da Agenda: ponto azul = dia com agendamento em que ainda dá para começar
+//      outro serviço; ponto vermelho = dia LOTADO (não dá para começar nenhum), e ao tocar avisa que não há
+//      horário livre; dia fechado ou que já passou: apagado e desligado);
+//   2) horários livres do dia escolhido (o serviço começa dentro do expediente e pode terminar depois:
+//      aparece um aviso discreto de hora extra);
 //   3) técnicos livres naquele horário (marca um ou mais).
 // Devolve { data, hora, tecnicoUids } ou null se a pessoa fechar sem confirmar.
 // Só carrega os agendamentos do mês que está na tela (e guarda os que já buscou).
@@ -17,7 +18,8 @@ import { botao } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
 import { mesVizinho } from '../dominio/agenda.js';
 import { calendarioDoMes } from './calendario-comum.js';
-import { diasComVaga, horariosLivresDoDia, pontosDoMes } from '../dominio/disponibilidade.js';
+import { diaTemInicioPelaFrente, diasComVaga, diasLotados, horariosLivresDoDia, pontosDoMes } from '../dominio/disponibilidade.js';
+import { fimDepoisDoExpediente } from '../dominio/expediente.js';
 import { ehISOValido, formatarDiaExtenso, formatarMesAno, hojeISO } from '../dominio/datas.js';
 
 /**
@@ -101,9 +103,9 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
       const pronto = !carregando && !erroDeCarga;
       const pontos = pronto ? pontosDoMes({ ...contaBase(), ano, mes, mostrarLotado: true }) : new Map();
       const comVaga = pronto ? diasComVaga({ ...contaBase(), ano, mes }) : new Set();
-      // Dia fechado ou que já passou: apagado. Dia com vaga ou lotado: dá para tocar.
-      const desligado = (iso) => !(comVaga.has(iso) || pontos.get(iso) === 'vermelho');
-      const complemento = (iso, ponto) => (comVaga.has(iso) ? ', com horário livre' : (ponto === 'vermelho' ? ', dia lotado, sem horário livre' : ''));
+      // Dia fechado ou que já passou: apagado. Os demais dá para tocar (se não couber este serviço, a tela explica).
+      const desligado = (iso) => !diaTemInicioPelaFrente(expediente, iso, agora());
+      const complemento = (iso, ponto) => (comVaga.has(iso) ? ', com horário livre' : (ponto === 'vermelho' ? ', dia lotado, sem horário livre' : ', sem horário livre para este serviço'));
       return calendarioDoMes({ ano, mes, hoje, escolhido: diaEscolhido, pontos, acao: 'seletor-dia', desligado, complemento });
     }
 
@@ -113,6 +115,9 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
       const pode = Boolean(diaEscolhido && horaEscolhida && escolhidos.size > 0 && livres.length > 0);
       const mesAnterior = mesVizinho(ano, mes, -1);
       const antesDeHoje = `${mesAnterior.ano}-${String(mesAnterior.mes + 1).padStart(2, '0')}` < hoje.slice(0, 7);
+      const diaLotadoEscolhido = Boolean(diaEscolhido) && !carregando && !erroDeCarga
+        && diasLotados({ ...contaBase(), ano, mes }).has(diaEscolhido);
+      const horaExtra = horaEscolhida ? fimDepoisDoExpediente(expediente, diaEscolhido, horaEscolhida, duracaoMin) : null;
       const semVagaNoMes = !carregando && !erroDeCarga && diasComVaga({ ...contaBase(), ano, mes }).size === 0;
       janela.innerHTML = String(html`
         <header class="seletor__topo">
@@ -133,8 +138,9 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
             <section class="seletor__secao" data-secao="horarios">
               <h3 class="subtitulo">${formatarDiaExtenso(diaEscolhido)}</h3>
               ${horarios.length === 0
-    ? html`<p class="texto-suave">Nenhum horário livre neste dia.</p>`
-    : html`<div class="seletor__horarios">${horarios.map((h) => html`<button type="button" class="seletor__horario ${h.hora === horaEscolhida ? 'seletor__horario--escolhido' : ''}" data-acao="seletor-hora" data-hora="${h.hora}" aria-pressed="${h.hora === horaEscolhida}">${h.hora}</button>`)}</div>`}
+    ? html`<p class="texto-suave">${diaLotadoEscolhido ? 'Nenhum horário livre neste dia.' : 'Nenhum horário livre neste dia para este serviço. Escolha outro dia.'}</p>`
+    : html`<div class="seletor__horarios">${horarios.map((h) => html`<button type="button" class="seletor__horario ${h.hora === horaEscolhida ? 'seletor__horario--escolhido' : ''}" data-acao="seletor-hora" data-hora="${h.hora}" aria-pressed="${h.hora === horaEscolhida}">${h.hora}</button>`)}</div>
+      ${horaExtra ? html`<p class="seletor__aviso-extra" data-aviso="hora-extra">Termina ${horaExtra.startsWith('depois') ? horaExtra : `às ${horaExtra}`}, depois do expediente.</p>` : ''}`}
             </section>` : ''}
           ${horaEscolhida && livres.length > 0 ? html`
             <section class="seletor__secao" data-secao="tecnicos">

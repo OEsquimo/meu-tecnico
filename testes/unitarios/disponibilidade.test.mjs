@@ -3,8 +3,9 @@
 // =============================================================================
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { expedientePadrao, expedienteDaEmpresa, validarExpediente, horariosDoDia, horaParaMinutos, minutosParaHora } from '../../public/js/dominio/expediente.js';
+import { expedientePadrao, expedienteDaEmpresa, validarExpediente, horariosDoDia, horaParaMinutos, minutosParaHora, fimDepoisDoExpediente } from '../../public/js/dominio/expediente.js';
 import { horariosLivresDoDia, diasComVaga, diasLotados, pontosDoMes } from '../../public/js/dominio/disponibilidade.js';
+import { tecnicoEstaLivre } from '../../public/js/dominio/agenda.js';
 
 // 2031-04-14 é segunda-feira; 2031-04-13 é domingo.
 const SEG = '2031-04-14';
@@ -33,16 +34,41 @@ test('empresa sem expediente salvo usa o padrão; expediente salvo vale; dia est
   assert.deepEqual(e.seg, expedientePadrao().seg);
 });
 
-test('horários do dia: de 30 em 30 min, só os que terminam até o fechamento', () => {
+test('horários do dia: de 30 em 30 min, do abrir até 30 min antes de fechar (o serviço pode passar do fechamento)', () => {
   const e = expedientePadrao();
-  const h60 = horariosDoDia(e, SEG, 60);
-  assert.equal(h60[0], '07:00');
-  assert.equal(h60[h60.length - 1], '17:00');
-  assert.equal(h60.length, 21);
-  const h120 = horariosDoDia(e, SEG, 120);
-  assert.equal(h120[h120.length - 1], '16:00');
-  assert.deepEqual(horariosDoDia(e, DOM, 60), [], 'domingo fechado não tem horário');
+  const h = horariosDoDia(e, SEG);
+  assert.equal(h[0], '07:00');
+  assert.equal(h[h.length - 1], '17:30', 'fecha às 18:00: o último início é 17:30');
+  assert.equal(h.length, 22);
+  assert.deepEqual(horariosDoDia(e, SEG, 240), h, 'a duração do serviço não limita o início (hora extra)');
+  assert.deepEqual(horariosDoDia(e, DOM), [], 'domingo fechado não tem horário');
   assert.equal(minutosParaHora(horaParaMinutos('07:30')), '07:30');
+});
+
+test('hora extra: avisa só quando o serviço termina depois do fechamento', () => {
+  const e = expedientePadrao(); // fecha às 18:00
+  assert.equal(fimDepoisDoExpediente(e, SEG, '16:00', 120), null, 'termina às 18:00: dentro do expediente');
+  assert.equal(fimDepoisDoExpediente(e, SEG, '16:30', 240), '20:30');
+  assert.equal(fimDepoisDoExpediente(e, SEG, '16:30', 600), 'depois da meia-noite');
+  assert.equal(fimDepoisDoExpediente(e, DOM, '09:00', 60), null, 'dia fechado');
+  assert.equal(fimDepoisDoExpediente(e, SEG, '', 60), null);
+});
+
+test('hora extra: o serviço longo no fim do dia é oferecido (começa dentro do expediente, termina depois)', () => {
+  const e = expedientePadrao();
+  const h = horariosLivresDoDia({ expediente: e, iso: SEG, duracaoMin: 480, tecnicos: [A], agendados: [], agora: longeNoPassado });
+  assert.equal(h[h.length - 1].hora, '17:30');
+});
+
+test('dia seguinte livre: a ocupação acaba na meia-noite do dia em que o serviço começou', () => {
+  // Ana começa às 16:30 um serviço de 8h (iria até 00:30 da terça).
+  const agendados = [agendado('a', SEG, '16:30', 480)];
+  assert.equal(tecnicoEstaLivre('a', new Date(2031, 3, 14, 20, 0), 60, agendados), false, 'à noite de segunda ela segue ocupada');
+  assert.equal(tecnicoEstaLivre('a', new Date(2031, 3, 15, 7, 0), 60, agendados), true, 'na terça cedo ela está livre');
+  assert.equal(tecnicoEstaLivre('a', new Date(2031, 3, 15, 0, 15), 30, agendados), true, 'depois da meia-noite já é outro dia');
+  // O serviço novo que passa da meia-noite também só conta até a meia-noite.
+  const terca = [agendado('a', '2031-04-15', '07:00', 60)];
+  assert.equal(tecnicoEstaLivre('a', new Date(2031, 3, 14, 16, 30), 900, terca), true, 'um serviço de segunda não esbarra na agenda de terça');
 });
 
 test('validar expediente: exige hora válida, fechar depois de abrir e pelo menos um dia aberto', () => {
@@ -126,13 +152,17 @@ test('dias lotados: só o dia aberto, futuro e sem nenhum horário livre; fechad
   assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [], agendados: [], agora }).has('2031-04-14'));
 });
 
-test('dias lotados: a conta usa a duração da visita (uma instalação de 3h pode não caber onde uma limpeza de 1h cabe)', () => {
+test('dias lotados: a regra é a mesma para qualquer serviço (não depende da duração) — lotado = não dá para começar nenhum', () => {
   const e = expedientePadrao();
-  e.seg = { aberto: true, de: '09:00', ate: '12:00' };
-  const agendados = [agendado('a', SEG, '10:00', 60)]; // Ana ocupada das 10:00 às 11:00
+  e.seg = { aberto: true, de: '09:00', ate: '12:00' }; // inícios: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30
   const agora = new Date(2031, 3, 3);
-  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 60, tecnicos: [A], agendados, agora }).has(SEG), '1h cabe às 09:00 ou 11:00');
-  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, duracaoMin: 180, tecnicos: [A], agendados, agora }).has(SEG), '3h não cabe no dia');
+  const comBrecha = [agendado('a', SEG, '10:00', 60)]; // Ana ocupada das 10:00 às 11:00; ela ainda pode começar às 09:00
+  assert.ok(!diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: comBrecha, agora }).has(SEG));
+  const cheio = [agendado('a', SEG, '09:00', 180)]; // Ana ocupada das 09:00 às 12:00: nenhum início livre
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: cheio, agora }).has(SEG));
+  // um serviço que começa às 11:30 e passa do fechamento (hora extra) ainda deixa o dia lotado
+  const ate1130 = [agendado('a', SEG, '09:00', 150), agendado('a', SEG, '11:30', 120, 'y')];
+  assert.ok(diasLotados({ expediente: e, ano: 2031, mes: 3, tecnicos: [A], agendados: ate1130, agora }).has(SEG));
 });
 
 test('dias lotados: hoje, depois do fim do expediente, o dia só acabou (não é lotado)', () => {
@@ -212,4 +242,14 @@ test('pontos: a visita em edição não deixa o próprio horário vermelho', () 
   const agendados = [agendado('a', SEG, '09:00', 60, 'edit'), agendado('b', SEG, '09:00', 60, 'outro')];
   assert.equal(pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true })).get(SEG), 'vermelho');
   assert.equal(pontosDoMes(base({ expediente: e, agendados, mostrarLotado: true, ignorarAgendamento: 'edit' })).get(SEG), 'azul');
+});
+
+test('pontos: a cor do dia NÃO depende da duração do serviço (Agenda e seletor mostram sempre o mesmo)', () => {
+  const e = expedientePadrao();
+  e.seg = { aberto: true, de: '09:00', ate: '12:00' };
+  const agendados = [agendado('a', SEG, '09:00', 120, '1'), agendado('b', SEG, '09:00', 120, '2')]; // sobra só 11:00–12:00 e o início 11:30 (30 min)
+  const curto = pontosDoMes(base({ expediente: e, agendados, duracaoMin: 30, mostrarLotado: true }));
+  const longo = pontosDoMes(base({ expediente: e, agendados, duracaoMin: 480, mostrarLotado: true }));
+  assert.deepEqual([...curto], [...longo]);
+  assert.equal(curto.get(SEG), 'azul', 'ainda dá para começar às 11:00');
 });

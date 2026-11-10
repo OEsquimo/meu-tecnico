@@ -36,7 +36,7 @@ export default async function montar({ raiz, sessao, ir }) {
       <div class="pilha pilha--pequena">
         <span class="campo__rotulo">Prévia</span>
         <div class="mensagem-previa" id="previa" aria-live="polite"></div>
-        ${botao({ texto: 'Voltar à mensagem padrão', variante: 'fantasma', acao: 'padrao', pequeno: true })}
+        ${botao({ texto: 'Voltar ao lembrete padrão', variante: 'fantasma', acao: 'padrao', pequeno: true })}
       </div>
       <h2 class="titulo-secao">Cobrança pelo WhatsApp</h2>
       ${campoTexto({ nome: 'chavePix', rotulo: 'Chave Pix (opcional)', valor: e.chavePix ?? '', maximo: PIX_MAX_LETRAS, ajuda: 'Aparece na mensagem de cobrança. Sem chave, a linha do Pix some.' })}
@@ -49,7 +49,7 @@ export default async function montar({ raiz, sessao, ir }) {
       <div class="pilha pilha--pequena">
         <span class="campo__rotulo">Prévia da cobrança</span>
         <div class="mensagem-previa" id="previa-cobranca" aria-live="polite"></div>
-        ${botao({ texto: 'Voltar à mensagem padrão do tom', variante: 'fantasma', acao: 'padrao-cobranca', pequeno: true })}
+        ${botao({ texto: 'Voltar à cobrança padrão', variante: 'fantasma', acao: 'padrao-cobranca', pequeno: true })}
       </div>
       ${interruptor({
         nome: 'permiteTecnicoCliente',

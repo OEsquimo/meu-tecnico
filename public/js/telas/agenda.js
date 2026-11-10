@@ -28,9 +28,6 @@ import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
-/** Medida do "dia lotado" na Agenda: o menor serviço padrão (1 hora). */
-const DURACAO_MINIMA_MIN = 60;
-
 export default async function montar(ctx) {
   const { raiz } = ctx;
   const usuario = contextoDoUsuario();
@@ -45,10 +42,7 @@ export default async function montar(ctx) {
   let servicosDoMes = []; // todos os agendados do mês (sem filtro de técnico)
   let tecnicos = []; // opções do filtro (só admin)
 
-  const topo = () => cabecalho({
-    titulo: 'Agenda',
-    acaoDireita: usuario.admin ? botao({ texto: 'Agendar', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}`, pequeno: true, id: 'botao-agendar' }) : null,
-  });
+  const topo = () => cabecalho({ titulo: 'Agenda', centralizado: true });
 
   // ---------------------------------------------------------------------------
   // Carregar o mês
@@ -110,6 +104,7 @@ export default async function montar(ctx) {
     ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(),
     complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} visita(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
   })}
+          ${usuario.admin && botao({ texto: 'Agendar', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}`, bloco: true, id: 'botao-agendar' })}
         </section>
 
         <section class="pilha pilha--pequena" aria-label="Serviços do dia">
@@ -117,9 +112,8 @@ export default async function montar(ctx) {
           ${doDia.length === 0
     ? html`<div class="cartao">${estadoVazio({
       icone: 'agenda',
-      titulo: 'Nenhum serviço neste dia',
-      texto: usuario.admin ? 'Toque em "Agendar" para marcar um serviço.' : 'Você não tem serviços neste dia.',
-      acao: usuario.admin ? botao({ texto: 'Agendar serviço', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}` }) : null,
+      titulo: 'Nenhum serviço neste dia.',
+      texto: usuario.admin ? '' : 'Você não tem serviços neste dia.',
     })}</div>`
     : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin }))}
         </section>
@@ -131,7 +125,8 @@ export default async function montar(ctx) {
 
   /**
    * Os pontos do mês. O vermelho (dia lotado) é calculado só para o administrador e só com a lista de
-   * técnicos carregada; a medida é 1 hora (nem um serviço de 1h cabe). Com o filtro de técnico ligado,
+   * técnicos carregada; é o dia em que não dá mais para começar nenhum serviço (a mesma regra do seletor
+   * de dia e hora). Com o filtro de técnico ligado,
    * vale só para aquele técnico. Visitas de qualquer técnico entram na conta de quem está ocupado.
    */
   function pontosDoCalendario() {
@@ -139,7 +134,6 @@ export default async function montar(ctx) {
       expediente: expedienteDaEmpresa(sessao.empresa),
       ano,
       mes,
-      duracaoMin: DURACAO_MINIMA_MIN,
       tecnicos,
       agendados: servicosDoMes,
       filtroTecnico,

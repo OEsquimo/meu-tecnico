@@ -33,7 +33,7 @@ export default async function montar(ctx) {
             direita: html`${seloStatusEquipe(m.status)}${seta}`,
           }))}
         </div>
-        ${aviso({ texto: 'Cada técnico vê só os serviços que você atribuiu a ele, sem valores. Se você trabalha sozinho, a equipe fica só com você.' })}
+        ${aviso({ texto: 'Cada técnico vê só os serviços que você atribuiu a ele. Os valores só aparecem para quem você liberar, em cada funcionário. Se você trabalha sozinho, a equipe fica só com você.' })}
       </div>`);
   } catch (erro) {
     if (ctx.ativo()) mostrarFalha(raiz, erro, ctx.recarregar);

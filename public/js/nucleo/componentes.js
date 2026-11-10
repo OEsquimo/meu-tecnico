@@ -15,14 +15,14 @@ export { iniciais };
  * Cabeçalho da tela: botão voltar + título + subtítulo opcional.
  * voltarPara: '#/clientes' (link fixo) | true (volta no histórico) | omitido (sem botão).
  */
-export function cabecalho({ titulo, subtitulo = '', voltarPara = null, acaoDireita = null }) {
+export function cabecalho({ titulo, subtitulo = '', voltarPara = null, acaoDireita = null, centralizado = false }) {
   const voltar = voltarPara === true
     ? html`<button type="button" class="cabecalho__voltar" data-acao="voltar" aria-label="Voltar">${icone('voltar', 24)}</button>`
     : voltarPara
       ? html`<a class="cabecalho__voltar" href="${voltarPara}" aria-label="Voltar">${icone('voltar', 24)}</a>`
       : '';
   return html`
-    <header class="cabecalho">
+    <header class="cabecalho ${centralizado ? 'cabecalho--centro' : ''}">
       ${voltar}
       <div class="cabecalho__textos">
         <h1 class="titulo-tela" tabindex="-1" id="titulo-da-tela">${titulo}</h1>
