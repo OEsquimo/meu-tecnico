@@ -270,7 +270,10 @@ service cloud.firestore {
         && (!('mensagemCobranca' in d) || (d.mensagemCobranca is string && d.mensagemCobranca.size() <= 600))
         && (!('tomCobranca' in d) || d.tomCobranca in ['amigavel', 'formal'])
         // Horário de funcionamento (opcional): um mapa com, no máximo, os 7 dias da semana
-        && (!('expediente' in d) || (d.expediente is map && d.expediente.keys().hasOnly(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'])));
+        && (!('expediente' in d) || (d.expediente is map && d.expediente.keys().hasOnly(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'])))
+        // Pausa de almoço e limite de horas por técnico por dia (opcionais)
+        && (!('almoco' in d) || (d.almoco is map && d.almoco.keys().hasOnly(['ativo', 'de', 'ate'])))
+        && (!('limiteHorasDia' in d) || (d.limiteHorasDia is number && d.limiteHorasDia >= 0 && d.limiteHorasDia <= 24));
     }
 
     // Atualização do contador de clientes: só é aceita junto com a criação
@@ -321,7 +324,7 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia'])
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)
         || contadorValido(emp)

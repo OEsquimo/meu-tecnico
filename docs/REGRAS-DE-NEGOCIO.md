@@ -118,3 +118,12 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Informar serviço:** a visita sem aparelho/serviço mostra o texto "Aparelho e serviço ainda não foram informados" e o botão "Informar aparelho e serviço" (nos cartões da Agenda/Início e na ficha do cliente o botão segue "Informar serviço"), que abre as mesmas perguntas do "Adicionar aparelhos e serviços" ("Em qual aparelho?" → "Qual serviço?"). A tela antiga `/informar/:id` foi removida; o endereço redireciona para `#/servico/:id?informar=1`, que abre a primeira pergunta. A linha "Serviço a definir" é consumida (preenchida) pelo primeiro serviço informado.
 - **"Adicionar aparelhos e serviços"** só aparece quando a visita já tem pelo menos um serviço de verdade.
 - **Excluir serviço e aparelho** continua só no Editar do agendamento: não há botão "Excluir" dentro do serviço nem "Remover da visita" no aparelho.
+
+## Pacote 11 — pausa de almoço e limite de horas por técnico
+
+- **Onde se configura:** Administrativa > Horário de funcionamento (mesma tela dos dias e horários). Guardado em `empresas/{id}.almoco = { ativo, de, ate }` e `empresas/{id}.limiteHorasDia` (número; 0 = sem limite). Valem para todos os técnicos. Padrão: almoço 12:00–13:00, ligado, e 8 horas por dia.
+- **Pausa de almoço:** o técnico fica indisponível nesse intervalo. Um serviço de até 4 horas não começa dentro do almoço nem o atravessa (encostar no 12:00 ou começar às 13:00 pode). Serviço maior que 4 horas pode atravessar (senão nunca caberia). Almoço desligado = sem pausa.
+- **Limite diário:** soma do tempo que o técnico já tem no dia (uma vez por visita, sem contar o agendamento em edição). Se o novo serviço fizesse passar do limite, o técnico não aparece como livre naquele horário. Exatamente no limite cabe. Dia ainda vazio: um serviço maior que o limite pode ser feito.
+- **Dia vermelho:** a regra é a mesma de antes (não cabe nem o menor serviço), mas agora considera almoço e limite. Ex.: instalações de 2h30 com limite de 8 h: 3 por dia, e o dia fica vermelho.
+- **Ao salvar o agendamento** o app confere de novo e avisa: "estaria no horário de almoço" ou "passaria do limite de horas de serviço do dia".
+- Serviços já agendados não mudam; as regras valem para novos agendamentos e edições.

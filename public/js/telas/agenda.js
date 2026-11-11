@@ -21,7 +21,7 @@ import { listarAgendados, cancelarAgendamentoCompleto, excluirAgendamentoComplet
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { agruparPorDia, mesVizinho } from '../dominio/agenda.js';
 import { menorDuracaoDosTipos, pontosDoMes } from '../dominio/disponibilidade.js';
-import { expedienteDaEmpresa } from '../dominio/expediente.js';
+import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import { sessao } from '../nucleo/sessao.js';
 import { calendarioDoMes } from './calendario-comum.js';
 import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js';
@@ -135,6 +135,7 @@ export default async function montar(ctx) {
       ano,
       mes,
       duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
+      regras: regrasDaEmpresa(sessao.empresa),
       tecnicos,
       agendados: servicosDoMes,
       filtroTecnico,

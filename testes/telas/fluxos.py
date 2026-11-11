@@ -63,7 +63,7 @@ with sync_playwright() as p:
     escolher_cliente("Maria Souza")
     livres = tecnicos_no_horario(pag, "2031-03-10", "09:30")
     ok(livres is None or not any("Marcos" in t for t in livres), "técnico ocupado não aparece entre os livres")
-    livres2 = tecnicos_no_horario(pag, "2031-03-10", "12:00")
+    livres2 = tecnicos_no_horario(pag, "2031-03-10", "13:00")
     ok(livres2 is not None and len(livres2) >= 2, "em outro horário os técnicos voltam")
 
     # 2b) horário lotado: depois de agendar até acabarem os técnicos, o horário deixa de ser oferecido
@@ -85,7 +85,7 @@ with sync_playwright() as p:
     ok(pag.evaluate("(() => { const el = document.querySelector('#botao-quando'); const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()"), "a tela rolou até o campo 'Quando'")
     pag.locator(".aviso-rapido--erro").first.click(); pag.wait_for_timeout(200)
     ok(pag.locator(".aviso-rapido--erro").count() == 0, "um toque fecha o aviso antes da hora")
-    agendar_data("2031-03-10", "12:00")
+    agendar_data("2031-03-10", "14:00")
 
     # 3) vários aparelhos e serviços, um técnico por serviço
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Sala")

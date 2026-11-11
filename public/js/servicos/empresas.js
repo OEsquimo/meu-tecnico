@@ -80,6 +80,11 @@ export async function salvarExpediente(empresaId, expediente) {
   await gravar([op.atualizar(`empresas/${empresaId}`, { expediente })]);
 }
 
+/** Salva a pausa de almoço e o limite de horas por técnico por dia: { almoco: { ativo, de, ate }, limiteHorasDia }. */
+export async function salvarRegrasDeTrabalho(empresaId, { almoco, limiteHorasDia }) {
+  await gravar([op.atualizar(`empresas/${empresaId}`, { almoco, limiteHorasDia })]);
+}
+
 /** Salva as configurações da empresa (nome, aviso de retorno, texto do WhatsApp, permissão do técnico, cobrança: Pix, texto e tom). */
 export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
   await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca })]);
