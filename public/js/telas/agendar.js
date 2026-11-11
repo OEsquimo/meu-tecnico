@@ -6,6 +6,10 @@
 //   ?cliente=ID  ?aparelho=ID  ?tipo=ID  ?data=AAAA-MM-DD
 //   ?retorno=ID  -> ID do serviço de ORIGEM do lembrete de retorno; ao agendar,
 //                   o lembrete passa a "agendado" (origemRetornoId).
+//   ?pedido=1&data=AAAA-MM-DD&hora=HH:MM&nome=...&whatsapp=...  -> PEDIDO DE UM CLIENTE (vem do botão
+//                   "Técnico: abrir no app" da mensagem do link de horários): dia e hora já vêm preenchidos,
+//                   um aviso "Pedido do cliente" aparece no alto, o cliente é achado pelo WhatsApp (ou pelo nome)
+//                   e, se não existir, "Cadastrar novo cliente" leva nome e WhatsApp preenchidos.
 //
 // REGRAS DESTA TELA
 //   * UM dia e UMA hora por agendamento (dá para mudar depois). Dia, hora e técnicos da visita
@@ -37,7 +41,9 @@ import { validarAgendamento } from '../dominio/validacoes.js';
 import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio/aparelhos.js';
 import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
-import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora } from '../dominio/datas.js';
+import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora, formatarDiaExtenso } from '../dominio/datas.js';
+import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
+import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
@@ -70,6 +76,9 @@ export default async function montar(ctx) {
   let linhasExistentes = []; // todas as linhas do agendamento em edição
   let agendamentoId = null;
   let origemRetornoId = null;
+  let pedidoDoCliente = null; // pedido que veio do link de horários (só em agendamento novo)
+  let pedidoSemVaga = false; // o horário pedido já não está livre
+  let buscaInicial = ''; // nome do pedido, para já filtrar a lista de clientes na primeira vez
   let todosClientes = [];
   let tecnicos = []; // { uid, nome }
   let aparelhos = []; // aparelhos do cliente escolhido
@@ -123,6 +132,7 @@ export default async function montar(ctx) {
         .map((l) => l.id);
       await carregarOcupacao({ avisar: false });
       sugerirTecnicoDoAgendamento();
+      conferirPedidoDoCliente();
       // Serviços que já chegam preenchidos (retorno, ficha do cliente) recebem um técnico livre.
       for (const s of todosOsServicos(estado)) {
         if (s.tecnicoUids.length === 0) s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
@@ -207,6 +217,39 @@ export default async function montar(ctx) {
     }
     const data = consulta.get('data');
     if (data && ehISOValido(data)) estado.data = data;
+    // Pedido de cliente (link de horários): dia e hora já preenchidos e cliente achado pelo WhatsApp.
+    const pedido = lerPedidoDaConsulta(consulta);
+    if (pedido) {
+      pedidoDoCliente = pedido;
+      estado.data = pedido.data;
+      estado.hora = pedido.hora;
+      buscaInicial = pedido.nome;
+      if (!estado.cliente && pedido.whatsapp) {
+        estado.cliente = todosClientes.find((c) => normalizarWhatsappBR(c.whatsapp) === pedido.whatsapp) || null;
+      }
+    }
+  }
+
+  /**
+   * O horário que o cliente pediu pode já não servir (passou, ou outro agendamento tomou): avisa e deixa a hora
+   * vazia para a pessoa escolher outra. Dia, nome e WhatsApp do pedido continuam.
+   */
+  function conferirPedidoDoCliente() {
+    if (!pedidoDoCliente || editando) return;
+    const inicio = inicioDoEstado(estado);
+    const livre = inicio && inicio.getTime() > Date.now() && tecnicosLivresParaAgendamento(contexto()).length > 0;
+    if (livre) return;
+    pedidoSemVaga = true;
+    estado.hora = '';
+    estado.tecnicoUids = [];
+  }
+
+  /** Endereço do cadastro de cliente novo, já com nome e WhatsApp do pedido (e a volta para cá com o pedido). */
+  function enderecoDoClienteNovo() {
+    if (!pedidoDoCliente) return '#/cliente/novo';
+    const q = new URLSearchParams({ pedido: '1', data: pedidoDoCliente.data, hora: pedidoDoCliente.hora, nome: pedidoDoCliente.nome });
+    if (pedidoDoCliente.whatsapp) q.set('whatsapp', pedidoDoCliente.whatsapp);
+    return `#/cliente/novo?${q.toString()}`;
   }
 
   /** Busca os aparelhos do cliente escolhido e acerta o endereço. */
@@ -269,6 +312,7 @@ export default async function montar(ctx) {
       ${topo}
       <form id="form-agendar" class="formulario" novalidate>
         <div data-erros-gerais></div>
+        <div id="area-pedido" class="pilha pilha--pequena"></div>
         <div id="area-cliente" class="pilha"></div>
         <div id="area-aparelhos" class="pilha"></div>
         <div id="area-quando"></div>
@@ -276,6 +320,7 @@ export default async function montar(ctx) {
         <div id="area-pendencias" class="pilha pilha--pequena"></div>
         ${botao({ texto: editando ? 'Salvar alterações' : 'Agendar', tipo: 'submit', bloco: true, id: 'botao-salvar' })}
       </form>`);
+    desenharPedido();
     desenharCliente();
     desenharAparelhos();
     desenharQuando();
@@ -330,6 +375,17 @@ export default async function montar(ctx) {
     if (alvo.obsAberta) levarAte(raiz.querySelector(`textarea[name="${nome}"]`));
   }
 
+  // ---- Pedido do cliente (veio do link de horários) ----
+  function desenharPedido() {
+    const area = raiz.querySelector('#area-pedido');
+    if (!area) return;
+    if (!pedidoDoCliente) { mostrar(area, ''); return; }
+    const p = pedidoDoCliente;
+    mostrar(area, html`
+      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}` })}
+      ${pedidoSemVaga && aviso({ tom: 'amarelo', texto: `O horário pedido (${p.hora}) já não está livre. Escolha outro em "Quando" e avise o cliente.` })}`);
+  }
+
   // ---- Cliente ----
   function desenharCliente() {
     const area = raiz.querySelector('#area-cliente');
@@ -341,8 +397,9 @@ export default async function montar(ctx) {
           <input class="campo__entrada" id="campo-busca" type="search" placeholder="Digite nome, telefone ou rua" autocomplete="off" />
         </div>
         <div id="area-resultados" class="pilha pilha--pequena"></div>`);
-      desenharResultados('');
       const entrada = area.querySelector('#campo-busca');
+      if (buscaInicial) { entrada.value = buscaInicial; buscaInicial = ''; }
+      desenharResultados(entrada.value);
       const filtrar = esperarDigitar(() => desenharResultados(entrada.value));
       ouvir(entrada, 'input', filtrar);
       return;
@@ -371,7 +428,7 @@ export default async function montar(ctx) {
     if (!area) return;
     const lista = filtrarClientes(todosClientes, termo);
     if (lista.length === 0) {
-      mostrar(area, html`<p class="texto-suave">Nenhum cliente encontrado. <a href="#/cliente/novo">Cadastrar novo cliente</a></p>`);
+      mostrar(area, html`<p class="texto-suave">Nenhum cliente encontrado. <a href="${enderecoDoClienteNovo()}">Cadastrar novo cliente</a></p>`);
       return;
     }
     mostrar(area, html`

@@ -14,6 +14,7 @@ import { mostrar, html, toast, limparCliques } from './ui.js';
 import { esqueletos, menuSuperior, estadoVazio, botao } from './componentes.js';
 import { traduzirErro, ehErroDeRede } from './erros.js';
 import { NOME_APP } from './constantes.js';
+import { guardarDestino, pegarDestino } from './destino.js';
 
 let elementos = null; // { raiz, menu }
 let token = 0; // identifica a navegação atual (descarta respostas atrasadas)
@@ -104,6 +105,22 @@ async function navegar() {
     return;
   }
   if (decisao.tipo === 'redirecionar') {
+    // Visitante que tocou num link interno (ex.: "Técnico: abrir no app"): guarda o destino para depois do login.
+    if (sessao.estado === 'visitante' && decisao.para === '/entrar' && rota.acesso !== 'publico') {
+      guardarDestino(`${caminho}${consulta.toString() ? `?${consulta.toString()}` : ''}`);
+    }
+    // Acabou de entrar e vai para o Início: se havia um destino guardado e este papel pode abri-lo, vai para lá.
+    if (decisao.para === '/' && sessao.estado === 'pronto') {
+      const destino = pegarDestino();
+      if (destino) {
+        const dentro = destino.indexOf('?');
+        const { rota: rotaDestino } = resolverRota(dentro === -1 ? destino : destino.slice(0, dentro));
+        if (decidirAcesso(rotaDestino, sessao).tipo === 'ok') {
+          ir(destino, { substituir: true });
+          return;
+        }
+      }
+    }
     if (decisao.aviso) toast(decisao.aviso, 'erro');
     ir(decisao.para, { substituir: true });
     return;
