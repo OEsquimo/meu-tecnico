@@ -41,7 +41,7 @@ import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, form
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
-import { expedienteDaEmpresa } from '../dominio/expediente.js';
+import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import {
   estadoInicial, novoGrupo, novoServico, inicioDoEstado, todosOsServicos, textoDoRetorno, duracaoDoTipo, duracaoDoServicoNaTela,
   DURACOES_OFERECIDAS, textoDaDuracao, problemasDoAgendamento,
@@ -501,6 +501,7 @@ export default async function montar(ctx) {
       expediente: expedienteDaEmpresa(sessao.empresa),
       duracaoMin: duracaoNecessaria(estado, tiposPorId()),
       duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
+      regras: regrasDaEmpresa(sessao.empresa),
       tecnicos,
       agendamentoId,
       // Só os agendamentos do mês que está na tela (com uma folga de 1 dia antes e 1 depois).
@@ -789,6 +790,7 @@ export default async function montar(ctx) {
         linhas,
         origemRetornoId,
         preservar: linhasPreservadas,
+        regras: regrasDaEmpresa(sessao.empresa),
       });
       descartarRascunho();
       // A linha aberta na URL pode ter sido removida da edição: vai para uma linha que existe.

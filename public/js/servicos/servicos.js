@@ -19,7 +19,7 @@ import { invalidarCache } from '../nucleo/cache.js';
 import { ErroApp } from '../nucleo/erros.js';
 import { PAGINA_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, ehLinhaSemServico, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
-import { tecnicoEstaLivre } from '../dominio/agenda.js';
+import { motivoDeIndisponibilidade } from '../dominio/agenda.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
@@ -145,7 +145,7 @@ function minutosPorTecnico(linhas) {
 }
 
 /** Confere, no banco, se cada técnico escolhido está livre. Lança ErroApp com o nome de quem não está. */
-export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null }) {
+export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null, regras = null }) {
   const minutos = minutosPorTecnico(linhas);
   if (minutos.size === 0) return;
   // Serviços agendados do dia anterior ao seguinte (cobre quem começou antes e passa do horário).
@@ -153,8 +153,11 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
   const ate = new Date(inicio.getTime() + 24 * 3600000);
   const agendados = await listarAgendados({ empresaId, de, ate });
   for (const [uid, total] of minutos) {
-    if (!tecnicoEstaLivre(uid, inicio, total, agendados, ignorarAgendamento)) {
+    const motivo = motivoDeIndisponibilidade(uid, inicio, total, agendados, ignorarAgendamento, regras);
+    if (motivo) {
       const nome = linhas.flatMap(tecnicosDaLinha).find((t) => t?.uid === uid)?.nome || 'O técnico';
+      if (motivo === 'almoco') throw new ErroApp(`${nome} estaria no horário de almoço. Escolha outro horário.`, 'tecnico-almoco');
+      if (motivo === 'limite') throw new ErroApp(`${nome} passaria do limite de horas de serviço do dia. Escolha outro dia, outro horário ou outro técnico.`, 'tecnico-limite');
       throw new ErroApp(`${nome} já tem outro serviço nesse horário. Escolha outro técnico ou outro horário.`, 'tecnico-ocupado');
     }
   }
@@ -177,7 +180,7 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
  *                                não são apagadas; só acompanham o novo dia/hora e a observação.
  * @returns {Promise<string>} id do agendamento
  */
-export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [] }) {
+export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [], regras = null }) {
   const inicio = combinarDataHora(data, hora);
   const editando = Boolean(agendamentoId);
   // Editar mexe nas linhas agendadas; se o agendamento foi cancelado, nas canceladas (reagendar).
@@ -209,7 +212,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
     }
   }
 
-  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null });
+  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null, regras });
   const minutos = minutosPorTecnico(todas);
 
   const operacoes = [];

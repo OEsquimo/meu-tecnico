@@ -12,6 +12,8 @@
 
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
+import { regrasDaEmpresa } from '../dominio/expediente.js';
+import { sessao } from '../nucleo/sessao.js';
 import { combinarDataHora, ehISOValido, ehHoraValida } from '../dominio/datas.js';
 import { tecnicosDoServico, linhasEditaveis } from '../dominio/servicos.js';
 
@@ -91,7 +93,7 @@ export function tecnicosLivresParaServico({ estado, servico, tecnicos, tiposPorI
   const inicio = inicioDoEstado(estado);
   if (!inicio) return [];
   const minha = duracaoDoServicoNaTela(servico, tiposPorId);
-  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, minutosDoTecnicoNaVisita(estado, tiposPorId, t.uid, servico.chave) + minha, agendados, agendamentoId));
+  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, minutosDoTecnicoNaVisita(estado, tiposPorId, t.uid, servico.chave) + minha, agendados, agendamentoId, regrasDaEmpresa(sessao.empresa)));
 }
 
 /**
@@ -107,7 +109,7 @@ export function duracaoNecessaria(estado, tiposPorId) {
 export function tecnicosLivresParaAgendamento({ estado, tecnicos, agendados, agendamentoId = null, duracaoMin = DURACAO_PADRAO_MIN }) {
   const inicio = inicioDoEstado(estado);
   if (!inicio) return [];
-  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, duracaoMin, agendados, agendamentoId));
+  return tecnicos.filter((t) => tecnicoEstaLivre(t.uid, inicio, duracaoMin, agendados, agendamentoId, regrasDaEmpresa(sessao.empresa)));
 }
 
 /**

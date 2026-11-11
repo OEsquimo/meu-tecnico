@@ -107,3 +107,53 @@ export function validarExpediente(entrada) {
   }
   return { valido: Object.keys(erros).length === 0, erros, dados };
 }
+
+// -----------------------------------------------------------------------------
+// REGRAS DE TRABALHO DO TÉCNICO (pausa de almoço e limite de horas por dia)
+// -----------------------------------------------------------------------------
+// Valem para todos os técnicos da empresa. Guardadas em empresas/{id}:
+//   almoco: { ativo: true, de: '12:00', ate: '13:00' }   e   limiteHorasDia: 8 (0 = sem limite)
+// -----------------------------------------------------------------------------
+
+export const LIMITE_HORAS_PADRAO = 8;
+export const LIMITE_HORAS_MAXIMO = 24;
+
+/** Padrão: almoço das 12:00 às 13:00 e 8 horas de serviço por técnico por dia. */
+export function regrasDeTrabalhoPadrao() {
+  return { almoco: { ativo: true, de: '12:00', ate: '13:00' }, limiteMin: LIMITE_HORAS_PADRAO * 60 };
+}
+
+/** Regras da empresa, completando com o padrão o que faltar. `limiteMin` 0 = sem limite. */
+export function regrasDaEmpresa(empresa) {
+  const padrao = regrasDeTrabalhoPadrao();
+  const a = empresa?.almoco;
+  const almocoValido = a && typeof a.ativo === 'boolean' && ehHoraValida(a.de) && ehHoraValida(a.ate) && horaParaMinutos(a.ate) > horaParaMinutos(a.de);
+  const horas = Number(empresa?.limiteHorasDia);
+  const limiteValido = empresa && empresa.limiteHorasDia !== undefined && empresa.limiteHorasDia !== null && Number.isFinite(horas) && horas >= 0 && horas <= LIMITE_HORAS_MAXIMO;
+  return {
+    almoco: almocoValido ? { ativo: a.ativo, de: a.de, ate: a.ate } : padrao.almoco,
+    limiteMin: limiteValido ? Math.round(horas * 60) : padrao.limiteMin,
+  };
+}
+
+/**
+ * Confere o que o administrador preencheu. `entrada`: { almocoAtivo, de, ate, limiteHoras }.
+ * Devolve { valido, erros, dados } com dados no formato guardado: { almoco, limiteHorasDia }.
+ */
+export function validarRegrasDeTrabalho(entrada) {
+  const erros = {};
+  const ativo = entrada?.almocoAtivo === true;
+  const de = String(entrada?.de ?? '').trim();
+  const ate = String(entrada?.ate ?? '').trim();
+  const texto = String(entrada?.limiteHoras ?? '').trim().replace(',', '.');
+  if (ativo) {
+    if (!ehHoraValida(de)) erros['almoco-de'] = 'Informe a hora em que o almoço começa.';
+    else if (!ehHoraValida(ate)) erros['almoco-ate'] = 'Informe a hora em que o almoço termina.';
+    else if (horaParaMinutos(ate) <= horaParaMinutos(de)) erros['almoco-ate'] = 'O almoço precisa terminar depois de começar.';
+  }
+  const horas = texto === '' ? 0 : Number(texto);
+  if (!Number.isFinite(horas) || horas < 0 || horas > LIMITE_HORAS_MAXIMO) erros.limiteHoras = `Informe de 0 a ${LIMITE_HORAS_MAXIMO} horas (0 = sem limite).`;
+  const padrao = regrasDeTrabalhoPadrao().almoco;
+  const dadosAlmoco = ativo || (ehHoraValida(de) && ehHoraValida(ate) && horaParaMinutos(ate) > horaParaMinutos(de)) ? { ativo, de, ate } : { ativo: false, de: padrao.de, ate: padrao.ate };
+  return { valido: Object.keys(erros).length === 0, erros, dados: { almoco: dadosAlmoco, limiteHorasDia: Math.round(horas * 100) / 100 } };
+}

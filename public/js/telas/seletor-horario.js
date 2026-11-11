@@ -30,13 +30,14 @@ import { ehISOValido, formatarDiaExtenso, formatarMesAno, hojeISO } from '../dom
  * @param {string[]} p.tecnicoUids   técnicos já escolhidos
  * @param {object} p.expediente      horário de funcionamento (dominio/expediente.js)
  * @param {number} p.duracaoMin      quanto tempo o técnico fica ocupado
+ * @param {object|null} p.regras      almoço e limite de horas por dia (dominio/expediente.js, regrasDaEmpresa)
  * @param {number} p.duracaoMinima   o menor serviço cadastrado (a medida do "dia lotado", igual à da Agenda)
  * @param {Array<{uid:string,nome:string}>} p.tecnicos  todos os técnicos que podem atender
  * @param {string|null} p.agendamentoId  agendamento em edição (não conta como ocupado)
  * @param {(ano:number, mes:number) => Promise<object[]>} p.carregarMes  agendados em volta do mês
  * @param {() => Date} [p.agora]     relógio (para testes)
  */
-export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, duracaoMin, duracaoMinima = DURACAO_PADRAO_MIN, tecnicos, agendamentoId = null, carregarMes, agora = () => new Date() }) {
+export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, duracaoMin, duracaoMinima = DURACAO_PADRAO_MIN, regras = null, tecnicos, agendamentoId = null, carregarMes, agora = () => new Date() }) {
   return new Promise((resolver) => {
     const hoje = hojeISO(agora());
     const inicial = ehISOValido(data) && data >= hoje ? data : hoje;
@@ -58,7 +59,7 @@ export function abrirSeletorDeHorario({ data, hora, tecnicoUids, expediente, dur
     janela.setAttribute('aria-label', 'Escolher dia e horário');
     document.body.appendChild(janela);
 
-    const contaBase = () => ({ expediente, duracaoMin, tecnicos, agendados, ignorarAgendamento: agendamentoId, agora: agora() });
+    const contaBase = () => ({ expediente, duracaoMin, tecnicos, agendados, ignorarAgendamento: agendamentoId, regras, agora: agora() });
     const horariosDoDiaEscolhido = () => (diaEscolhido ? horariosLivresDoDia({ ...contaBase(), iso: diaEscolhido }) : []);
     const techsDaHora = () => horariosDoDiaEscolhido().find((h) => h.hora === horaEscolhida)?.tecnicos || [];
 
