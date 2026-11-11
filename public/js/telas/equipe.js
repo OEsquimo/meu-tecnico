@@ -23,7 +23,7 @@ export default async function montar(ctx) {
       <div class="pilha">
         ${botao({ texto: 'Novo funcionário', iconeNome: 'usuarioMais', href: '#/equipe/novo', bloco: true })}
         <div class="lista pilha pilha--pequena">
-          ${itemLista({ avatarNome: sessao.vinculo?.nome || 'Você', titulo: 'Você', sub: 'Administrador · acesso total' })}
+          ${itemLista({ href: '#/equipe/eu', avatarNome: sessao.vinculo?.nome || 'Você', titulo: 'Você', sub: sessao.empresa?.adminAtende === false ? 'Administrador · não atende serviços' : 'Administrador · acesso total', direita: seta })}
           ${equipe.map((m) => itemLista({
             href: m.status === 'convite' ? `#/equipe/convite/${m.id}` : `#/equipe/${m.id}`,
             avatarNome: m.nome,

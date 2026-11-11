@@ -61,7 +61,7 @@ export default async function montar(ctx) {
       })];
       // A lista de técnicos só é buscada uma vez; se falhar, o filtro simplesmente some.
       if (usuario.admin && tecnicos.length === 0) {
-        tarefas.push(tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome }).catch(() => []));
+        tarefas.push(tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome, atende: sessao.empresa?.adminAtende !== false }).catch(() => []));
       }
       const [lista, equipe] = await Promise.all(tarefas);
       if (!ctx.ativo()) return;

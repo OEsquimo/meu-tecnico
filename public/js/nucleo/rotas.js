@@ -64,6 +64,7 @@ export const ROTAS = [
   { padrao: '/equipe', carregar: () => import('../telas/equipe.js'), acesso: 'admin', menu: null, titulo: 'Equipe' },
   { padrao: '/equipe/novo', carregar: () => import('../telas/funcionario-form.js'), acesso: 'admin', menu: null, titulo: 'Novo funcionário' },
   { padrao: '/equipe/convite/:id', carregar: () => import('../telas/convite-criado.js'), acesso: 'admin', menu: null, titulo: 'Convite' },
+  { padrao: '/equipe/eu', carregar: () => import('../telas/administrador.js'), acesso: 'admin', menu: null, titulo: 'Meus dados' },
   { padrao: '/equipe/:id', carregar: () => import('../telas/funcionario.js'), acesso: 'admin', menu: null, titulo: 'Funcionário' },
   { padrao: '/expediente', carregar: () => import('../telas/expediente.js'), acesso: 'admin', menu: null, titulo: 'Horário de funcionamento' },
   { padrao: '/configuracoes', carregar: () => import('../telas/configuracoes.js'), acesso: 'admin', menu: null, titulo: 'Configurações' },

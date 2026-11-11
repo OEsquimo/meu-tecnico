@@ -94,7 +94,7 @@ export default async function montar(ctx) {
       await carregarEstilos();
       [todosClientes, tecnicos] = await Promise.all([
         listarClientes(usuario.empresaId),
-        tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome }),
+        tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome, atende: sessao.empresa?.adminAtende !== false }),
       ]);
       estado.tecnicoUids = [];
 

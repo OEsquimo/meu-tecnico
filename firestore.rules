@@ -226,6 +226,16 @@ service cloud.firestore {
         && request.resource.data.nome.size() > 0
         && request.resource.data.nome.size() <= 100;
 
+      // O administrador edita o próprio nome e WhatsApp.
+      allow update: if logado() && request.auth.uid == u
+        && resource.data.papel == 'admin'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() > 0
+        && request.resource.data.nome.size() <= 100
+        && request.resource.data.telefone is string
+        && request.resource.data.telefone.size() <= 20;
+
       // Administrador remove técnico; ou o próprio usuário limpa o vínculo
       // depois que a empresa não existe mais (exclusão de conta).
       allow delete: if (ehAdmin(resource.data.empresaId) && resource.data.papel == 'tecnico')
@@ -273,6 +283,7 @@ service cloud.firestore {
         && (!('expediente' in d) || (d.expediente is map && d.expediente.keys().hasOnly(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'])))
         // Pausa de almoço e limite de horas por técnico por dia (opcionais)
         && (!('almoco' in d) || (d.almoco is map && d.almoco.keys().hasOnly(['ativo', 'de', 'ate'])))
+        && (!('adminAtende' in d) || d.adminAtende is bool)
         && (!('limiteHorasDia' in d) || (d.limiteHorasDia is number && d.limiteHorasDia >= 0 && d.limiteHorasDia <= 24));
     }
 
@@ -324,7 +335,7 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende'])
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)
         || contadorValido(emp)
