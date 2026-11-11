@@ -176,3 +176,129 @@
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
 }
+
+/* ---- Ferramentas (lista) e "Enviar horários ao cliente" ---- */
+.ferramenta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ferramenta__icone {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-primaria-clara);
+  color: var(--cor-primaria);
+}
+
+.mensagem-previa {
+  padding: 12px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+}
+
+/* ---- Página pública em que o cliente escolhe dia e horário ---- */
+.pagina-cliente {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: 32px;
+}
+
+.pagina-cliente__marca {
+  text-align: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--cor-primaria);
+  padding-top: 8px;
+}
+
+.pagina-cliente__titulo {
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.pagina-cliente__sub {
+  margin: -8px 0 0;
+  text-align: center;
+}
+
+.passo__titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.passo__numero {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--cor-primaria);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.horarios-grupo + .horarios-grupo {
+  margin-top: 14px;
+}
+
+.horarios-grupo__titulo {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--cor-texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.horarios-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.horario-botao {
+  min-height: 48px;
+  border: 2px solid var(--cor-borda);
+  border-radius: 12px;
+  background: var(--cor-cartao);
+  color: var(--cor-texto);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.horario-botao--escolhido {
+  border-color: var(--cor-primaria);
+  background: var(--cor-primaria);
+  color: #fff;
+}
+
+.resumo-pedido__linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}

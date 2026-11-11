@@ -15,6 +15,7 @@ import { cabecalho, botao, aviso, estadoVazio, esqueletos } from '../nucleo/comp
 import { icone } from '../nucleo/icones.js';
 import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
+import { ferramentasDoUsuario } from '../nucleo/ferramentas.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
 import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento, listarIncluidosNaoVistos, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
@@ -127,6 +128,7 @@ export default async function montar(ctx) {
           ${atalho('#/historico', 'relogio', 'Concluídos', 'Serviços concluídos')}
           ${atalho('#/financeiro', 'grafico', 'Financeiro', 'Quanto você ganhou')}
           ${atalho('#/administrativa', 'ajustes', 'Administrativa', 'Equipe, plano e mais')}
+          ${ferramentasDoUsuario(sessao).length > 0 ? atalho('#/ferramentas', 'ferramenta', 'Ferramentas', 'Horários ao cliente e mais') : ''}
         </div>
       </div>`);
   }
@@ -219,6 +221,7 @@ export default async function montar(ctx) {
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Meus próximos serviços')}
           ${atalho('#/historico', 'relogio', 'Concluídos', 'O que já concluí')}
           ${podeGerirClientes(sessao) ? atalho('#/clientes', 'clientes', 'Clientes', 'Cadastro e aparelhos') : ''}
+          ${ferramentasDoUsuario(sessao).length > 0 ? atalho('#/ferramentas', 'ferramenta', 'Ferramentas', 'Ferramentas do dia a dia') : ''}
         </div>
       </div>`);
   }

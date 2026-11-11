@@ -27,6 +27,7 @@ import { contatosSuportados, escolherContato } from '../servicos/contatos.js';
 import { validarCliente } from '../dominio/validacoes.js';
 import { formatarTelefone, mascararTelefoneDigitando, normalizarWhatsappBR } from '../dominio/telefone.js';
 import { formatarCEP, novoEndereco } from '../dominio/endereco.js';
+import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
 import { telaDeErro } from './clientes-comum.js';
 
 const OPCOES_UF = ESTADOS_BR.map(([sigla, nome]) => ({ valor: sigla, rotulo: `${sigla} — ${nome}` }));
@@ -141,6 +142,10 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     }
   }
 
+  // Pedido de um cliente que veio do link de horários (Agendar > "Cadastrar novo cliente"): nome e WhatsApp já vêm
+  // preenchidos e, depois de cadastrar, a pessoa volta ao Agendar com o dia e a hora do pedido.
+  const pedido = editando ? null : lerPedidoDaConsulta(consulta);
+
   // ---- 2. Desenha o formulário ----
   const enderecosIniciais = (cliente?.enderecos?.length ? cliente.enderecos : [novoEndereco()]).slice(0, MAXIMO_ENDERECOS);
   const modoInicial = editando ? 'manual' : 'cep';
@@ -152,10 +157,10 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
 
       <section class="cartao pilha">
         <h2>Dados do cliente</h2>
-        ${campoTexto({ nome: 'nome', rotulo: 'Nome', valor: cliente?.nome ?? '', maximo: 120, autocompletar: 'off' })}
+        ${campoTexto({ nome: 'nome', rotulo: 'Nome', valor: cliente?.nome ?? pedido?.nome ?? '', maximo: 120, autocompletar: 'off' })}
         ${campoTexto({
           nome: 'whatsapp', rotulo: 'Telefone (WhatsApp)', tipo: 'tel', modo: 'tel', autocompletar: 'off', maximo: 15,
-          valor: cliente ? formatarTelefone(cliente.whatsapp) : '', placeholder: '(11) 91234-5678',
+          valor: cliente ? formatarTelefone(cliente.whatsapp) : (pedido?.whatsapp ? formatarTelefone(pedido.whatsapp) : ''), placeholder: '(11) 91234-5678',
           ajuda: 'Com DDD. É por ele que você chama o cliente e manda o lembrete de retorno.',
         })}
         ${contatosSuportados() && botao({ texto: 'Escolher dos contatos', variante: 'secundario', iconeNome: 'clientes', acao: 'contatos', bloco: true })}
@@ -370,7 +375,11 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         else id = await criarCliente(empresaId, dados, sessao.usuario.uid);
         toast(editando ? 'Cliente atualizado.' : 'Cliente cadastrado.', 'sucesso');
         if (editando && consulta?.get('voltar') === '1') voltar('/agendar');
-        else ir(`/cliente/${encodeURIComponent(id)}`, { substituir: true });
+        else if (pedido) {
+          const q = new URLSearchParams({ cliente: id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
+          if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);
+          ir(`/agendar?${q.toString()}`, { substituir: true });
+        } else ir(`/cliente/${encodeURIComponent(id)}`, { substituir: true });
       } catch (erro) {
         mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });
       }

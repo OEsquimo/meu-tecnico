@@ -26,6 +26,7 @@ export const ROTAS = [
   { padrao: '/recuperar-senha', carregar: () => import('../telas/recuperar-senha.js'), acesso: 'publico', menu: null, titulo: 'Recuperar senha' },
   { padrao: '/convite/:empresaId/:equipeId', carregar: () => import('../telas/convite.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Convite' },
   { padrao: '/termos', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Termos de uso', extras: { documento: 'termos' } },
+  { padrao: '/horarios', carregar: () => import('../telas/horarios-cliente.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Escolher dia e horário' },
   { padrao: '/privacidade', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Privacidade', extras: { documento: 'privacidade' } },
 
   // ---- Logado, mas sem empresa / bloqueado ----
@@ -44,6 +45,7 @@ export const ROTAS = [
   { padrao: '/aparelho/:id/editar', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Aparelho' },
   { padrao: '/cliente/:clienteId/aparelho/novo', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Novo aparelho' },
   { padrao: '/conta', carregar: () => import('../telas/conta.js'), acesso: 'membro', menu: null, titulo: 'Minha conta' },
+  { padrao: '/ferramentas', carregar: () => import('../telas/ferramentas.js'), acesso: 'membro', menu: null, titulo: 'Ferramentas' },
 
   // ---- Clientes (administrador; técnico só se liberado) ----
   { padrao: '/clientes', carregar: () => import('../telas/clientes.js'), acesso: 'clientes', menu: 'clientes', titulo: 'Clientes' },
@@ -57,6 +59,7 @@ export const ROTAS = [
   { padrao: '/reagendamentos', carregar: () => import('../telas/reagendamentos.js'), acesso: 'admin', menu: null, titulo: 'Aguardando reagendamento' },
   { padrao: '/retornos', carregar: () => import('../telas/retornos.js'), acesso: 'admin', menu: null, titulo: 'Retornos' },
   { padrao: '/financeiro', carregar: () => import('../telas/financeiro.js'), acesso: 'admin', menu: 'financeiro', titulo: 'Financeiro' },
+  { padrao: '/ferramentas/horarios', carregar: () => import('../telas/enviar-horarios.js'), acesso: 'admin', menu: null, titulo: 'Enviar horários ao cliente' },
   { padrao: '/administrativa', carregar: () => import('../telas/administrativa.js'), acesso: 'admin', menu: null, titulo: 'Administrativa' },
   { padrao: '/tipos-servico', carregar: () => import('../telas/tipos-servico.js'), acesso: 'admin', menu: null, titulo: 'Tipos de serviço' },
   { padrao: '/tipos-servico/novo', carregar: () => import('../telas/tipo-servico-form.js'), acesso: 'admin', menu: null, titulo: 'Novo tipo de serviço' },
