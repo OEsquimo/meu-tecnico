@@ -88,3 +88,14 @@ test('dia lotado considera o limite: com 8 h feitas, nem o menor serviço cabe',
   const semRegras = diasLotados({ expediente: exp, ano: 2031, mes: 3, tecnicos: [A], agendados, duracaoMinima: 60, agora: passado });
   assert.equal(semRegras.has(SEG), false, 'sem as regras novas o dia ainda teria vaga (17:00)');
 });
+
+import { validarAdministrador } from '../../public/js/dominio/validacoes.js';
+test('administrador: nome obrigatório, WhatsApp opcional mas válido quando vem', () => {
+  assert.equal(validarAdministrador({ nome: '', telefone: '' }).erros.nome !== undefined, true);
+  assert.equal(validarAdministrador({ nome: 'Marcos Frio', telefone: '' }).valido, true, 'sem WhatsApp pode');
+  assert.equal(validarAdministrador({ nome: 'Marcos Frio', telefone: '123' }).erros.telefone !== undefined, true);
+  const ok = validarAdministrador({ nome: ' Marcos Frio ', telefone: '(11) 91234-5678' });
+  assert.equal(ok.valido, true);
+  assert.equal(ok.dados.nome, 'Marcos Frio');
+  assert.equal(typeof ok.dados.telefone, 'string');
+});

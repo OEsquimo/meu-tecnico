@@ -127,3 +127,8 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Dia vermelho:** a regra é a mesma de antes (não cabe nem o menor serviço), mas agora considera almoço e limite. Ex.: instalações de 2h30 com limite de 8 h: 3 por dia, e o dia fica vermelho.
 - **Ao salvar o agendamento** o app confere de novo e avisa: "estaria no horário de almoço" ou "passaria do limite de horas de serviço do dia".
 - Serviços já agendados não mudam; as regras valem para novos agendamentos e edições.
+
+## Pacote 12 — dados do administrador e "Eu atendo serviços"
+
+- **Meus dados (`#/equipe/eu`):** o cartão "Você" da Equipe abre a edição de Nome (obrigatório) e WhatsApp (opcional, válido quando preenchido). O administrador não tem Bloquear nem Remover. Nome e WhatsApp ficam em `usuarios/{uid}` (as regras permitem ao próprio administrador mudar só `nome` e `telefone`).
+- **Eu atendo serviços:** interruptor guardado em `empresas/{id}.adminAtende` (ligado quando não existe, para não mudar nada de quem já usa o app). Só muda quando o administrador mexe: nunca é ligado nem travado sozinho. Desligado, o administrador não aparece na lista de técnicos ao agendar nem na conta do dia vermelho; sem nenhum técnico a atender, o dia simplesmente não tem horários. Serviços já agendados com ele não mudam. A Equipe mostra "Administrador · não atende serviços".

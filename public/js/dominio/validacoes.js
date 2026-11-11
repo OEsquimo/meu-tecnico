@@ -252,6 +252,22 @@ export function validarFuncionario({ nome, telefone }) {
   return resultado(erros, { nome: n, telefone: telefoneLimpo });
 }
 
+/** Dados do próprio administrador: nome obrigatório; WhatsApp opcional (se vier, precisa ser válido). */
+export function validarAdministrador({ nome, telefone }) {
+  const erros = {};
+  const n = texto(nome);
+  if (n.length < 2) erros.nome = 'Digite o seu nome.';
+  else if (n.length > 100) erros.nome = 'O nome está muito longo (máximo 100 letras).';
+  const tel = texto(telefone);
+  let telefoneLimpo = '';
+  if (tel) {
+    const normal = normalizarWhatsappBR(tel);
+    if (!normal) erros.telefone = 'Número inválido. Digite com DDD, por exemplo (11) 91234-5678.';
+    else telefoneLimpo = normal;
+  }
+  return resultado(erros, { nome: n, telefone: telefoneLimpo });
+}
+
 // -----------------------------------------------------------------------------
 // ADMINISTRATIVA / CONFIGURAÇÕES
 // -----------------------------------------------------------------------------

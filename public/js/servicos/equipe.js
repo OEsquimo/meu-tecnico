@@ -31,10 +31,13 @@ export function buscarMembro(empresaId, id) {
   return ler(`${caminhoEquipe(empresaId)}/${id}`);
 }
 
-/** Técnicos que podem receber serviço: o próprio administrador + funcionários ativos. */
+/**
+ * Técnicos que podem receber serviço: o próprio administrador (se ele atende: `administrador.atende !== false`)
+ * + funcionários ativos.
+ */
 export async function tecnicosParaAtribuir(empresaId, administrador) {
   const equipe = await listarEquipe(empresaId);
-  const lista = [{ uid: administrador.uid, nome: administrador.nome ? `${administrador.nome} (eu)` : 'Eu mesmo' }];
+  const lista = administrador.atende === false ? [] : [{ uid: administrador.uid, nome: administrador.nome ? `${administrador.nome} (eu)` : 'Eu mesmo' }];
   for (const m of equipe) {
     if (m.status === 'ativo' && m.uid) lista.push({ uid: m.uid, nome: m.nome });
   }
@@ -122,5 +125,17 @@ export async function removerFuncionario(empresaId, membro) {
   const operacoes = [op.apagar(`${caminhoEquipe(empresaId)}/${membro.id}`)];
   if (membro.uid) operacoes.push(op.apagar(`usuarios/${membro.uid}`));
   await gravar(operacoes);
+  invalidarCache(`${empresaId}:equipe`);
+}
+
+/**
+ * Salva os dados do próprio administrador: nome e WhatsApp (no vínculo dele) e se ele atende serviços
+ * (na empresa: `adminAtende`, ligado quando não existe). Não mexe em serviços já agendados.
+ */
+export async function salvarDadosDoAdministrador(empresaId, uid, { nome, telefone, atende }) {
+  await gravar([
+    op.atualizar(`usuarios/${uid}`, { nome, telefone }),
+    op.atualizar(`empresas/${empresaId}`, { adminAtende: atende === true }),
+  ]);
   invalidarCache(`${empresaId}:equipe`);
 }
