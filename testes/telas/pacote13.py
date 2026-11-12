@@ -128,9 +128,13 @@ with sync_playwright() as p:
     ok("Pedido do cliente" in t and "Cláudia Nogueira" in t, "Agendar mostra o aviso 'Pedido do cliente'")
     quando = pag.inner_text("#botao-quando")
     ok(hora in quando, f"dia e hora do pedido já vêm preenchidos ({quando.splitlines()[0]})")
-    ok(pag.input_value("#campo-busca") == "Cláudia Nogueira", "a busca de cliente já vem com o nome")
-    ok("Cadastrar novo cliente" in t, "oferece 'Cadastrar novo cliente'")
-    pag.locator("a:has-text('Cadastrar novo cliente')").click(); pag.wait_for_timeout(1000)
+    ok(pag.locator("#campo-busca").count() == 0 and "Cadastrar cliente novo" in t and "Buscar cliente já cadastrado" in t, "pedido de cliente: dois botões, sem busca nem lista de nomes na cara")
+    pag.locator("[data-acao=buscar-cliente-pedido]").click(); pag.wait_for_timeout(500)
+    ok(pag.input_value("#campo-busca") == "Cláudia Nogueira", "'Buscar cliente já cadastrado' abre a busca já com o nome")
+    ok("Cadastrar novo cliente" in pag.inner_text("#area-cliente"), "sem resultado, a busca ainda oferece cadastrar")
+    ir("/agenda")
+    ir("/agendar?" + link_app.split("#/agendar?", 1)[1])
+    pag.locator("a:has-text('Cadastrar cliente novo')").click(); pag.wait_for_timeout(1000)
     ok(pag.input_value("input[name=nome]") == "Cláudia Nogueira", "cadastro novo vem com o nome do pedido")
     pag.locator("label.chip", has_text="Digitar à mão").first.click()
     for n, v in [("rua", "Rua A"), ("numero", "10"), ("cidade", "Recife")]:
@@ -148,7 +152,13 @@ with sync_playwright() as p:
     # cliente já cadastrado: achado pelo WhatsApp
     q = urllib.parse.urlencode({"pedido": "1", "data": iso, "hora": hora, "nome": "Ana", "whatsapp": "11934567890"})
     ir("/agendar?" + q)
-    ok("Ana Lima" in pag.inner_text("#area-cliente"), "cliente já cadastrado é escolhido pelo WhatsApp")
+    ok("Ana Lima" in pag.inner_text("#area-cliente") and pag.locator("[data-acao=buscar-cliente-pedido]").count() == 0, "cliente já cadastrado é escolhido pelo WhatsApp")
+    q2 = urllib.parse.urlencode({"pedido": "1", "data": iso, "hora": hora, "nome": "Ana"})
+    ir("/agendar?" + q2)
+    pag.locator("[data-acao=buscar-cliente-pedido]").click(); pag.wait_for_timeout(500)
+    ok("Ana Lima" in pag.inner_text("#area-resultados"), "'Buscar cliente' lista os cadastrados com o nome do pedido")
+    pag.locator("[data-acao=escolher-cliente]").first.click(); pag.wait_for_timeout(500)
+    ok("Ana Lima" in pag.inner_text("#area-cliente") and "Pedido do cliente" in texto(), "tocar no cliente da lista escolhe ele e mantém o pedido")
 
     # horário que já passou
     q = urllib.parse.urlencode({"pedido": "1", "data": "2020-01-01", "hora": "09:00", "nome": "Zé"})
