@@ -20,6 +20,7 @@ import { ErroApp } from '../nucleo/erros.js';
 import { PAGINA_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, ehLinhaSemServico, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { motivoDeIndisponibilidade } from '../dominio/agenda.js';
+import { acharAgendamentoDuplicado, MENSAGEM_AGENDAMENTO_DUPLICADO } from '../dominio/duplicidade.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
@@ -163,6 +164,15 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
   }
 }
 
+/** Barra o mesmo cliente + aparelho + serviço no mesmo dia e hora (toque duplo, esquecimento). Lança ErroApp 'agendamento-duplicado'. */
+export async function verificarAgendamentoDuplicado({ empresaId, clienteId, inicio, pares, ignorarAgendamento = null }) {
+  if (!pares.some((p) => p.aparelhoId && p.tipoId)) return;
+  const agendados = await listarAgendados({ empresaId, de: new Date(inicio.getTime() - 60000), ate: new Date(inicio.getTime() + 60000) });
+  if (acharAgendamentoDuplicado({ clienteId, inicio, pares, agendados, ignorarAgendamento })) {
+    throw new ErroApp(MENSAGEM_AGENDAMENTO_DUPLICADO, 'agendamento-duplicado');
+  }
+}
+
 /**
  * Cria OU edita um agendamento inteiro, de uma vez (tudo ou nada).
  * @param {object} p
@@ -213,6 +223,10 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   }
 
   await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null, regras });
+  await verificarAgendamentoDuplicado({
+    empresaId, clienteId: cliente?.id, inicio, ignorarAgendamento: editando ? (agendamentoId || id) : null,
+    pares: todas.map((l) => ({ aparelhoId: l.aparelho?.id, tipoId: l.tipo?.id })),
+  });
   const minutos = minutosPorTecnico(todas);
 
   const operacoes = [];
@@ -447,6 +461,7 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   // A linha "a definir" que recebe o serviço: a do mesmo aparelho, senão a sem aparelho, senão qualquer uma.
   const semServico = abertas.filter(ehLinhaSemServico);
   const alvo = semServico.find((l) => l.aparelhoId === aparelho.id) || semServico.find((l) => !l.aparelhoId) || semServico[0];
+  if (!tecnico) await conferirDuplicidadeAoInformar({ empresaId, abertas, aparelho, tipo });
   if (!alvo) {
     const referencia = abertas.find((l) => tecnico && tecnicosDoServico(l).includes(tecnico.uid)) || abertas[0];
     return adicionarServicoNaVisita({ empresaId, base: referencia, aparelho, tipo, tecnico, linhasDaVisita });
@@ -454,6 +469,9 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   const duracao = tipo.duracaoMin ?? DURACAO_PADRAO_MIN;
   const preenchida = { ...alvo, duracaoMin: duracao };
   const minutos = minutosPorTecnico(abertas.map((l) => (l.id === alvo.id ? preenchida : l)));
+  // O administrador informando o serviço depois: se o tempo da visita cresce, o técnico não pode ficar ocupado
+  // em outro atendimento nesse período. (O técnico que já está no local não é barrado: ele já está lá.)
+  if (!tecnico) await conferirTecnicosAoInformar({ empresaId, abertas, alvo, duracao });
   const operacoes = abertas.map((l) => {
     const linha = l.id === alvo.id ? preenchida : l;
     const campos = { ...ocupacaoDaLinha({ ...linha, duracaoMin: duracaoDoServico(linha) }, minutos), atualizadoEm: AGORA };
@@ -473,6 +491,41 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
   return alvo.id;
+}
+
+/** Ao informar o serviço depois: o mesmo cliente + aparelho + serviço não pode já estar agendado nesse horário em outra visita. */
+async function conferirDuplicidadeAoInformar({ empresaId, abertas, aparelho, tipo }) {
+  const ref = abertas[0];
+  if (!(ref?.dataAgendada instanceof Date)) return;
+  await verificarAgendamentoDuplicado({
+    empresaId, clienteId: ref.clienteId, inicio: ref.dataAgendada, ignorarAgendamento: chaveDoAgendamento(ref),
+    pares: [{ aparelhoId: aparelho.id, tipoId: tipo.id }],
+  });
+}
+
+/** Ao informar o serviço depois: cada técnico da visita, com o tempo novo, continua livre de OUTROS atendimentos? */
+async function conferirTecnicosAoInformar({ empresaId, abertas, alvo, duracao }) {
+  const inicio = alvo.dataAgendada;
+  if (!(inicio instanceof Date)) return;
+  // Tempo de cada técnico na visita (soma dos serviços dele), já com a duração do serviço que está entrando.
+  const minutos = new Map();
+  const nomes = new Map();
+  for (const l of abertas) {
+    const uids = tecnicosDoServico(l);
+    const lista = nomesDosTecnicos(l);
+    uids.forEach((uid, i) => {
+      nomes.set(uid, lista[i] || nomes.get(uid) || '');
+      minutos.set(uid, (minutos.get(uid) || 0) + (l.id === alvo.id ? duracao : duracaoDoServico(l)));
+    });
+  }
+  if (minutos.size === 0) return;
+  const agendados = await listarAgendados({ empresaId, de: new Date(inicio.getTime() - 24 * 3600000), ate: new Date(inicio.getTime() + 24 * 3600000) });
+  const chave = chaveDoAgendamento(alvo);
+  for (const [uid, total] of minutos) {
+    if (motivoDeIndisponibilidade(uid, inicio, total, agendados, chave, null) === 'ocupado') {
+      throw new ErroApp(`${nomes.get(uid) || 'O técnico'} fica ocupado em outro atendimento nesse período. Abra "Editar" no agendamento para trocar o técnico ou o horário.`, 'tecnico-ocupado');
+    }
+  }
 }
 
 /** Serviços que o técnico acrescentou em campo e que o administrador ainda não viu (só administrador). */

@@ -11,7 +11,7 @@
 // guarda dado nenhum de cliente. Linguagem simples, botões grandes, nunca fica sem saída.
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, levarAte } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, levarAte, avancarEntreCampos } from '../nucleo/ui.js';
 import { botao, aviso, estadoVazio, campoTexto } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
 import { mesVizinho } from '../dominio/agenda.js';
@@ -124,6 +124,7 @@ export default async function montar(ctx) {
     const form = raiz.querySelector('#form-pedido');
     form.elements.nome.addEventListener('input', (e) => { nome = e.target.value; });
     form.elements.whatsapp.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); whatsapp = e.target.value; });
+    avancarEntreCampos(form); // Enter no nome vai para o WhatsApp
     aoEnviar(form, () => enviar(form));
   }
 

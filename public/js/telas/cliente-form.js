@@ -15,19 +15,20 @@
 // atualizarCliente() (o administrador também atualiza os serviços agendados).
 // =============================================================================
 
-import { html, bruto, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, bruto, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoSelecao, botao, aviso, estadoVazio } from '../nucleo/componentes.js';
 import { resumoDoPlano } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { ESTADOS_BR, MAXIMO_ENDERECOS } from '../nucleo/constantes.js';
-import { buscarCliente, criarCliente, atualizarCliente, mensagemDeBloqueio } from '../servicos/clientes.js';
+import { buscarCliente, criarCliente, atualizarCliente, listarClientes, mensagemDeBloqueio } from '../servicos/clientes.js';
 import { buscarPorCEP, buscarPorRua, obterLocalizacao, buscarPorCoordenadas } from '../servicos/cep.js';
 import { contatosSuportados, escolherContato } from '../servicos/contatos.js';
 import { validarCliente } from '../dominio/validacoes.js';
-import { formatarTelefone, mascararTelefoneDigitando, normalizarWhatsappBR } from '../dominio/telefone.js';
+import { formatarTelefone, mascararTelefoneDigitando, normalizarWhatsappBR, somenteDigitos } from '../dominio/telefone.js';
 import { formatarCEP, novoEndereco } from '../dominio/endereco.js';
 import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
+import { acharClientesParecidos, textoDoAvisoDeCliente } from '../dominio/duplicidade.js';
 import { telaDeErro } from './clientes-comum.js';
 
 const OPCOES_UF = ESTADOS_BR.map(([sigla, nome]) => ({ valor: sigla, rotulo: `${sigla} — ${nome}` }));
@@ -259,6 +260,12 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     alvo?.click();
   });
 
+  // Enter vai ao próximo campo; o WhatsApp completo (celular com 11 dígitos) já passa para o seguinte.
+  avancarEntreCampos(form, {
+    automatico: { whatsapp: (v) => somenteDigitos(v).length === 11 && Boolean(normalizarWhatsappBR(v)) },
+    validos: { whatsapp: (v) => Boolean(normalizarWhatsappBR(v)) },
+  });
+
   for (const b of blocos()) atualizarAvisoGps(b.dataset.blocoEndereco);
   atualizarBlocos();
 
@@ -368,8 +375,33 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     // Endereço novo ainda não tem id: criamos agora (o id liga aparelhos e serviços ao endereço).
     const dados = { ...r.dados, enderecos: r.dados.enderecos.map((e) => ({ ...e, id: e.id || novoEndereco().id })) };
 
+    // Cliente novo parecido com um já cadastrado (mesmo WhatsApp e/ou endereço): só avisa, a pessoa decide.
+    let existente = null;
+    if (!editando) {
+      const parecidos = await listarClientes(empresaId).then((lista) => acharClientesParecidos(lista, dados)).catch(() => []);
+      if (parecidos.length > 0) {
+        const { cliente: achado, motivos } = parecidos[0];
+        const escolha = await escolher({
+          titulo: 'Esse cliente já existe?',
+          mensagem: `Já existe um cliente cadastrado com essas informações: ${achado.nome}. ${textoDoAvisoDeCliente(motivos)} Deseja consultar o cadastro existente?`,
+          opcoes: [{ id: 'abrir', rotulo: 'Consultar o cadastro existente' }, { id: 'mesmo', rotulo: 'Cadastrar mesmo assim' }],
+          cancelar: 'Voltar e conferir',
+        });
+        if (!escolha) return;
+        if (escolha === 'abrir') existente = achado;
+      }
+    }
+
     await comCarregando(form.querySelector('[type="submit"]'), async () => {
       try {
+        if (existente) {
+          if (pedido) {
+            const q = new URLSearchParams({ cliente: existente.id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
+            if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);
+            ir(`/agendar?${q.toString()}`, { substituir: true });
+          } else ir(`/cliente/${encodeURIComponent(existente.id)}`, { substituir: true });
+          return;
+        }
         let id = params.id;
         if (editando) await atualizarCliente(empresaId, id, dados, { administrador });
         else id = await criarCliente(empresaId, dados, sessao.usuario.uid);
