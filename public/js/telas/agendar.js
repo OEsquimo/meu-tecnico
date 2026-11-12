@@ -79,6 +79,7 @@ export default async function montar(ctx) {
   let pedidoDoCliente = null; // pedido que veio do link de horários (só em agendamento novo)
   let pedidoSemVaga = false; // o horário pedido já não está livre
   let buscaInicial = ''; // nome do pedido, para já filtrar a lista de clientes na primeira vez
+  let buscandoPedido = false; // no pedido de cliente, a busca só abre quando a pessoa toca em "Buscar cliente já cadastrado"
   let todosClientes = [];
   let tecnicos = []; // { uid, nome }
   let aparelhos = []; // aparelhos do cliente escolhido
@@ -390,6 +391,18 @@ export default async function montar(ctx) {
   function desenharCliente() {
     const area = raiz.querySelector('#area-cliente');
     const c = estado.cliente;
+    if (!c && pedidoDoCliente && !buscandoPedido) {
+      // Pedido de um cliente que ainda não escolhemos: duas saídas simples, sem lista de nomes na cara.
+      mostrar(area, html`
+        <div class="campo" data-campo="clienteId">
+          <span class="campo__rotulo">Cliente</span>
+          <div class="pilha pilha--pequena">
+            ${botao({ texto: 'Cadastrar cliente novo', bloco: true, href: enderecoDoClienteNovo() })}
+            ${botao({ texto: 'Buscar cliente já cadastrado', variante: 'secundario', bloco: true, acao: 'buscar-cliente-pedido' })}
+          </div>
+        </div>`);
+      return;
+    }
     if (!c) {
       mostrar(area, html`
         <div class="campo" data-campo="clienteId">
@@ -639,6 +652,11 @@ export default async function montar(ctx) {
       'abrir-seletor': abrirSeletor,
       'escolher-cliente': (el) => escolherCliente(el.dataset.id),
       'trocar-cliente': trocarCliente,
+      'buscar-cliente-pedido': () => {
+        buscandoPedido = true;
+        desenharCliente();
+        raiz.querySelector('#campo-busca')?.focus();
+      },
       'editar-cliente': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/editar?voltar=1`),
       'novo-aparelho': () => sairPara(`/cliente/${encodeURIComponent(estado.cliente.id)}/aparelho/novo?voltar=1&endereco=${encodeURIComponent(estado.enderecoId || '')}`),
       'editar-aparelho': (el) => {
