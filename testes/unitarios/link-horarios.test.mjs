@@ -139,7 +139,17 @@ test('ler o pedido no Agendar: só vale com pedido=1, data e hora certas', () =>
   assert.equal(lerPedidoDaConsulta(null), null);
 });
 
-test('endereço base do app: tira #, ? e index.html', () => {
-  assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico/index.html?demo=1#/x'), 'https://a.b/meu-tecnico/');
+test('endereço base do app: tira #, index.html e a consulta, mas mantém o modo demonstração', () => {
+  assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico/index.html?x=2#/x'), 'https://a.b/meu-tecnico/');
   assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico'), 'https://a.b/meu-tecnico/');
+  assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico/?demo=1#/ferramentas'), 'https://a.b/meu-tecnico/?demo=1');
+  assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico/index.html?x=1&demo=1'), 'https://a.b/meu-tecnico/?demo=1');
+  assert.equal(enderecoBaseDoApp('https://a.b/meu-tecnico/?demo=10'), 'https://a.b/meu-tecnico/');
+});
+
+test('o link e o pedido mantêm o ?demo=1 para abrir no modo demonstração', () => {
+  const base = enderecoBaseDoApp('https://a.b/meu-tecnico/?demo=1#/ferramentas/horarios');
+  const link = montarLinkDeHorarios({ base, empresa: 'X', whatsapp: '5581983259341', dias: [{ iso: SEG, horas: ['09:00'] }], geradoEm: SEG });
+  assert.ok(link.startsWith('https://a.b/meu-tecnico/?demo=1#/horarios?'), link);
+  assert.ok(linkDoPedidoNoApp(base, { data: SEG, hora: '09:00', nome: 'Maria' }).startsWith('https://a.b/meu-tecnico/?demo=1#/agendar?'));
 });

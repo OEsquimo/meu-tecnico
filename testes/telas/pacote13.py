@@ -73,11 +73,12 @@ with sync_playwright() as p:
     ok("Atendimento" not in pag.inner_text("#mensagem-previa"), "serviço não aparece escrito na mensagem do administrador")
     link = re.search(r"https?://\S+#/horarios\?\S+", pag.inner_text("#mensagem-previa")).group(0)
     ok("s=Instala" in urllib.parse.unquote_plus(link), "o serviço escolhido vai no link")
-    parte = link.split("#", 1)[1]
+    ok("?demo=1#/horarios" in link, "o link mantém o ?demo=1 (senão abriria 'aplicativo não configurado')")
 
     # ---------------- O cliente abre o link (sem login) ----------------
     ctx_cli, cli = nova()
-    cli.goto(BASE + "#" + parte); cli.wait_for_selector(".pagina-cliente", timeout=8000); cli.wait_for_timeout(500)
+    cli.goto(link); cli.wait_for_selector(".pagina-cliente", timeout=8000); cli.wait_for_timeout(500)
+    ok("não está configurado" not in cli.inner_text("body"), "o link abre a página do cliente (não a tela de 'não configurado')")
     t = texto(cli)
     ok("Escolha o melhor dia e horário" in t and "Atendimento: Instalação" in t, "página do cliente com título e serviço")
     ok(cli.locator(".menu-topo__item").count() == 0 or not cli.locator("#menu-topo").is_visible(), "página pública sem menu")
@@ -103,6 +104,7 @@ with sync_playwright() as p:
     ok(zap.startswith("https://wa.me/5581983259341?text="), "o pedido vai para o WhatsApp do administrador")
     ok("Cláudia Nogueira" in zap and "Técnico: abrir no app" in zap and "#/agendar?" in zap, "mensagem do pedido tem o nome e o botão do técnico")
     link_app = re.search(r"https?://\S+#/agendar\?\S+", zap).group(0)
+    ok("?demo=1#/agendar" in link_app, "o botão 'Técnico: abrir no app' também mantém o ?demo=1")
     cli.click("[data-acao=mudar]"); cli.wait_for_timeout(800)
     ok(cli.locator("#passo-horario").is_hidden(), "'Mudar o dia ou o horário' volta ao começo")
 
