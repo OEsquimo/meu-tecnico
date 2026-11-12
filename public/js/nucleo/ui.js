@@ -395,3 +395,66 @@ export function esperarDigitar(funcao, atrasoMs = 200) {
     relogio = setTimeout(() => funcao(...args), atrasoMs);
   };
 }
+
+// -----------------------------------------------------------------------------
+// AVANÇO ENTRE CAMPOS
+// -----------------------------------------------------------------------------
+
+const TIPOS_DE_TEXTO = new Set(['text', 'tel', 'email', 'number', 'search', 'url', 'password', '']);
+
+/** Campo de digitar (não é botão, caixa de marcar, lista nem escondido). */
+function ehCampoDeDigitar(el) {
+  return el instanceof HTMLInputElement && TIPOS_DE_TEXTO.has(el.type) && !el.disabled && !el.readOnly && !el.hidden && !el.closest('[hidden]');
+}
+
+/** Próximo campo de digitar do formulário, na ordem da tela (ou null se este é o último). */
+export function proximoCampo(formulario, atual) {
+  const campos = [...formulario.querySelectorAll('input, textarea, select')];
+  const i = campos.indexOf(atual);
+  for (const c of campos.slice(i + 1)) {
+    if (c instanceof HTMLTextAreaElement) return !c.disabled && !c.closest('[hidden]') ? c : null;
+    if (ehCampoDeDigitar(c)) return c;
+  }
+  return null;
+}
+
+/**
+ * Faz o formulário andar sozinho entre os campos de digitar:
+ *  - Enter no campo preenchido (e válido) vai para o próximo, em vez de enviar o formulário. No último campo, ou se o
+ *    campo está vazio/inválido, o Enter continua como antes (envia e mostra o que falta);
+ *  - `automatico` = { nomeDoCampo: (valor) => true quando o campo está completo }: ao digitar o último número o foco
+ *    segue sozinho (ex.: WhatsApp com 11 dígitos). Só avança digitando no fim do campo, nunca apaga nada e nunca pula
+ *    para listas ou botões;
+ *  - `validos` = { nomeDoCampo: (valor) => true se o valor serve } para o Enter (sem isso: basta não estar vazio, ou ser opcional).
+ * O teclado do celular mostra "Próximo" (enterkeyhint) nos campos que têm um seguinte.
+ */
+export function avancarEntreCampos(formulario, { automatico = {}, validos = {} } = {}) {
+  const opcional = (el) => Boolean(el.closest('.campo')?.querySelector('.campo__opcional'));
+  const servePara = (el) => {
+    const regra = validos[el.name];
+    if (regra) return regra(el.value);
+    return el.value.trim() !== '' || opcional(el);
+  };
+
+  formulario.addEventListener('focusin', (ev) => {
+    if (ehCampoDeDigitar(ev.target)) ev.target.enterKeyHint = proximoCampo(formulario, ev.target) ? 'next' : 'done';
+  });
+
+  formulario.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' || ev.defaultPrevented || ev.isComposing || !ehCampoDeDigitar(ev.target)) return;
+    const seguinte = proximoCampo(formulario, ev.target);
+    if (!seguinte || !servePara(ev.target)) return;
+    ev.preventDefault();
+    seguinte.focus();
+  });
+
+  formulario.addEventListener('input', (ev) => {
+    const campo = ev.target;
+    const completo = automatico[campo.name];
+    if (!completo || !ehCampoDeDigitar(campo) || !String(ev.inputType || '').startsWith('insert')) return;
+    if (campo.selectionStart !== null && campo.selectionStart !== campo.value.length) return;
+    if (!completo(campo.value)) return;
+    const seguinte = proximoCampo(formulario, campo);
+    if (ehCampoDeDigitar(seguinte)) seguinte.focus();
+  });
+}
