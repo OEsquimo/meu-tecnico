@@ -128,10 +128,15 @@ export function abrirDias(texto, geradoEm) {
 // O link e a leitura dele
 // -----------------------------------------------------------------------------
 
-/** Endereço do app sem "#", "?" nem "index.html", terminado em "/". */
+/**
+ * Endereço do app sem "#", sem "index.html" e terminado em "/". Só o modo demonstração ("?demo=1") é mantido:
+ * sem ele, quem abre o link veria "O aplicativo ainda não está configurado" (o app real precisa do Firebase).
+ */
 export function enderecoBaseDoApp(href) {
-  const base = String(href ?? '').replace(/#.*$/, '').replace(/\?.*$/, '').replace(/index\.html$/, '');
-  return base.endsWith('/') ? base : `${base}/`;
+  const texto = String(href ?? '').replace(/#.*$/, '');
+  const demonstracao = /[?&]demo=1(&|$)/.test(texto);
+  const base = texto.replace(/\?.*$/, '').replace(/index\.html$/, '');
+  return `${base.endsWith('/') ? base : `${base}/`}${demonstracao ? '?demo=1' : ''}`;
 }
 
 /**
