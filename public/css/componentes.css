@@ -1085,6 +1085,10 @@ body.modo-demonstracao::before {
 }
 
 /* Aviso discreto de hora extra no seletor de horário */
+.seletor__unico { margin: 0; font-size: 1rem; }
+.agendar-resumo { display: flex; flex-direction: column; gap: var(--espaco-2, 8px); }
+.agendar-resumo__dia { font-weight: 700; font-size: 1.0625rem; }
+.agendar-resumo__sub { color: var(--cor-texto-suave, #5b6b7a); }
 .seletor__aviso-extra { margin: var(--espaco-2, 8px) 0 0; font-size: 0.8125rem; color: var(--cor-texto-suave, #5b6b7a); }
 
 /* Pontos do histórico na Agenda (dias que já passaram): verde = concluído, amarelo = atrasado ou cancelado. Podem ser dois. */

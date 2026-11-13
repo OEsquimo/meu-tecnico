@@ -53,7 +53,7 @@ def tecnicos_no_horario(pag, data, hora):
         nomes = None
     else:
         pag.click(f"{SELETOR} [data-acao=seletor-hora][data-hora='{hora}']")
-        nomes = pag.locator(f"{SELETOR} .tecnico-opcao").all_inner_texts()
+        nomes = pag.locator(f"{SELETOR} .tecnico-opcao").all_inner_texts() + pag.locator(f"{SELETOR} .seletor__unico strong").all_inner_texts()
     pag.click(f"{SELETOR} [data-acao=seletor-fechar]")
     pag.wait_for_selector(SELETOR, state="detached")
     return nomes

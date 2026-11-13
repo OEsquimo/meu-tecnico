@@ -29,7 +29,7 @@ with sync_playwright() as p:
     # ---- Agenda: um botão só, dentro do calendário; título no meio ----
     ir("/agenda")
     ok(pag.locator("#botao-agendar").count() == 1, "Agenda: um único botão Agendar")
-    ok(pag.locator("a[href*='#/agendar']").count() == 1, "Agenda: nenhum outro atalho para Agendar na tela")
+    ok(pag.locator("a[href*='#/agendar']").count() == 0, "Agenda: nenhum outro atalho para Agendar na tela")
     ok(pag.locator("section[aria-label='Calendário'] #botao-agendar").count() == 1, "o botão fica dentro do cartão do calendário")
     ultimo_dia = pag.locator("section[aria-label='Calendário'] .calendario__dia").last.bounding_box()
     bt = pag.locator("#botao-agendar").bounding_box()
@@ -40,10 +40,16 @@ with sync_playwright() as p:
     sem = pag.locator("section[aria-label='Calendário'] .calendario__dia:not(:has(.calendario__ponto)):not([disabled])")
     sem.nth(sem.count() - 1).click(); pag.wait_for_timeout(300)
     ok("Nenhum serviço neste dia." in texto(), "dia vazio: texto simples 'Nenhum serviço neste dia.'")
-    ok(pag.locator("a[href*='#/agendar']").count() == 1 and "Agendar serviço" not in texto(), "dia vazio: continua um botão Agendar só")
+    ok(pag.locator("#botao-agendar").count() == 1 and "Agendar serviço" not in texto(), "dia vazio: continua um botão Agendar só")
     dia_escolhido = pag.locator("section[aria-label='Calendário'] .calendario__dia--selecionado").first.get_attribute("data-iso")
-    pag.click("#botao-agendar"); pag.wait_for_timeout(700)
-    ok("#/agendar" in pag.url and f"data={dia_escolhido}" in pag.url, f"o botão abre Agendar no dia escolhido ({dia_escolhido})")
+    ok(pag.locator("#botao-agendar").inner_text().strip().startswith("Agendar em") or "Agendar hoje" in pag.locator("#botao-agendar").inner_text(), "o botão mostra o dia escolhido")
+    pag.click("#botao-agendar"); pag.wait_for_selector("dialog.seletor[open]"); pag.wait_for_timeout(600)
+    ok("#/agenda" in pag.url and pag.locator("dialog.seletor [data-acao=seletor-confirmar]").count() == 1, "o botão abre a tela flutuante com os horários do dia escolhido")
+    if pag.locator("dialog.seletor [data-acao=seletor-hora]").count() == 0:
+        pag.click("dialog.seletor [data-acao=seletor-proximo]"); pag.wait_for_timeout(900)
+    pag.locator("dialog.seletor [data-acao=seletor-hora]").first.click(); pag.wait_for_timeout(200)
+    pag.click("dialog.seletor [data-acao=seletor-confirmar]"); pag.wait_for_timeout(900)
+    ok("#/agendar" in pag.url and "agenda=1" in pag.url and "hora=" in pag.url, "confirmar leva ao Agendar com dia, hora e técnico")
 
     # ---- Agendar: sem avisos repetidos; cartão Quando amarelo com ícone ----
     ir("/agendar")

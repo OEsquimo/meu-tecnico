@@ -47,7 +47,7 @@ import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, form
 import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
+import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
 import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import {
@@ -81,6 +81,7 @@ export default async function montar(ctx) {
   let pedidoDoCliente = null; // pedido que veio do link de horários (só em agendamento novo)
   let pedidoSemVaga = false; // o horário pedido já não está livre
   let buscaInicial = ''; // nome do pedido, para já filtrar a lista de clientes na primeira vez
+  let daAgenda = false; // veio da Agenda: o dia vem de lá e a hora/técnico da tela flutuante; não mostra calendário
   let buscandoPedido = false; // no pedido de cliente, a busca só abre quando a pessoa toca em "Buscar cliente já cadastrado"
   let todosClientes = [];
   let tecnicos = []; // { uid, nome }
@@ -124,6 +125,7 @@ export default async function montar(ctx) {
       // O rascunho só volta quando a pessoa RETORNA da tela para onde saiu (mesmo endereço da página).
       // Antes ele reaparecia em qualquer agendamento novo, com o cliente de outra tentativa.
       if (rascunho && (rascunho.extras.editandoId || null) === (params.id || null) && rascunho.extras.endereco === location.hash) {
+        daAgenda = !editando && consulta.get('agenda') === '1';
         await restaurarRascunho(rascunho);
       } else if (editando) {
         await carregarParaEditar();
@@ -230,6 +232,13 @@ export default async function montar(ctx) {
     }
     const data = consulta.get('data');
     if (data && ehISOValido(data)) estado.data = data;
+    // Veio da Agenda (+ Agendar): dia e hora já escolhidos na tela flutuante, com o(s) técnico(s).
+    const hora = consulta.get('hora') || '';
+    if (consulta.get('agenda') === '1' && !editando && estado.data && /^\d{2}:\d{2}$/.test(hora)) {
+      daAgenda = true;
+      estado.hora = hora;
+      estado.tecnicoUids = (consulta.get('tecnicos') || '').split(',').filter((uid) => tecnicos.some((t) => t.uid === uid));
+    }
     // Pedido de cliente (link de horários): dia e hora já preenchidos e cliente achado pelo WhatsApp.
     const pedido = lerPedidoDaConsulta(consulta);
     if (pedido) {
@@ -259,6 +268,10 @@ export default async function montar(ctx) {
 
   /** Endereço do cadastro de cliente novo, já com nome e WhatsApp do pedido (e a volta para cá com o pedido). */
   function enderecoDoClienteNovo() {
+    if (daAgenda) {
+      const q = new URLSearchParams({ agenda: '1', data: estado.data, hora: estado.hora, tecnicos: estado.tecnicoUids.join(',') });
+      return `#/cliente/novo?${q.toString()}`;
+    }
     if (!pedidoDoCliente) return '#/cliente/novo';
     const q = new URLSearchParams({ pedido: '1', data: pedidoDoCliente.data, hora: pedidoDoCliente.hora, nome: pedidoDoCliente.nome });
     if (pedidoDoCliente.whatsapp) q.set('whatsapp', pedidoDoCliente.whatsapp);
@@ -326,6 +339,7 @@ export default async function montar(ctx) {
       <form id="form-agendar" class="formulario" novalidate>
         <div data-erros-gerais></div>
         <div id="area-pedido" class="pilha pilha--pequena"></div>
+        <div id="area-resumo"></div>
         <div id="area-cliente" class="pilha"></div>
         <div id="area-aparelhos" class="pilha"></div>
         <div id="area-quando"></div>
@@ -337,7 +351,7 @@ export default async function montar(ctx) {
     desenharCliente();
     desenharAparelhos();
     desenharQuando();
-    if (calCarregando && contadorCal === 0) {
+    if (calCarregando && contadorCal === 0 && !daAgenda) {
       // O calendário abre no mês do dia que já veio escolhido (da Agenda, de um pedido ou da edição).
       if (ehISOValido(estado.data) && estado.data >= hojeDaTela) { calAno = Number(estado.data.slice(0, 4)); calMes = Number(estado.data.slice(5, 7)) - 1; }
       carregarMesDoCalendario();
@@ -426,6 +440,7 @@ export default async function montar(ctx) {
           <label class="campo__rotulo" for="campo-busca">Cliente</label>
           <input class="campo__entrada" id="campo-busca" type="search" placeholder="Digite nome, telefone ou rua" autocomplete="off" />
         </div>
+        ${botao({ texto: 'Cadastrar cliente novo', variante: 'secundario', bloco: true, href: enderecoDoClienteNovo(), id: 'botao-cliente-novo' })}
         <div id="area-resultados" class="pilha pilha--pequena"></div>`);
       const entrada = area.querySelector('#campo-busca');
       if (buscaInicial) { entrada.value = buscaInicial; buscaInicial = ''; }
@@ -458,7 +473,7 @@ export default async function montar(ctx) {
     if (!area) return;
     const lista = filtrarClientes(todosClientes, termo);
     if (lista.length === 0) {
-      mostrar(area, html`<p class="texto-suave">Nenhum cliente encontrado. <a href="${enderecoDoClienteNovo()}">Cadastrar novo cliente</a></p>`);
+      mostrar(area, html`<p class="texto-suave">Nenhum cliente encontrado.</p>`);
       return;
     }
     mostrar(area, html`
@@ -594,7 +609,26 @@ export default async function montar(ctx) {
     desenharQuando();
   }
 
+  /** Veio da Agenda: em vez do calendário, só o resumo (dia da Agenda, hora e técnico da tela flutuante) com "Alterar horário". */
+  function desenharResumoDaAgenda() {
+    const resumo = raiz.querySelector('#area-resumo');
+    const quando = raiz.querySelector('#area-quando');
+    if (quando) mostrar(quando, '');
+    if (!resumo) return;
+    const nomes = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]?.nome).filter(Boolean);
+    mostrar(resumo, html`
+      <div class="campo" data-campo="data">
+        <span class="campo__rotulo">Quando</span>
+        <div class="cartao agendar-resumo" id="resumo-quando">
+          <div class="agendar-resumo__dia">${estado.hora ? `${formatarDiaExtenso(estado.data)} às ${estado.hora}` : formatarDiaExtenso(estado.data)}</div>
+          <div class="agendar-resumo__sub">${estado.hora ? (nomes.length > 0 ? `${nomes.length > 1 ? 'Técnicos' : 'Técnico'}: ${nomes.join(', ')}` : 'Sem técnico escolhido') : 'Escolha o horário'}</div>
+          ${botao({ texto: 'Alterar horário', variante: 'secundario', pequeno: true, acao: 'abrir-seletor', id: 'botao-quando' })}
+        </div>
+      </div>`);
+  }
+
   function desenharQuando() {
+    if (daAgenda) { desenharResumoDaAgenda(); return; }
     const area = raiz.querySelector('#area-quando');
     if (!area) return;
     const inicio = inicioDoEstado(estado);
@@ -957,6 +991,7 @@ export default async function montar(ctx) {
         throw erro;
       }
       descartarRascunho();
+      diaDeVolta.iso = '';
       // A linha aberta na URL pode ter sido removida da edição: vai para uma linha que existe.
       const restantes = await listarLinhasDoAgendamento(usuario.empresaId, { agendamentoId: id });
       const destino = restantes.find((l) => l.status === STATUS.AGENDADO) || restantes[0];

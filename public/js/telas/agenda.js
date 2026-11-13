@@ -27,7 +27,9 @@ import { sessao } from '../nucleo/sessao.js';
 import { calendarioDoMes } from './calendario-comum.js';
 import { formatarMesAno, formatarDiaExtenso, hojeISO, paraISO } from '../dominio/datas.js';
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+import { abrirSeletorDeHorario } from './seletor-horario.js';
+import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
+import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
@@ -39,6 +41,12 @@ export default async function montar(ctx) {
   let ano = anoHoje;
   let mes = mesHoje - 1;
   let diaEscolhido = hoje;
+  if (diaDeVolta.iso && Date.now() - diaDeVolta.quando < 10 * 60000 && diaDeVolta.iso >= hoje) {
+    diaEscolhido = diaDeVolta.iso;
+    ano = Number(diaEscolhido.slice(0, 4));
+    mes = Number(diaEscolhido.slice(5, 7)) - 1;
+  }
+  diaDeVolta.iso = '';
   let filtroTecnico = ''; // '' = todos
   let servicosDoMes = []; // todos os agendados do mês (sem filtro de técnico)
   let fechadosDoMes = []; // concluídos e cancelados do mês (só para os pontos verde e amarelo dos dias que já passaram)
@@ -111,7 +119,7 @@ export default async function montar(ctx) {
     ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(), passado: (iso) => iso < hoje,
     complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} visita(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
   })}
-          ${usuario.admin && diaEscolhido >= hoje && botao({ texto: 'Agendar', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}`, bloco: true, id: 'botao-agendar' })}
+          ${usuario.admin && diaEscolhido >= hoje && botao({ texto: diaEscolhido === hoje ? 'Agendar hoje' : `Agendar em ${diaEscolhido.slice(8, 10)}/${diaEscolhido.slice(5, 7)}`, iconeNome: 'mais', acao: 'agendar-dia', bloco: true, id: 'botao-agendar' })}
         </section>
 
         <section class="pilha pilha--pequena" aria-label="Serviços do dia">
@@ -168,11 +176,31 @@ export default async function montar(ctx) {
     carregarMes();
   }
 
+  /** + Agendar: tela flutuante com os horários e técnicos livres do dia; depois segue para escolher o cliente. */
+  async function agendarNoDia(iso) {
+    if (!iso || iso < hoje) return;
+    const escolha = await abrirSeletorDeHorario({
+      modo: 'folha', data: iso, hora: '', tecnicoUids: [],
+      expediente: expedienteDaEmpresa(sessao.empresa),
+      duracaoMin: DURACAO_PADRAO_MIN,
+      duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
+      regras: regrasDaEmpresa(sessao.empresa),
+      tecnicos,
+      agendamentoId: null,
+      carregarMes: (a, m) => listarAgendados({ empresaId: usuario.empresaId, de: new Date(a, m, 0), ate: new Date(a, m + 1, 2) }),
+    });
+    if (!escolha || !ctx.ativo()) return;
+    diaDeVolta.iso = diaEscolhido; diaDeVolta.quando = Date.now();
+    const q = new URLSearchParams({ agenda: '1', data: escolha.data, hora: escolha.hora, tecnicos: escolha.tecnicoUids.join(',') });
+    ctx.ir(`/agendar?${q.toString()}`);
+  }
+
   const desligar = aoClicar(raiz, {
     dia: (el) => {
       diaEscolhido = el.dataset.dia;
       desenhar();
     },
+    'agendar-dia': () => agendarNoDia(diaEscolhido),
     'mes-anterior': () => irParaMes(-1),
     'mes-seguinte': () => irParaMes(1),
     navegar: (el) => {
