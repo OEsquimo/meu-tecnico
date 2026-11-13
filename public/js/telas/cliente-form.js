@@ -146,6 +146,12 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   // Pedido de um cliente que veio do link de horários (Agendar > "Cadastrar novo cliente"): nome e WhatsApp já vêm
   // preenchidos e, depois de cadastrar, a pessoa volta ao Agendar com o dia e a hora do pedido.
   const pedido = editando ? null : lerPedidoDaConsulta(consulta);
+  // Veio da Agenda (+ Agendar): depois de cadastrar, volta ao Agendar com o dia, a hora e o técnico já escolhidos.
+  const daAgenda = !editando && consulta?.get('agenda') === '1' && Boolean(consulta.get('data')) && Boolean(consulta.get('hora'));
+  const voltarAoAgendar = (clienteId) => {
+    const q = new URLSearchParams({ cliente: clienteId, agenda: '1', data: consulta.get('data'), hora: consulta.get('hora'), tecnicos: consulta.get('tecnicos') || '' });
+    ir(`/agendar?${q.toString()}`, { substituir: true });
+  };
 
   // ---- 2. Desenha o formulário ----
   const enderecosIniciais = (cliente?.enderecos?.length ? cliente.enderecos : [novoEndereco()]).slice(0, MAXIMO_ENDERECOS);
@@ -395,7 +401,8 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     await comCarregando(form.querySelector('[type="submit"]'), async () => {
       try {
         if (existente) {
-          if (pedido) {
+          if (daAgenda) voltarAoAgendar(existente.id);
+          else if (pedido) {
             const q = new URLSearchParams({ cliente: existente.id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
             if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);
             ir(`/agendar?${q.toString()}`, { substituir: true });
@@ -407,6 +414,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         else id = await criarCliente(empresaId, dados, sessao.usuario.uid);
         toast(editando ? 'Cliente atualizado.' : 'Cliente cadastrado.', 'sucesso');
         if (editando && consulta?.get('voltar') === '1') voltar('/agendar');
+        else if (daAgenda) voltarAoAgendar(id);
         else if (pedido) {
           const q = new URLSearchParams({ cliente: id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
           if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);

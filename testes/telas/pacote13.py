@@ -131,7 +131,7 @@ with sync_playwright() as p:
     ok(pag.locator("#campo-busca").count() == 0 and "Cadastrar cliente novo" in t and "Buscar cliente já cadastrado" in t, "pedido de cliente: dois botões, sem busca nem lista de nomes na cara")
     pag.locator("[data-acao=buscar-cliente-pedido]").click(); pag.wait_for_timeout(500)
     ok(pag.input_value("#campo-busca") == "Cláudia Nogueira", "'Buscar cliente já cadastrado' abre a busca já com o nome")
-    ok("Cadastrar novo cliente" in pag.inner_text("#area-cliente"), "sem resultado, a busca ainda oferece cadastrar")
+    ok("Cadastrar cliente novo" in pag.inner_text("#area-cliente"), "sem resultado, a busca ainda oferece cadastrar")
     ir("/agenda")
     ir("/agendar?" + link_app.split("#/agendar?", 1)[1])
     pag.locator("a:has-text('Cadastrar cliente novo')").click(); pag.wait_for_timeout(1000)

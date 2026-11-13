@@ -202,6 +202,9 @@ export function linkLigar(telefone) {
 // -----------------------------------------------------------------------------
 
 /** Dia de hoje em AAAA-MM-DD. */
+/** Dia que a Agenda reabre se a pessoa voltar do Agendar sem salvar (vale 10 minutos; o Agendar limpa ao salvar). */
+export const diaDeVolta = { iso: '', quando: 0 };
+
 export const hojeIso = () => paraISO(new Date());
 
 /** Título de seção pequeno dentro das telas. */

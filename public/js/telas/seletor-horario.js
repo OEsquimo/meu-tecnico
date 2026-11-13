@@ -55,6 +55,8 @@ export function abrirSeletorDeHorario({ modo = 'completo', data, hora, tecnicoUi
     let resposta = null;
     const guardados = new Map(); // "ano-mes" -> agendados do mês
     let pedido = 0;
+    let procurando = false; // procurando o próximo dia com horário livre (só na folha)
+    let semProximo = false;
 
     const janela = document.createElement('dialog');
     const folha = modo === 'folha';
@@ -145,26 +147,60 @@ export function abrirSeletorDeHorario({ modo = 'completo', data, hora, tecnicoUi
             <section class="seletor__secao" data-secao="horarios">
               ${folha ? '' : html`<h3 class="subtitulo">${formatarDiaExtenso(diaEscolhido)}</h3>`}
               ${horarios.length === 0
-    ? html`<p class="texto-suave">${diaLotadoEscolhido ? 'Nenhum horário livre neste dia.' : 'Nenhum horário livre neste dia para este serviço. Escolha outro dia.'}</p>`
+    ? html`<p class="texto-suave">${diaLotadoEscolhido || folha ? 'Nenhum horário livre neste dia.' : 'Nenhum horário livre neste dia para este serviço. Escolha outro dia.'}</p>
+      ${folha ? botao({ texto: procurando ? 'Procurando…' : 'Ver próximo dia livre', variante: 'secundario', bloco: true, acao: 'seletor-proximo', desabilitado: procurando }) : ''}
+      ${folha && semProximo ? html`<p class="texto-suave" data-aviso="sem-proximo">Nenhum dia livre nos próximos meses.</p>` : ''}`
     : html`<div class="seletor__horarios">${horarios.map((h) => html`<button type="button" class="seletor__horario ${h.hora === horaEscolhida ? 'seletor__horario--escolhido' : ''}" data-acao="seletor-hora" data-hora="${h.hora}" aria-pressed="${h.hora === horaEscolhida}">${h.hora}</button>`)}</div>
       ${horaExtra ? html`<p class="seletor__aviso-extra" data-aviso="hora-extra">Termina ${horaExtra.startsWith('depois') ? horaExtra : `às ${horaExtra}`}, depois do expediente.</p>` : ''}`}
             </section>` : ''}
           ${horaEscolhida && livres.length > 0 ? html`
             <section class="seletor__secao" data-secao="tecnicos">
               <h3 class="subtitulo">Técnicos livres às ${horaEscolhida}</h3>
-              <div class="tecnicos-caixas">
+              ${folha && livres.length === 1
+    ? html`<p class="seletor__unico" data-aviso="tecnico-unico">Técnico: <strong>${livres[0].nome}</strong></p>`
+    : html`<div class="tecnicos-caixas">
                 ${livres.map((t) => html`
                   <label class="tecnico-opcao">
                     <input type="checkbox" name="seletor-tec" value="${t.uid}" ${escolhidos.has(t.uid) ? 'checked' : ''} />
                     <span>${t.nome}</span>
                   </label>`)}
               </div>
-              <p class="campo__ajuda">Marque mais de um se forem juntos.</p>
+              <p class="campo__ajuda">Marque mais de um se forem juntos.</p>`}
             </section>` : ''}
         </div>
         <footer class="seletor__rodape">
           ${botao({ texto: 'Confirmar', acao: 'seletor-confirmar', bloco: true, desabilitado: !pode })}
         </footer>`);
+    }
+
+    /** Folha: vai para o próximo dia (depois do escolhido) que tem horário livre, procurando até 3 meses à frente. */
+    async function procurarProximoDia() {
+      if (procurando || !diaEscolhido) return;
+      procurando = true; semProximo = false;
+      desenhar();
+      try {
+        let [a, m] = diaEscolhido.split('-').map(Number);
+        m -= 1;
+        for (let i = 0; i < 4; i += 1) {
+          const chave = `${a}-${m}`;
+          if (!guardados.has(chave)) guardados.set(chave, await carregarMes(a, m));
+          const lista = guardados.get(chave);
+          const dias = [...diasComVaga({ ...contaBase(), agendados: lista, ano: a, mes: m })].filter((iso) => iso > diaEscolhido).sort();
+          if (dias.length > 0) {
+            ano = a; mes = m; agendados = lista;
+            diaEscolhido = dias[0]; horaEscolhida = ''; escolhidos = new Set();
+            procurando = false;
+            desenhar();
+            return;
+          }
+          const v = mesVizinho(a, m, 1); a = v.ano; m = v.mes;
+        }
+        semProximo = true;
+      } catch {
+        erroDeCarga = true;
+      }
+      procurando = false;
+      desenhar();
     }
 
     function fechar(valor) {
@@ -182,6 +218,7 @@ export function abrirSeletorDeHorario({ modo = 'completo', data, hora, tecnicoUi
         desenhar();
       },
       'seletor-hora': (el) => { horaEscolhida = el.dataset.hora; ajustarTecnicos(); desenhar(); },
+      'seletor-proximo': () => procurarProximoDia(),
       'seletor-confirmar': () => {
         if (!diaEscolhido || !horaEscolhida || escolhidos.size === 0) return;
         const livres = techsDaHora().map((t) => t.uid);
