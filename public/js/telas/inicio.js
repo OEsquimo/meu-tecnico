@@ -12,12 +12,14 @@
 
 import { html, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, estadoVazio, esqueletos } from '../nucleo/componentes.js';
+import { tecnicosParaAtribuir } from '../servicos/equipe.js';
+import { regrasDaEmpresa } from '../dominio/expediente.js';
 import { icone } from '../nucleo/icones.js';
 import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
 import { ferramentasDoUsuario } from '../nucleo/ferramentas.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
-import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento, listarIncluidosNaoVistos, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
+import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento, listarIncluidosNaoVistos, listarReatribuidosNaoVistos, conferirAtrasosDoDia, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
 import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento, nomesDosTecnicos } from '../dominio/servicos.js';
@@ -79,6 +81,7 @@ export default async function montar(ctx) {
   // ---------------------------------------------------------------------------
   // ADMINISTRADOR
   // ---------------------------------------------------------------------------
+  let reatribuidos = []; // serviços que passaram de um técnico para outro por atraso e o administrador ainda não viu
   let incluidos = []; // serviços que o técnico acrescentou em campo e o administrador ainda não viu
   let totalAguardando = 0; // agendamentos cancelados esperando nova data (lembrete de reagendamento)
 
@@ -87,15 +90,24 @@ export default async function montar(ctx) {
     const hoje = inicioDoDia(agora);
     const diasAviso = sessao.empresa?.diasAvisoRetorno ?? DIAS_AVISO_RETORNO_PADRAO;
 
+    // Técnico que passou do tempo: o próximo agendamento dele vai para outro técnico livre, ou fica Atrasado.
+    // Confere antes de ler o dia, para a tela já mostrar o resultado. Se falhar, a tela segue sem o ajuste.
+    try {
+      const equipe = await tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome, atende: sessao.empresa?.adminAtende !== false });
+      await conferirAtrasosDoDia({ empresaId: usuario.empresaId, tecnicos: equipe, regras: regrasDaEmpresa(sessao.empresa), agora });
+    } catch { /* sem ajuste desta vez */ }
+
     // Retornos e atrasados não podem derrubar a tela inteira: se falharem, só somem.
-    const [doDia, atrasados, retornos, aguardando, naoVistos] = await Promise.all([
+    const [doDia, atrasados, retornos, aguardando, naoVistos, trocas] = await Promise.all([
       listarAgendados({ empresaId: usuario.empresaId, de: hoje, ate: inicioDoDiaSeguinte(agora) }),
       listarAtrasados({ empresaId: usuario.empresaId, agora }).catch(() => []),
       contarRetornos({ empresaId: usuario.empresaId, hojeISO: hojeISO(agora), diasAviso }).catch(() => 0),
       listarAguardandoReagendamento({ empresaId: usuario.empresaId }).catch(() => []),
       listarIncluidosNaoVistos({ empresaId: usuario.empresaId }).catch(() => []),
+      listarReatribuidosNaoVistos({ empresaId: usuario.empresaId }).catch(() => []),
     ]);
     incluidos = naoVistos;
+    reatribuidos = trocas;
     totalAguardando = agruparAgendamentos(aguardando).length;
 
     // Próxima visita: a primeira de hoje que ainda não passou; senão, a primeira dos próximos dias.
@@ -157,6 +169,13 @@ export default async function montar(ctx) {
       const nomes = [...new Set(incluidos.map((l) => (nomesDosTecnicos(l)[0] || 'O técnico').split(' ')[0]))];
       const quem = nomes.length === 1 ? nomes[0] : 'Técnicos';
       avisos.push(avisoLink(`#/servico/${incluidos[0].id}`, 'amarelo', incluidos.length === 1 ? `${quem} incluiu 1 serviço em campo` : `${quem} incluíram ${incluidos.length} serviços em campo`, 'Confira o serviço e o valor. Toque para abrir.'));
+    }
+    if (reatribuidos.length > 0) {
+      const r = reatribuidos[0];
+      const visitas = agruparAgendamentos(reatribuidos).length;
+      avisos.push(avisoLink(`#/servico/${r.id}`, 'amarelo',
+        visitas === 1 ? `Agendamento de ${r.clienteNome} passou para ${nomesDosTecnicos(r)[0] || 'outro técnico'}` : `${visitas} agendamentos passaram para outro técnico`,
+        visitas === 1 ? `${r.reatribuidoDeNome || 'O técnico'} ainda está em outro serviço. Toque para abrir.` : 'Os técnicos anteriores ainda estão em outro serviço. Toque para abrir.'));
     }
     if (totalAguardando > 0) {
       avisos.push(avisoLink('#/reagendamentos', 'amarelo', totalAguardando === 1 ? '1 agendamento aguardando reagendamento' : `${totalAguardando} agendamentos aguardando reagendamento`, 'Foram cancelados e precisam de uma nova data. Toque para ver e editar.'));

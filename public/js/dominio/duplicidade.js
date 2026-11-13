@@ -3,12 +3,12 @@
 // =============================================================================
 // 1. CLIENTE: ao cadastrar um cliente novo, compara o WhatsApp e os endereços com os clientes
 //    que já existem. O app só AVISA e deixa a pessoa decidir: nunca bloqueia nem junta sozinho.
-// 2. AGENDAMENTO: o mesmo cliente, no mesmo aparelho, com o mesmo serviço, no mesmo dia e hora,
-//    não pode ser agendado duas vezes (isso é quase sempre um toque duplo ou um esquecimento).
+// 2. AGENDAMENTO: um aparelho só tem um agendamento aberto por vez (ver mais abaixo).
 // =============================================================================
 
 import { normalizarWhatsappBR } from './telefone.js';
 import { STATUS, chaveDoAgendamento } from './servicos.js';
+import { formatarDataBR, formatarHora } from './datas.js';
 
 // -----------------------------------------------------------------------------
 // CLIENTE
@@ -89,29 +89,28 @@ export function textoDoAvisoDeCliente(motivos) {
 }
 
 // -----------------------------------------------------------------------------
-// AGENDAMENTO
+// AGENDAMENTO — um aparelho só tem UM agendamento aberto
+// -----------------------------------------------------------------------------
+// Enquanto o serviço de um aparelho não for concluído (ou cancelado), não se cria outro agendamento para ele.
+// Precisando de mais um serviço no mesmo aparelho, edita-se o agendamento que já existe. Outros aparelhos do
+// mesmo cliente não são afetados. Linhas sem aparelho ("Serviço a definir") não entram na regra.
 // -----------------------------------------------------------------------------
 
-const mesmoMinuto = (a, b) => a instanceof Date && b instanceof Date && Math.floor(a.getTime() / 60000) === Math.floor(b.getTime() / 60000);
-
 /**
- * Já existe, para o MESMO cliente, o mesmo aparelho e o mesmo serviço nesse dia e hora?
- * - `pares`: [{ aparelhoId, tipoId }] do agendamento que vai ser salvo (linhas sem aparelho ou sem serviço não contam);
- * - `agendados`: serviços com status "agendado" (de qualquer visita);
+ * Algum dos aparelhos já tem agendamento aberto?
+ * - `aparelhoIds`: aparelhos do agendamento que vai ser salvo;
+ * - `abertas`: serviços com status "agendado" desses aparelhos (de qualquer visita);
  * - `ignorarAgendamento`: chave do agendamento em edição (ele não conflita com ele mesmo).
  * Devolve a linha que já existe, ou null.
  */
-export function acharAgendamentoDuplicado({ clienteId, inicio, pares, agendados, ignorarAgendamento = null }) {
-  if (!clienteId || !(inicio instanceof Date)) return null;
-  const validos = (pares || []).filter((p) => p.aparelhoId && p.tipoId);
-  if (validos.length === 0) return null;
-  for (const s of agendados || []) {
-    if (s.status !== STATUS.AGENDADO || s.clienteId !== clienteId) continue;
-    if (ignorarAgendamento && chaveDoAgendamento(s) === ignorarAgendamento) continue;
-    if (!mesmoMinuto(s.dataAgendada, inicio)) continue;
-    if (validos.some((p) => p.aparelhoId === s.aparelhoId && p.tipoId === s.tipoServicoId)) return s;
-  }
-  return null;
+export function acharAparelhoComAgendamentoAberto({ aparelhoIds, abertas, ignorarAgendamento = null }) {
+  const ids = new Set((aparelhoIds || []).filter(Boolean));
+  if (ids.size === 0) return null;
+  return (abertas || []).find((s) => s.status === STATUS.AGENDADO && ids.has(s.aparelhoId)
+    && !(ignorarAgendamento && chaveDoAgendamento(s) === ignorarAgendamento)) || null;
 }
 
-export const MENSAGEM_AGENDAMENTO_DUPLICADO = 'Esse serviço já está agendado para este cliente, neste aparelho, nesse dia e horário.';
+export function mensagemAparelhoOcupado(linha) {
+  const quando = linha?.dataAgendada instanceof Date ? ` (${formatarDataBR(linha.dataAgendada)} às ${formatarHora(linha.dataAgendada)})` : '';
+  return `Este aparelho já tem um serviço agendado${quando}. Para acrescentar outro serviço, edite o agendamento que já existe.`;
+}

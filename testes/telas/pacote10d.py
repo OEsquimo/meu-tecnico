@@ -23,7 +23,7 @@ with sync_playwright() as p:
     pag.click("#form-entrar [type=submit]"); pag.wait_for_selector(".menu-topo__item"); pag.wait_for_timeout(1000)
 
     ir("/agenda"); ir("/agendar")
-    pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
+    pag.locator("[data-acao=escolher-cliente]", has_text="Maria Souza").click(); pag.wait_for_timeout(600)
     escolher_quando(pag, "2031-07-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     sid = pag.url.split("/servico/")[1]
@@ -42,7 +42,7 @@ with sync_playwright() as p:
     pag.keyboard.press("Escape"); pag.wait_for_timeout(300)
 
     # ---- informar dois serviços no mesmo aparelho ----
-    informar(pag, servicos=("Limpeza", "Manutenção"))
+    informar(pag, servicos=("Limpeza", "Manutenção"), aparelho="Quarto")
     ok(pag.locator("a:has-text('Concluir serviço')").count() == 2, "dois serviços, cada um com Concluir")
     ok("Serviço a definir" not in texto() and "ainda não foram informados" not in texto(), "linha 'a definir' consumida")
     ok(pag.locator("button:has-text('Adicionar aparelhos e serviços')").count() == 1, "'Adicionar aparelhos e serviços' aparece com serviço real")

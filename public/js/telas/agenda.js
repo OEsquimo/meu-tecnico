@@ -1,7 +1,8 @@
 // =============================================================================
 // TELA: Agenda
 // =============================================================================
-// Calendário do mês (um ponto por dia: azul = tem agendamento e ainda cabe mais; vermelho = lotado)
+// Calendário do mês (de hoje em diante, um ponto por dia: azul = tem agendamento e ainda cabe mais; vermelho = lotado;
+// dias que já passaram: verde = serviço concluído, amarelo = atrasado ou cancelado, e podem ser os dois)
 // + lista dos serviços do dia escolhido.
 //   * ADMINISTRADOR: vê os serviços de todos, com filtro por técnico, e tem o
 //     botão "Agendar" (já abre a tela de agendar com o dia escolhido).
@@ -17,14 +18,14 @@
 import { html, mostrar, aoClicar, aoEnviar, confirmar, comCarregando, toast, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, estadoVazio, esqueletos, campoSelecao } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
-import { listarAgendados, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
+import { listarAgendados, listarConcluidosECancelados, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { agruparPorDia, mesVizinho } from '../dominio/agenda.js';
-import { menorDuracaoDosTipos, pontosDoMes } from '../dominio/disponibilidade.js';
+import { menorDuracaoDosTipos, pontosDoMes, pontosDoHistorico } from '../dominio/disponibilidade.js';
 import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import { sessao } from '../nucleo/sessao.js';
 import { calendarioDoMes } from './calendario-comum.js';
-import { formatarMesAno, formatarDiaExtenso, hojeISO } from '../dominio/datas.js';
+import { formatarMesAno, formatarDiaExtenso, hojeISO, paraISO } from '../dominio/datas.js';
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
 
@@ -40,6 +41,7 @@ export default async function montar(ctx) {
   let diaEscolhido = hoje;
   let filtroTecnico = ''; // '' = todos
   let servicosDoMes = []; // todos os agendados do mês (sem filtro de técnico)
+  let fechadosDoMes = []; // concluídos e cancelados do mês (só para os pontos verde e amarelo dos dias que já passaram)
   let tecnicos = []; // opções do filtro (só admin)
 
   const topo = () => cabecalho({ titulo: 'Agenda', centralizado: true });
@@ -58,14 +60,17 @@ export default async function montar(ctx) {
         de: new Date(ano, mes, 0),
         ate: new Date(ano, mes + 1, 2),
         tecnicoUid: usuario.admin ? null : usuario.uid,
-      })];
+      }), listarConcluidosECancelados({
+        empresaId: usuario.empresaId, de: new Date(ano, mes, 1), ate: new Date(ano, mes + 1, 1), tecnicoUid: usuario.admin ? null : usuario.uid,
+      }).catch(() => [])]; // o histórico não pode derrubar a Agenda: se falhar, só some o verde
       // A lista de técnicos só é buscada uma vez; se falhar, o filtro simplesmente some.
       if (usuario.admin && tecnicos.length === 0) {
         tarefas.push(tecnicosParaAtribuir(usuario.empresaId, { uid: usuario.uid, nome: usuario.nome, atende: sessao.empresa?.adminAtende !== false }).catch(() => []));
       }
-      const [lista, equipe] = await Promise.all(tarefas);
+      const [lista, fechados, equipe] = await Promise.all(tarefas);
       if (!ctx.ativo()) return;
       servicosDoMes = lista;
+      fechadosDoMes = fechados;
       if (equipe) tecnicos = equipe;
       desenhar();
     } catch (erro) {
@@ -80,7 +85,9 @@ export default async function montar(ctx) {
   // Desenhar
   // ---------------------------------------------------------------------------
   function desenhar() {
-    const grupos = agruparPorDia(visiveis());
+    // Dias que já passaram também mostram o que foi concluído ou cancelado (é o que os pontos verde e amarelo indicam).
+    const doHistorico = fechadosDoMes.filter((s) => s.dataAgendada instanceof Date && paraISO(s.dataAgendada) < hoje && (!filtroTecnico || servicoTemTecnico(s, filtroTecnico)));
+    const grupos = agruparPorDia([...visiveis(), ...doHistorico]);
     const doDia = grupos[diaEscolhido] || [];
 
     mostrar(raiz, html`
@@ -101,10 +108,10 @@ export default async function montar(ctx) {
             <button type="button" class="agenda-mes__botao agenda-mes__botao--proximo" data-acao="mes-seguinte" aria-label="Próximo mês">${icone('voltar', 22)}</button>
           </div>
           ${calendarioDoMes({
-    ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(),
+    ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(), passado: (iso) => iso < hoje,
     complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} visita(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
   })}
-          ${usuario.admin && botao({ texto: 'Agendar', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}`, bloco: true, id: 'botao-agendar' })}
+          ${usuario.admin && diaEscolhido >= hoje && botao({ texto: 'Agendar', iconeNome: 'mais', href: `#/agendar?data=${diaEscolhido}`, bloco: true, id: 'botao-agendar' })}
         </section>
 
         <section class="pilha pilha--pequena" aria-label="Serviços do dia">
@@ -130,7 +137,7 @@ export default async function montar(ctx) {
    * vale só para aquele técnico. Visitas de qualquer técnico entram na conta de quem está ocupado.
    */
   function pontosDoCalendario() {
-    return pontosDoMes({
+    const pontos = pontosDoMes({
       expediente: expedienteDaEmpresa(sessao.empresa),
       ano,
       mes,
@@ -141,6 +148,14 @@ export default async function montar(ctx) {
       filtroTecnico,
       mostrarLotado: usuario.admin,
     });
+    // Dias que já passaram contam o HISTÓRICO: verde = concluído; amarelo = atrasado ou cancelado (podem ser os dois).
+    for (const iso of [...pontos.keys()]) if (iso < hoje) pontos.delete(iso);
+    const historico = pontosDoHistorico({
+      servicos: [...servicosDoMes, ...fechadosDoMes].filter((s) => !filtroTecnico || servicoTemTecnico(s, filtroTecnico)),
+      ano, mes, hoje,
+    });
+    for (const [iso, cores] of historico) pontos.set(iso, cores);
+    return pontos;
   }
 
   /** Muda de mês: escolhe hoje (se for o mês atual) ou o dia 1, e busca os dados. */

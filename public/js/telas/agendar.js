@@ -29,7 +29,9 @@
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, levarAte } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
-import { menorDuracaoDosTipos } from '../dominio/disponibilidade.js';
+import { menorDuracaoDosTipos, escolherTecnicoEquilibrado } from '../dominio/disponibilidade.js';
+import { mesVizinho } from '../dominio/agenda.js';
+import { calendarioDeDisponibilidade } from './calendario-comum.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { icone } from '../nucleo/icones.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
@@ -41,7 +43,7 @@ import { validarAgendamento } from '../dominio/validacoes.js';
 import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio/aparelhos.js';
 import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
-import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora, formatarDiaExtenso } from '../dominio/datas.js';
+import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora, formatarDiaExtenso, formatarMesAno } from '../dominio/datas.js';
 import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
@@ -85,6 +87,16 @@ export default async function montar(ctx) {
   let aparelhos = []; // aparelhos do cliente escolhido
   let ocupacao = []; // serviços agendados em volta do dia escolhido
   let contadorOcupacao = 0;
+  // Calendário da própria tela (card "Quando"): mês mostrado, dia em destaque e os agendados de cada mês já buscado.
+  const hojeDaTela = hojeISO();
+  let calAno = Number(hojeDaTela.slice(0, 4));
+  let calMes = Number(hojeDaTela.slice(5, 7)) - 1;
+  let diaDestaque = '';
+  let calCarregando = true;
+  let calErro = false;
+  let calAgendados = [];
+  const calGuardados = new Map();
+  let contadorCal = 0;
 
   const tiposPorId = () => Object.fromEntries(sessao.tipos.map((t) => [t.id, t]));
   const aparelhosPorId = () => Object.fromEntries(aparelhos.map((a) => [a.id, a]));
@@ -282,8 +294,8 @@ export default async function montar(ctx) {
   /** Agendamento novo sem técnico: já deixa o primeiro técnico livre escolhido (dá para trocar). */
   function sugerirTecnicoDoAgendamento() {
     if (estado.tecnicoUids.length > 0) return;
-    const primeiro = tecnicosLivresParaAgendamento(contexto())[0]?.uid;
-    estado.tecnicoUids = primeiro ? [primeiro] : [];
+    const sugerido = escolherTecnicoEquilibrado({ livres: tecnicosLivresParaAgendamento(contexto()), agendados: ocupacao, iso: estado.data });
+    estado.tecnicoUids = sugerido ? [sugerido.uid] : [];
   }
 
   // ---------------------------------------------------------------------------
@@ -325,6 +337,11 @@ export default async function montar(ctx) {
     desenharCliente();
     desenharAparelhos();
     desenharQuando();
+    if (calCarregando && contadorCal === 0) {
+      // O calendário abre no mês do dia que já veio escolhido (da Agenda, de um pedido ou da edição).
+      if (ehISOValido(estado.data) && estado.data >= hojeDaTela) { calAno = Number(estado.data.slice(0, 4)); calMes = Number(estado.data.slice(5, 7)) - 1; }
+      carregarMesDoCalendario();
+    }
     desenharObsAgendamento();
     desenharPendencias();
 
@@ -545,36 +562,87 @@ export default async function montar(ctx) {
     return [...form.querySelectorAll('input[type="checkbox"]')].filter((c) => c.name === nome && c.checked).map((c) => c.value);
   }
 
-  // ---- Quando (dia, hora e técnicos da visita): um botão que abre o seletor ----
+  // ---- Quando (dia, hora e técnicos da visita): calendário aqui na tela + tela flutuante com horários e técnicos ----
+  const baseDoCalendario = () => ({
+    expediente: expedienteDaEmpresa(sessao.empresa),
+    duracaoMin: duracaoNecessaria(estado, tiposPorId()),
+    duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
+    regras: regrasDaEmpresa(sessao.empresa),
+    tecnicos,
+    agendamentoId,
+  });
+
+  /** Busca os agendados do mês do calendário (e guarda; só busca de novo se a pessoa mudar de mês). */
+  async function carregarMesDoCalendario() {
+    const chave = `${calAno}-${calMes}`;
+    const meu = ++contadorCal;
+    calErro = false;
+    if (calGuardados.has(chave)) { calAgendados = calGuardados.get(chave); calCarregando = false; return; }
+    calCarregando = true;
+    desenharQuando();
+    try {
+      const lista = await listarAgendados({ empresaId: usuario.empresaId, de: new Date(calAno, calMes, 0), ate: new Date(calAno, calMes + 1, 2) });
+      if (meu !== contadorCal || !ctx.ativo()) return;
+      calGuardados.set(chave, lista);
+      calAgendados = lista;
+    } catch {
+      if (meu !== contadorCal || !ctx.ativo()) return;
+      calAgendados = [];
+      calErro = true;
+    }
+    calCarregando = false;
+    desenharQuando();
+  }
+
   function desenharQuando() {
     const area = raiz.querySelector('#area-quando');
     if (!area) return;
     const inicio = inicioDoEstado(estado);
     const nomes = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]?.nome).filter(Boolean);
+    const destaque = diaDestaque || (estado.data >= hojeDaTela ? estado.data : ''); // dia que já passou não fica em destaque
+    const antesDeHoje = `${mesVizinho(calAno, calMes, -1).ano}-${String(mesVizinho(calAno, calMes, -1).mes + 1).padStart(2, '0')}` < hojeDaTela.slice(0, 7);
     mostrar(area, html`
-      <div class="campo" data-campo="data">
+      <div class="campo quando-calendario" data-campo="data">
         <span class="campo__rotulo">Quando</span>
-        <button type="button" class="quando-botao ${inicio ? '' : 'quando-botao--pendente'}" id="botao-quando" data-acao="abrir-seletor">
-          <span class="quando-botao__principal">${inicio ? `${formatarDataBR(inicio)} às ${formatarHora(inicio)}` : html`Escolher dia e horário <span class="quando-botao__icone" aria-hidden="true">${icone('alerta', 20)}</span>`}</span>
-          <span class="quando-botao__sub">${inicio ? (nomes.length > 0 ? nomes.join(', ') : 'Sem técnico escolhido') : 'Toque para ver os horários livres'}</span>
-        </button>
+        <div class="seletor__mes" data-ano-mes="${calAno}-${String(calMes + 1).padStart(2, '0')}">
+          <button type="button" class="botao botao--secundario botao--pequeno" data-acao="quando-mes" data-passo="-1" aria-label="Mês anterior" ${antesDeHoje ? html`disabled` : ''}>‹</button>
+          <strong>${formatarMesAno(calAno, calMes)}</strong>
+          <button type="button" class="botao botao--secundario botao--pequeno" data-acao="quando-mes" data-passo="1" aria-label="Próximo mês">›</button>
+        </div>
+        ${calCarregando ? html`<p class="texto-suave" role="status">Carregando os horários livres…</p>` : ''}
+        ${calErro ? html`<div class="aviso aviso--amarelo" role="alert">Não deu para ver os horários deste mês. Toque em ‹ ou › para tentar de novo.</div>` : ''}
+        ${calendarioDeDisponibilidade({ ...baseDoCalendario(), ano: calAno, mes: calMes, hoje: hojeDaTela, escolhido: destaque, acao: 'quando-dia', pronto: !calCarregando && !calErro, agendados: calAgendados })}
+        ${inicio || destaque
+    ? html`<button type="button" class="quando-botao ${inicio ? '' : 'quando-botao--pendente'}" id="botao-quando" data-acao="abrir-seletor">
+          <span class="quando-botao__principal">${inicio ? `${formatarDataBR(inicio)} às ${formatarHora(inicio)}` : html`Escolher o horário de ${formatarDataBR(new Date(`${destaque}T12:00:00`))} <span class="quando-botao__icone" aria-hidden="true">${icone('alerta', 20)}</span>`}</span>
+          <span class="quando-botao__sub">${inicio ? (nomes.length > 0 ? `${nomes.join(', ')} · toque para mudar o horário` : 'Sem técnico escolhido') : 'Toque para ver os horários livres'}</span>
+        </button>`
+    : html`<div class="quando-botao quando-botao--pendente" id="botao-quando">
+          <span class="quando-botao__principal">Escolher dia e horário <span class="quando-botao__icone" aria-hidden="true">${icone('alerta', 20)}</span></span>
+          <span class="quando-botao__sub">Toque num dia do calendário</span>
+        </div>`}
       </div>`);
   }
 
-  /** Abre o seletor de dia, hora e técnicos e aplica a escolha na tela. */
-  async function abrirSeletor() {
+  /** Abre a tela flutuante com os horários e os técnicos livres do dia e aplica a escolha na tela. */
+  async function abrirFolha(iso) {
+    if (!iso || iso < hojeDaTela) return;
+    const mesmoDia = iso === estado.data;
     const antes = [...estado.tecnicoUids];
+    diaDestaque = iso;
+    desenharQuando();
     const escolha = await abrirSeletorDeHorario({
-      data: estado.data,
-      hora: estado.hora,
-      tecnicoUids: estado.tecnicoUids,
+      modo: 'folha',
+      data: iso,
+      hora: mesmoDia ? estado.hora : '',
+      tecnicoUids: mesmoDia ? estado.tecnicoUids : [],
       expediente: expedienteDaEmpresa(sessao.empresa),
       duracaoMin: duracaoNecessaria(estado, tiposPorId()),
       duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
       regras: regrasDaEmpresa(sessao.empresa),
       tecnicos,
       agendamentoId,
-      // Só os agendamentos do mês que está na tela (com uma folga de 1 dia antes e 1 depois).
+      // Só os agendados do mês do dia (com uma folga de 1 dia antes e 1 depois).
       carregarMes: (ano, mes) => listarAgendados({ empresaId: usuario.empresaId, de: new Date(ano, mes, 0), ate: new Date(ano, mes + 1, 2) }),
     });
     if (!escolha || !ctx.ativo()) return;
@@ -584,11 +652,19 @@ export default async function montar(ctx) {
     estado.data = escolha.data;
     estado.hora = escolha.hora;
     estado.tecnicoUids = [...escolha.tecnicoUids];
+    diaDestaque = escolha.data;
     try { await carregarOcupacao(); } catch (erro) { toast(traduzirErro(erro), 'erro'); }
     for (const s of todosOsServicos(estado)) {
       if (s.tecnicoUids.length === 0) s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
     }
     if (ctx.ativo()) redesenharTudo();
+  }
+
+  async function mudarMesDoCalendario(passo) {
+    const v = mesVizinho(calAno, calMes, passo);
+    calAno = v.ano;
+    calMes = v.mes;
+    await carregarMesDoCalendario();
   }
 
   /** O agendamento aberto está cancelado (salvar o reagenda)? */
@@ -649,7 +725,9 @@ export default async function montar(ctx) {
     });
 
     desligar = aoClicar(raiz, {
-      'abrir-seletor': abrirSeletor,
+      'abrir-seletor': () => abrirFolha(diaDestaque || estado.data),
+      'quando-dia': (el) => abrirFolha(el.dataset.iso),
+      'quando-mes': (el) => mudarMesDoCalendario(Number(el.dataset.passo)),
       'escolher-cliente': (el) => escolherCliente(el.dataset.id),
       'trocar-cliente': trocarCliente,
       'buscar-cliente-pedido': () => {
@@ -852,21 +930,32 @@ export default async function montar(ctx) {
     const linhas = montarLinhas(estado, { tiposPorId: tiposPorId(), aparelhosPorId: aparelhosPorId(), tecnicosPorUid: tecnicosPorUid() });
     const botaoSalvar = form.querySelector('#botao-salvar');
     await comCarregando(botaoSalvar, async () => {
-      const id = await salvarAgendamento({
-        empresaId: usuario.empresaId,
-        agendamentoId,
-        existentes: linhasExistentes,
-        cliente: estado.cliente,
-        endereco: enderecoDoCliente(estado.cliente, limpos.enderecoId),
-        tecnicos: estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]).filter(Boolean),
-        data: limpos.data,
-        hora: limpos.hora,
-        observacao: limpos.descricao,
-        linhas,
-        origemRetornoId,
-        preservar: linhasPreservadas,
-        regras: regrasDaEmpresa(sessao.empresa),
-      });
+      let id;
+      try {
+        id = await salvarAgendamento({
+          empresaId: usuario.empresaId,
+          agendamentoId,
+          existentes: linhasExistentes,
+          cliente: estado.cliente,
+          endereco: enderecoDoCliente(estado.cliente, limpos.enderecoId),
+          tecnicos: estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]).filter(Boolean),
+          data: limpos.data,
+          hora: limpos.hora,
+          observacao: limpos.descricao,
+          linhas,
+          origemRetornoId,
+          preservar: linhasPreservadas,
+          regras: regrasDaEmpresa(sessao.empresa),
+        });
+      } catch (erro) {
+        // Um aparelho só tem um agendamento aberto: oferece abrir o que já existe (para acrescentar o serviço lá).
+        if (erro?.codigo === 'aparelho-ocupado' && erro.servicoId) {
+          const escolha = await escolher({ titulo: 'Este aparelho já tem agendamento', mensagem: erro.message, opcoes: [{ id: 'abrir', rotulo: 'Abrir agendamento' }], cancelar: 'Voltar' });
+          if (escolha === 'abrir' && ctx.ativo()) ctx.ir(`/servico/${encodeURIComponent(erro.servicoId)}`);
+          return;
+        }
+        throw erro;
+      }
       descartarRascunho();
       // A linha aberta na URL pode ter sido removida da edição: vai para uma linha que existe.
       const restantes = await listarLinhasDoAgendamento(usuario.empresaId, { agendamentoId: id });

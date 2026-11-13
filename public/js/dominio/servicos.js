@@ -39,11 +39,12 @@ export function linhasEditaveis(linhas) {
   return agendadas.length > 0 ? agendadas : linhas.filter((l) => l.status === STATUS.CANCELADO);
 }
 
-/** O serviço está agendado e o horário já passou sem ser concluído? */
+/** O serviço está agendado e o horário já passou sem ser concluído (ou o técnico anterior atrasou e ninguém pôde assumir)? */
 export function estaAtrasado(servico, agora = new Date()) {
-  return servico.status === STATUS.AGENDADO
-    && servico.dataAgendada instanceof Date
-    && servico.dataAgendada.getTime() < agora.getTime();
+  if (servico.status !== STATUS.AGENDADO) return false;
+  // O técnico anterior passou do tempo e não havia outro técnico livre: o administrador precisa avisar o cliente.
+  if (servico.atrasoPorTecnico === true) return true;
+  return servico.dataAgendada instanceof Date && servico.dataAgendada.getTime() < agora.getTime();
 }
 
 /**

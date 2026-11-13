@@ -78,7 +78,7 @@ with sync_playwright() as p:
     ok(lotado, "sem técnico livre: o horário deixa de ser oferecido no seletor")
 
     # 2c) Agendar sem escolher dia e hora: mostra o erro no campo "Quando"
-    escolher_cliente("Maria Souza")
+    escolher_cliente("Ana Lima")
     ok("Escolher dia e horário" in pag.inner_text("#botao-quando"), "novo agendamento começa sem dia e hora (botão 'Escolher dia e horário')")
     pag.click("#botao-salvar"); pag.wait_for_timeout(700)
     ok("#/agendar" in pag.url and pag.locator(".aviso-rapido--erro").count() >= 1, "sem dia e hora: Agendar mostra o erro e não agenda")

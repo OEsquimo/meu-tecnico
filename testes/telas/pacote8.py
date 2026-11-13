@@ -26,7 +26,7 @@ with sync_playwright() as p:
     escolher_quando(pag, "2031-06-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     sid = pag.url.split("/servico/")[1]
-    informar(pag, servicos=("Limpeza", "Manutenção"))
+    informar(pag, servicos=("Limpeza", "Manutenção"), aparelho="Sala")
 
     # ---- Aparelho no topo de "Concluir serviço" ----
     pag.locator("a:has-text('Concluir serviço')").first.click(); pag.wait_for_timeout(1000)
