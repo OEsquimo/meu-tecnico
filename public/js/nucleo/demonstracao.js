@@ -115,6 +115,8 @@ export async function semearDemonstracao(memoria) {
   ap('a-maria-quarto', 'c-maria', 'e-maria', 'split', 9000, 'Quarto');
   ap('a-joao-1', 'c-joao', 'e-joao', 'cassete', 36000, 'Loja');
   ap('a-ana-1', 'c-ana', 'e-ana', 'janela', 7000, '');
+  ap('a-ana-2', 'c-ana', 'e-ana', 'split', 12000, 'Sala');
+  ap('a-ana-3', 'c-ana', 'e-ana', 'split', 9000, 'Quarto');
   ap('a-carlos-1', 'c-carlos', 'e-carlos', 'piso-teto', 24000, 'Escritório');
 
   // ---- Serviços ----

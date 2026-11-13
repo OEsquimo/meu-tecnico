@@ -144,6 +144,8 @@ export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = f
               <div class="expande">
                 <div class="visita-linha__nome">${l.tipoServicoNome}</div>
                 ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
+                ${l.status === 'agendado' && l.reatribuidoDeNome && selo(`Passou de ${l.reatribuidoDeNome.split(' ')[0]} (atraso)`)}
+                ${l.status === 'agendado' && l.atrasoPorTecnico === true && html`<div class="item-lista__sub" data-aviso="atraso-tecnico">${(l.atrasoTecnicoNome || 'O técnico').split(' ')[0]} ainda está em outro serviço. Avise o cliente do atraso.</div>`}
                 ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
               </div>
               ${acoes && (precisaInformarAparelhoEServico(l)

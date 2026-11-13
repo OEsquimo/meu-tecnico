@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { combinarDataHora, paraISO, diasNoMes } from './datas.js';
-import { tecnicosLivres } from './agenda.js';
+import { tecnicosLivres, fimDoServico } from './agenda.js';
 import { expedienteDoDia, horariosDoDia } from './expediente.js';
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { STATUS, tecnicosDoServico } from './servicos.js';
@@ -97,6 +97,51 @@ export function pontosDoMes({ expediente, ano, mes, duracaoMinima, tecnicos = []
     if (contaveis.length > 0) {
       for (const iso of diasLotados({ expediente, ano, mes, duracaoMinima, tecnicos: contaveis, agendados, ignorarAgendamento, regras, agora })) pontos.set(iso, 'vermelho');
     }
+  }
+  return pontos;
+}
+
+/**
+ * Entre os técnicos livres, o que tem MENOS serviço no dia (minutos de serviço agendados, contando uma vez por visita);
+ * empate: menos visitas; empate: ordem alfabética. É o técnico que já vem marcado ao escolher o horário.
+ * Devolve o técnico ({uid, nome}) ou null.
+ */
+export function escolherTecnicoEquilibrado({ livres, agendados = [], iso }) {
+  if (!livres || livres.length === 0) return null;
+  const carga = (uid) => {
+    const visitas = new Map();
+    for (const s of agendados) {
+      if (s.status !== STATUS.AGENDADO || !(s.dataAgendada instanceof Date) || paraISO(s.dataAgendada) !== iso) continue;
+      if (!tecnicosDoServico(s).includes(uid)) continue;
+      const chave = s.agendamentoId || s.id;
+      const minutos = (fimDoServico(s, uid).getTime() - s.dataAgendada.getTime()) / 60000;
+      visitas.set(chave, Math.max(visitas.get(chave) || 0, minutos));
+    }
+    return { minutos: [...visitas.values()].reduce((t, m) => t + m, 0), visitas: visitas.size };
+  };
+  return [...livres]
+    .map((t) => ({ t, ...carga(t.uid) }))
+    .sort((a, b) => a.minutos - b.minutos || a.visitas - b.visitas || String(a.t.nome).localeCompare(String(b.t.nome), 'pt-BR'))[0].t;
+}
+
+/**
+ * Pontos do HISTÓRICO (dias que já passaram) num mês, para a Agenda:
+ *   verde   = teve serviço concluído naquele dia;
+ *   amarelo = teve serviço atrasado (agendado que não foi concluído) ou cancelado.
+ * Um dia pode ter os dois. Hoje e os dias de frente não entram (lá valem o azul e o vermelho).
+ * `servicos`: serviços de QUALQUER status do mês.
+ * @returns {Map<string, Set<'verde'|'amarelo'>>}
+ */
+export function pontosDoHistorico({ servicos = [], ano, mes, hoje }) {
+  const pontos = new Map();
+  const prefixo = `${ano}-${String(mes + 1).padStart(2, '0')}-`;
+  for (const s of servicos) {
+    if (!(s.dataAgendada instanceof Date)) continue;
+    const iso = paraISO(s.dataAgendada);
+    if (!iso.startsWith(prefixo) || iso >= hoje) continue;
+    const cor = s.status === STATUS.CONCLUIDO ? 'verde' : 'amarelo'; // agendado no passado = atrasado; cancelado = amarelo
+    if (!pontos.has(iso)) pontos.set(iso, new Set());
+    pontos.get(iso).add(cor);
   }
   return pontos;
 }

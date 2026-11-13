@@ -25,7 +25,7 @@ with sync_playwright() as p:
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
     escolher_quando(pag, "2031-05-10", "09:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
-    informar(pag, servicos=("Limpeza", "Manutenção"))
+    informar(pag, servicos=("Limpeza", "Manutenção"), aparelho="Sala")
     ok(pag.locator("a:has-text('Concluir serviço')").count() == 2, "visita com 2 serviços, cada um com Concluir")
 
     def concluir_primeiro():

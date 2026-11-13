@@ -94,7 +94,8 @@ with sync_playwright() as p:
       const { CONTAS_DEMO } = await import(o + 'nucleo/demonstracao.js');
       const empresaId = sessao.vinculo.empresaId;
       const cliente = (await C.listarClientes(empresaId)).find((c) => c.id === 'c-ana');
-      const aparelho = (await A.listarAparelhosDoCliente(empresaId, 'c-ana'))[0];
+      const aparelho = (await A.listarAparelhosDoCliente(empresaId, 'c-ana')).find((a) => a.id === 'a-ana-2');
+      const aparelho3 = (await A.listarAparelhosDoCliente(empresaId, 'c-ana')).find((a) => a.id === 'a-ana-3');
       const tipo = sessao.tipos.find((t) => t.nome === 'Limpeza');
       const outroTipo = sessao.tipos.find((t) => t.nome === 'Carga de gás');
       const rafael = { uid: CONTAS_DEMO.tecnico.uid, nome: 'Rafael Costa' };
@@ -113,15 +114,15 @@ with sync_playwright() as p:
       await tenta('vizinho', () => S.salvarAgendamento({ ...base2, hora: '12:00', cliente: maria, endereco: null, tecnicos: [rafael], linhas: [] }));
       const linhas = (await S.listarAgendados({ empresaId, de: new Date(2031, 9, 15), ate: new Date(2031, 9, 16) })).filter((l) => l.clienteId === 'c-ana');
       const tipoLongo = { ...tipo, duracaoMin: 180 };
-      await tenta('informarOcupado', () => S.informarServicoNaVisita({ empresaId, linhasDaVisita: linhas, aparelho, tipo: tipoLongo }));
+      await tenta('informarOcupado', () => S.informarServicoNaVisita({ empresaId, linhasDaVisita: linhas, aparelho: aparelho3, tipo: tipoLongo }));
       const tipoCurto = { ...tipo, duracaoMin: 30 };
-      await tenta('informarCabe', () => S.informarServicoNaVisita({ empresaId, linhasDaVisita: linhas, aparelho, tipo: tipoCurto }));
+      await tenta('informarCabe', () => S.informarServicoNaVisita({ empresaId, linhasDaVisita: linhas, aparelho: aparelho3, tipo: tipoCurto }));
       return saida;
     }""")
     ok(r["primeiro"] == "ok", f"agendamento novo é gravado ({r['primeiro']})")
-    ok(r["repetido"] == "agendamento-duplicado", f"mesmo cliente + aparelho + serviço + horário é barrado ({r['repetido']})")
-    ok(r["outroServico"] == "ok", f"outro serviço no mesmo aparelho e horário é permitido ({r['outroServico']})")
-    ok(r["outroHorario"] == "ok", f"mesmo serviço em outro horário é permitido ({r['outroHorario']})")
+    ok(r["repetido"] == "aparelho-ocupado", f"aparelho com agendamento aberto não ganha outro ({r['repetido']})")
+    ok(r["outroServico"] == "aparelho-ocupado", f"outro serviço no mesmo aparelho também é barrado ({r['outroServico']})")
+    ok(r["outroHorario"] == "aparelho-ocupado", f"outro horário no mesmo aparelho também é barrado ({r['outroHorario']})")
     ok(r["informarOcupado"] == "tecnico-ocupado", f"informar serviço longo com o técnico ocupado depois é barrado ({r['informarOcupado']})")
     ok(r["informarCabe"] == "ok", f"informar serviço curto que cabe é permitido ({r['informarCabe']})")
 

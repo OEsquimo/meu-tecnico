@@ -35,6 +35,8 @@ const instalacao = TIPOS[2]; // 180 min
 const cliente = { id: 'c1', nome: 'Cliente Teste', whatsapp: '5511999999999' };
 const ap1 = { id: 'a1', tipo: 'split', btus: 12000, nome: 'Sala' };
 const ap2 = { id: 'a2', tipo: 'janela', btus: 9000, nome: 'Quarto' };
+const ap3 = { id: 'a3', tipo: 'split', btus: 18000, nome: 'Escritório' };
+const ap4 = { id: 'a4', tipo: 'split', btus: 24000, nome: 'Garagem' };
 
 async function novoBanco() {
   const memoria = criarAdaptadorMemoria();
@@ -146,8 +148,8 @@ test('mesmo técnico em vários serviços da visita é permitido; técnico ocupa
   ] })); // Ana 09:00–11:00
   await assert.rejects(() => salvarAgendamento(base({ hora: '10:00', linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] })), /já tem outro serviço/);
   // Bruno está livre no mesmo horário; e Ana fica livre às 11:00.
-  await salvarAgendamento(base({ hora: '09:30', linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_B }] }));
-  await salvarAgendamento(base({ hora: '11:00', linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  await salvarAgendamento(base({ hora: '09:30', linhas: [{ aparelho: ap3, tipo: limpeza, tecnico: TEC_B }] }));
+  await salvarAgendamento(base({ hora: '11:00', linhas: [{ aparelho: ap4, tipo: limpeza, tecnico: TEC_A }] }));
 });
 
 test('soma das durações do mesmo técnico na visita também conta para o conflito', async () => {
@@ -210,7 +212,7 @@ test('agendamento cancelado é reagendado ao salvar (vira Reagendado); o técnic
   assert.ok(canceladas.every((l) => l.status === 'cancelado'));
   assert.equal(seloDoServico(canceladas[0]).texto, 'Cancelado');
   // Cancelado libera o técnico: outro agendamento no mesmo horário é aceito.
-  const outro = await salvarAgendamento(base({ linhas: [{ aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] }));
+  const outro = await salvarAgendamento(base({ linhas: [{ aparelho: ap2, tipo: limpeza, tecnico: TEC_A }] }));
   // Remarcar para o mesmo horário agora falha (o técnico está ocupado)...
   await assert.rejects(() => salvarAgendamento(base({ agendamentoId: id, existentes: canceladas, linhas: [{ id: canceladas[0].id, aparelho: ap1, tipo: limpeza, tecnico: TEC_A }] })), /já tem outro serviço/);
   // ...e em outro horário funciona: a linha volta a "agendado" com a nova hora, sem duplicar.

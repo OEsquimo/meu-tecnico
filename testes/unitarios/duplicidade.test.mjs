@@ -1,9 +1,9 @@
 // =============================================================================
-// TESTES: cliente duplicado e agendamento duplicado
+// TESTES: cliente duplicado e regra "um aparelho, um agendamento aberto"
 // =============================================================================
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { acharClientesParecidos, enderecosIguais, normalizarTextoDeEndereco, acharAgendamentoDuplicado, textoDoAvisoDeCliente } from '../../public/js/dominio/duplicidade.js';
+import { acharClientesParecidos, enderecosIguais, normalizarTextoDeEndereco, acharAparelhoComAgendamentoAberto, mensagemAparelhoOcupado, textoDoAvisoDeCliente } from '../../public/js/dominio/duplicidade.js';
 
 const maria = { id: 'c1', nome: 'Maria', whatsapp: '5511912345678', enderecos: [{ rua: 'Rua das Flores', numero: '120', cidade: 'São Paulo', complemento: '' }] };
 const joao = { id: 'c2', nome: 'João', whatsapp: '5521988887777', enderecos: [{ rua: 'Avenida Brasil', numero: '50', cidade: 'Rio de Janeiro' }] };
@@ -38,24 +38,22 @@ test('cliente: ignora o próprio e os arquivados; WhatsApp inválido não casa',
 });
 
 const quando = new Date(2031, 3, 14, 9, 0);
-const existente = { id: 's1', agendamentoId: 'a1', status: 'agendado', clienteId: 'c1', aparelhoId: 'ap1', tipoServicoId: 't1', dataAgendada: quando };
+const aberta = { id: 's1', agendamentoId: 'a1', status: 'agendado', clienteId: 'c1', aparelhoId: 'ap1', tipoServicoId: 't1', dataAgendada: quando };
 
-test('agendamento: mesmo cliente + aparelho + serviço + horário é duplicado', () => {
-  const pares = [{ aparelhoId: 'ap1', tipoId: 't1' }];
-  assert.equal(acharAgendamentoDuplicado({ clienteId: 'c1', inicio: new Date(quando), pares, agendados: [existente] }).id, 's1');
+test('aparelho: com agendamento aberto não aceita outro (nem de outro serviço, nem em outro dia)', () => {
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap1'], abertas: [aberta] }).id, 's1');
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap9', 'ap1'], abertas: [{ ...aberta, tipoServicoId: 't2', dataAgendada: new Date(2031, 5, 1, 15, 0) }] }).id, 's1');
 });
 
-test('agendamento: serviço, aparelho, cliente, horário ou status diferentes não são duplicados', () => {
-  const base = { clienteId: 'c1', inicio: new Date(quando), pares: [{ aparelhoId: 'ap1', tipoId: 't1' }], agendados: [existente] };
-  assert.equal(acharAgendamentoDuplicado({ ...base, pares: [{ aparelhoId: 'ap1', tipoId: 't2' }] }), null);
-  assert.equal(acharAgendamentoDuplicado({ ...base, pares: [{ aparelhoId: 'ap2', tipoId: 't1' }] }), null);
-  assert.equal(acharAgendamentoDuplicado({ ...base, clienteId: 'c2' }), null);
-  assert.equal(acharAgendamentoDuplicado({ ...base, inicio: new Date(2031, 3, 14, 10, 0) }), null);
-  assert.equal(acharAgendamentoDuplicado({ ...base, agendados: [{ ...existente, status: 'cancelado' }] }), null);
-  assert.equal(acharAgendamentoDuplicado({ ...base, pares: [{ aparelhoId: null, tipoId: '' }] }), null, 'linha "a definir" não conta');
+test('aparelho: outro aparelho, linha sem aparelho e serviço concluído ou cancelado não bloqueiam', () => {
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap2'], abertas: [aberta] }), null);
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: [null, ''], abertas: [aberta] }), null);
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap1'], abertas: [{ ...aberta, status: 'concluido' }] }), null);
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap1'], abertas: [{ ...aberta, status: 'cancelado' }] }), null);
 });
 
-test('agendamento: editar não conflita com ele mesmo', () => {
-  const pares = [{ aparelhoId: 'ap1', tipoId: 't1' }];
-  assert.equal(acharAgendamentoDuplicado({ clienteId: 'c1', inicio: new Date(quando), pares, agendados: [existente], ignorarAgendamento: 'a1' }), null);
+test('aparelho: editar o próprio agendamento não conflita com ele mesmo; a mensagem diz o que fazer', () => {
+  assert.equal(acharAparelhoComAgendamentoAberto({ aparelhoIds: ['ap1'], abertas: [aberta], ignorarAgendamento: 'a1' }), null);
+  assert.match(mensagemAparelhoOcupado(aberta), /14\/04\/2031 às 09:00/);
+  assert.match(mensagemAparelhoOcupado(aberta), /edite o agendamento que já existe/);
 });

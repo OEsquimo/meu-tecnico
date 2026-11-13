@@ -567,3 +567,32 @@
   margin-left: 6px;
   color: var(--cor-aviso);
 }
+
+/* ---------- Tela flutuante de horários e técnicos (sobe de baixo; o calendário fica atrás, na tela Agendar) ---------- */
+.janela--folha {
+  width: 100vw;
+  max-width: 100vw;
+  max-height: 82dvh;
+  margin: auto 0 0;
+  padding: 0;
+  border-radius: var(--raio-grande) var(--raio-grande) 0 0;
+}
+.janela--folha[open] {
+  display: flex;
+  flex-direction: column;
+}
+.janela--folha .seletor__titulo {
+  font-size: 18px;
+}
+
+/* Calendário na própria tela Agendar (card "Quando"). */
+.quando-calendario {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quando-calendario__escolhido {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cor-texto-suave);
+}

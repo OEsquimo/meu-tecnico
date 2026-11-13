@@ -4,7 +4,7 @@ Tela "Horário de funcionamento" (almoço + limite), seletor sem horários de al
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote11.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, _abrir_no_mes, SELETOR
+from _quando import escolher_quando, _abrir_dia, SELETOR
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -19,8 +19,7 @@ with sync_playwright() as p:
     def ir(h): pag.evaluate(f"location.hash='#{h}'"); pag.wait_for_timeout(1000)
     def texto(): return pag.inner_text("#conteudo")
     def horas_do_dia(data):
-        _abrir_no_mes(pag, data)
-        pag.click(f"{SELETOR} [data-acao=seletor-dia][data-iso='{data}']")
+        _abrir_dia(pag, data)
         horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]").evaluate_all("els => els.map(e => e.dataset.hora)")
         pag.click(f"{SELETOR} [data-acao=seletor-fechar]"); pag.wait_for_timeout(400)
         return horas

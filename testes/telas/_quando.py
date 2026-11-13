@@ -1,29 +1,37 @@
 """Ajuda dos testes de tela: escolher dia, hora e técnicos no seletor de tela cheia (modo demonstração)."""
 
-SELETOR = "dialog.seletor"
+SELETOR = "dialog.seletor"          # tela flutuante com horários e técnicos
+CALENDARIO = "#area-quando"          # calendário que fica na própria tela Agendar
 
 
 def _abrir_no_mes(pag, data):
-    """Abre o seletor e navega até o mês de `data` (AAAA-MM-DD)."""
-    pag.click("[data-acao=abrir-seletor]")
-    pag.wait_for_selector(f"{SELETOR}[open]")
+    """Vai até o mês de `data` (AAAA-MM-DD) no calendário da tela Agendar e toca no dia: abre a tela flutuante."""
+    pag.wait_for_selector(f"{CALENDARIO} .seletor__mes")
     alvo = data[:7]
     for _ in range(240):
-        atual = pag.locator(f"{SELETOR} .seletor__mes").get_attribute("data-ano-mes")
+        pag.wait_for_selector(f"{CALENDARIO} .seletor__mes")
+        atual = pag.locator(f"{CALENDARIO} .seletor__mes").get_attribute("data-ano-mes")
         if atual == alvo:
             break
-        # meses para trás ou para frente, conforme o caso
         passo = "1" if atual < alvo else "-1"
-        pag.click(f"{SELETOR} [data-acao=seletor-mes][data-passo='{passo}']")
-        pag.wait_for_timeout(60)
-    pag.wait_for_selector(f"{SELETOR} [data-iso='{data}']:not([disabled]), {SELETOR} .calendario__dia--sem-vaga", timeout=8000)
+        pag.click(f"{CALENDARIO} [data-acao=quando-mes][data-passo='{passo}']")
+        pag.wait_for_timeout(80)
+    pag.wait_for_selector(f"{CALENDARIO} [data-iso='{data}']:not([disabled]), {CALENDARIO} .calendario__dia--sem-vaga", timeout=8000)
+    pag.wait_for_function("!document.querySelector('#area-quando')?.innerText.includes('Carregando os horários')", timeout=8000)
     pag.wait_for_timeout(200)
 
 
-def escolher_quando(pag, data, hora, tecnico=None, confirmar=True):
-    """Escolhe dia, hora e (opcional) um técnico. tecnico=None mantém o que o seletor já marcou."""
+def _abrir_dia(pag, data):
     _abrir_no_mes(pag, data)
-    pag.click(f"{SELETOR} [data-acao=seletor-dia][data-iso='{data}']")
+    pag.click(f"{CALENDARIO} [data-acao=quando-dia][data-iso='{data}']")
+    pag.wait_for_selector(f"{SELETOR}[open]")
+    pag.wait_for_function("!document.querySelector('dialog.seletor')?.innerText.includes('Carregando')", timeout=8000)
+    pag.wait_for_timeout(150)
+
+
+def escolher_quando(pag, data, hora, tecnico=None, confirmar=True):
+    """Escolhe dia, hora e (opcional) um técnico. tecnico=None mantém o que a tela já marcou."""
+    _abrir_dia(pag, data)
     pag.click(f"{SELETOR} [data-acao=seletor-hora][data-hora='{hora}']")
     if tecnico:
         for i in range(pag.locator(f"{SELETOR} .tecnico-opcao").count()):
@@ -39,9 +47,8 @@ def escolher_quando(pag, data, hora, tecnico=None, confirmar=True):
 
 
 def tecnicos_no_horario(pag, data, hora):
-    """Abre o seletor, escolhe dia e hora e devolve os nomes dos técnicos livres. Fecha sem confirmar."""
-    _abrir_no_mes(pag, data)
-    pag.click(f"{SELETOR} [data-acao=seletor-dia][data-iso='{data}']")
+    """Toca no dia, escolhe a hora e devolve os nomes dos técnicos livres. Fecha sem confirmar."""
+    _abrir_dia(pag, data)
     if pag.locator(f"{SELETOR} [data-acao=seletor-hora][data-hora='{hora}']").count() == 0:
         nomes = None
     else:
@@ -52,10 +59,11 @@ def tecnicos_no_horario(pag, data, hora):
     return nomes
 
 
-def informar(pag, servicos=("Limpeza",), primeiro="button:has-text('Informar')"):
-    """Informa aparelho (o 1º da lista) e serviços pelos diálogos simples da visita."""
+def informar(pag, servicos=("Limpeza",), primeiro="button:has-text('Informar')", aparelho=None):
+    """Informa aparelho (o 1º da lista, ou o que tem o texto `aparelho`) e serviços pelos diálogos simples da visita.
+    Atenção: um aparelho com agendamento aberto não pode ser escolhido (regra "um aparelho, um agendamento aberto")."""
     for i, nome in enumerate(servicos):
         alvo = primeiro if i == 0 else "button:has-text('Adicionar aparelhos e serviços')"
         pag.locator(alvo).first.click(); pag.wait_for_timeout(400)
-        pag.locator("dialog [data-escolha]").first.click(); pag.wait_for_timeout(400)
+        (pag.locator("dialog [data-escolha]", has_text=aparelho) if aparelho else pag.locator("dialog [data-escolha]")).first.click(); pag.wait_for_timeout(400)
         pag.locator("dialog [data-escolha]", has_text=nome).first.click(); pag.wait_for_timeout(1200)

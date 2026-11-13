@@ -12,11 +12,11 @@
 
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { tecnicoEstaLivre } from '../dominio/agenda.js';
+import { escolherTecnicoEquilibrado } from '../dominio/disponibilidade.js';
 import { regrasDaEmpresa } from '../dominio/expediente.js';
 import { sessao } from '../nucleo/sessao.js';
 import { combinarDataHora, ehISOValido, ehHoraValida } from '../dominio/datas.js';
 import { tecnicosDoServico, linhasEditaveis } from '../dominio/servicos.js';
-import { acharAgendamentoDuplicado, MENSAGEM_AGENDAMENTO_DUPLICADO } from '../dominio/duplicidade.js';
 
 let contador = 0;
 /** Chave só da tela (para achar o cartão). Não vai para o banco. */
@@ -140,7 +140,8 @@ export function tecnicosSugeridos({ estado, servico, tecnicos, tiposPorId, agend
   const livres = tecnicosLivresParaServico({ estado, servico, tecnicos, tiposPorId, agendados, agendamentoId });
   const doAgendamento = estado.tecnicoUids.filter((uid) => livres.some((t) => t.uid === uid));
   if (doAgendamento.length > 0) return doAgendamento;
-  return livres[0] ? [livres[0].uid] : [];
+  const sugerido = escolherTecnicoEquilibrado({ livres, agendados, iso: estado.data });
+  return sugerido ? [sugerido.uid] : [];
 }
 
 /**
@@ -167,11 +168,6 @@ export function problemasDoAgendamento(estado, { tecnicos, tiposPorId, agendados
       if (tipos.has(s.tipoId)) problemas.push({ texto: 'O mesmo serviço está duas vezes no mesmo aparelho. Remova um deles.', alvo: { servico: s.chave } });
       tipos.add(s.tipoId);
     }
-  }
-  // O mesmo cliente + aparelho + serviço já agendado nesse dia e hora (em outra visita).
-  const pares = estado.grupos.flatMap((g) => g.servicos.map((s) => ({ aparelhoId: g.aparelhoId, tipoId: s.tipoId })));
-  if (acharAgendamentoDuplicado({ clienteId: estado.cliente?.id, inicio: inicioDoEstado(estado), pares, agendados, ignorarAgendamento: agendamentoId })) {
-    problemas.push({ texto: `⚠️ ${MENSAGEM_AGENDAMENTO_DUPLICADO}`, alvo: { campo: 'hora' } });
   }
   for (const g of estado.grupos.filter((x) => x.aparelhoId === '' && x.servicos.length === 0)) {
     problemas.push({ texto: 'Escolha o aparelho.', alvo: { grupo: g.chave } });

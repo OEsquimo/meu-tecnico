@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -59,6 +59,7 @@ export default async function montar(ctx) {
       }
       // O administrador abriu: o aviso de "incluído em campo" some do Início (sem atrapalhar a tela se falhar).
       if (usuario.admin) marcarIncluidosComoVistos(usuario.empresaId, linhas).catch(() => {});
+      if (usuario.admin) marcarReatribuicoesComoVistas(usuario.empresaId, linhas).catch(() => {});
     } catch (erro) {
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregar, cabecalho({ titulo: 'Serviço', voltarPara }));
     }
@@ -172,6 +173,7 @@ export default async function montar(ctx) {
             ['Telefone', s.clienteWhatsapp ? formatarTelefone(s.clienteWhatsapp) : ''],
             ['Local', s.local],
             ['Técnicos', tecnicos],
+            ...(abertas[0]?.reatribuidoDeNome ? [['Passou de', `${abertas[0].reatribuidoDeNome} (atraso)`]] : []),
             ['Observação', observacao],
             ...(pendentes.length > 0 && temConcluida ? [['Situação da visita', resumo]] : []),
             ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),

@@ -20,7 +20,8 @@ import { ErroApp } from '../nucleo/erros.js';
 import { PAGINA_HISTORICO, DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
 import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, ehLinhaSemServico, chaveDoAgendamento, duracaoDoServico, camposDosTecnicos, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { motivoDeIndisponibilidade } from '../dominio/agenda.js';
-import { acharAgendamentoDuplicado, MENSAGEM_AGENDAMENTO_DUPLICADO } from '../dominio/duplicidade.js';
+import { acharAparelhoComAgendamentoAberto, mensagemAparelhoOcupado } from '../dominio/duplicidade.js';
+import { planejarAjustesDeAtraso, trocarTecnico } from '../dominio/atraso.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
@@ -164,12 +165,20 @@ export async function verificarDisponibilidade({ empresaId, inicio, linhas, igno
   }
 }
 
-/** Barra o mesmo cliente + aparelho + serviço no mesmo dia e hora (toque duplo, esquecimento). Lança ErroApp 'agendamento-duplicado'. */
-export async function verificarAgendamentoDuplicado({ empresaId, clienteId, inicio, pares, ignorarAgendamento = null }) {
-  if (!pares.some((p) => p.aparelhoId && p.tipoId)) return;
-  const agendados = await listarAgendados({ empresaId, de: new Date(inicio.getTime() - 60000), ate: new Date(inicio.getTime() + 60000) });
-  if (acharAgendamentoDuplicado({ clienteId, inicio, pares, agendados, ignorarAgendamento })) {
-    throw new ErroApp(MENSAGEM_AGENDAMENTO_DUPLICADO, 'agendamento-duplicado');
+/**
+ * Um aparelho só tem UM agendamento aberto: enquanto o serviço dele não for concluído (ou cancelado), não se cria
+ * outro. Lança ErroApp 'aparelho-ocupado' (com `servicoId` do agendamento existente, para a tela oferecer "Abrir").
+ */
+export async function verificarAparelhosLivres({ empresaId, aparelhoIds, ignorarAgendamento = null }) {
+  const ids = [...new Set((aparelhoIds || []).filter(Boolean))];
+  for (const aparelhoId of ids) {
+    const abertas = await listar(caminho(empresaId), { onde: [['aparelhoId', '==', aparelhoId], ['status', '==', STATUS.AGENDADO]], limite: 20 });
+    const existente = acharAparelhoComAgendamentoAberto({ aparelhoIds: [aparelhoId], abertas, ignorarAgendamento });
+    if (existente) {
+      const erro = new ErroApp(mensagemAparelhoOcupado(existente), 'aparelho-ocupado');
+      erro.servicoId = existente.id;
+      throw erro;
+    }
   }
 }
 
@@ -223,10 +232,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   }
 
   await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null, regras });
-  await verificarAgendamentoDuplicado({
-    empresaId, clienteId: cliente?.id, inicio, ignorarAgendamento: editando ? (agendamentoId || id) : null,
-    pares: todas.map((l) => ({ aparelhoId: l.aparelho?.id, tipoId: l.tipo?.id })),
-  });
+  await verificarAparelhosLivres({ empresaId, aparelhoIds: todas.map((l) => l.aparelho?.id), ignorarAgendamento: editando ? (agendamentoId || id) : null });
   const minutos = minutosPorTecnico(todas);
 
   const operacoes = [];
@@ -243,6 +249,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
       obsAparelho: l.obsAparelho || '',
       obsServico: l.obsServico || '',
       descricao: '',
+      atrasoPorTecnico: false, // salvar (editar ou reagendar) tira o aviso de atraso do técnico
       atualizadoEm: AGORA,
     };
     if (l.id && abertas.some((a) => a.id === l.id)) {
@@ -461,7 +468,7 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   // A linha "a definir" que recebe o serviço: a do mesmo aparelho, senão a sem aparelho, senão qualquer uma.
   const semServico = abertas.filter(ehLinhaSemServico);
   const alvo = semServico.find((l) => l.aparelhoId === aparelho.id) || semServico.find((l) => !l.aparelhoId) || semServico[0];
-  if (!tecnico) await conferirDuplicidadeAoInformar({ empresaId, abertas, aparelho, tipo });
+  if (!tecnico) await conferirAparelhoAoInformar({ empresaId, abertas, aparelho });
   if (!alvo) {
     const referencia = abertas.find((l) => tecnico && tecnicosDoServico(l).includes(tecnico.uid)) || abertas[0];
     return adicionarServicoNaVisita({ empresaId, base: referencia, aparelho, tipo, tecnico, linhasDaVisita });
@@ -493,14 +500,11 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   return alvo.id;
 }
 
-/** Ao informar o serviço depois: o mesmo cliente + aparelho + serviço não pode já estar agendado nesse horário em outra visita. */
-async function conferirDuplicidadeAoInformar({ empresaId, abertas, aparelho, tipo }) {
+/** Ao informar o aparelho depois: ele não pode já ter outro agendamento aberto. */
+async function conferirAparelhoAoInformar({ empresaId, abertas, aparelho }) {
   const ref = abertas[0];
-  if (!(ref?.dataAgendada instanceof Date)) return;
-  await verificarAgendamentoDuplicado({
-    empresaId, clienteId: ref.clienteId, inicio: ref.dataAgendada, ignorarAgendamento: chaveDoAgendamento(ref),
-    pares: [{ aparelhoId: aparelho.id, tipoId: tipo.id }],
-  });
+  if (!ref) return;
+  await verificarAparelhosLivres({ empresaId, aparelhoIds: [aparelho.id], ignorarAgendamento: chaveDoAgendamento(ref) });
 }
 
 /** Ao informar o serviço depois: cada técnico da visita, com o tempo novo, continua livre de OUTROS atendimentos? */
@@ -593,6 +597,71 @@ async function listarDoTecnico(empresaId, uid, onde, opcoes) {
     lista.sort((a, b) => (valor(a) > valor(b) ? 1 : valor(a) < valor(b) ? -1 : 0) * (sentido === 'desc' ? -1 : 1));
   }
   return opcoes.limite ? lista.slice(0, opcoes.limite) : lista;
+}
+
+/**
+ * Serviços concluídos e cancelados entre duas datas (para os pontos verde e amarelo do histórico na Agenda).
+ * O técnico passa tecnicoUid: só os dele.
+ */
+export async function listarConcluidosECancelados({ empresaId, de, ate, tecnicoUid = null }) {
+  const opcoes = { ordenarPor: [['dataAgendada', 'asc']], limite: 300 };
+  const doStatus = (status) => {
+    const onde = [['status', '==', status], ['dataAgendada', '>=', de], ['dataAgendada', '<', ate]];
+    return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
+  };
+  const [concluidos, cancelados] = await Promise.all([doStatus(STATUS.CONCLUIDO), doStatus(STATUS.CANCELADO)]);
+  return [...concluidos, ...cancelados];
+}
+
+// -----------------------------------------------------------------------------
+// ATRASO DO TÉCNICO (só administrador): passa o próximo agendamento para outro técnico ou o deixa Atrasado
+// -----------------------------------------------------------------------------
+
+/**
+ * Confere os agendamentos de HOJE. Se um técnico passou do tempo do serviço e o próximo dele começa logo, o próximo
+ * vai para outro técnico livre; sem ninguém livre, fica "Atrasado" (o administrador avisa o cliente).
+ * Devolve quantas linhas mudaram. Falha em silêncio (a tela não pode quebrar por isso): quem chama trata.
+ */
+export async function conferirAtrasosDoDia({ empresaId, tecnicos, regras = null, agora = new Date() }) {
+  const agendados = await listarAgendados({ empresaId, de: inicioDoDia(agora), ate: new Date(inicioDoDia(agora).getTime() + 24 * 3600000) });
+  const acoes = planejarAjustesDeAtraso({ agendados, tecnicos, regras, agora });
+  if (acoes.length === 0) return 0;
+  const operacoes = [];
+  let total = 0;
+  for (const a of acoes) {
+    for (const id of a.linhaIds) {
+      const linha = agendados.find((l) => l.id === id);
+      if (!linha) continue;
+      total += 1;
+      if (a.tipo === 'atrasar') {
+        operacoes.push(op.atualizar(`${caminho(empresaId)}/${id}`, { atrasoPorTecnico: true, atrasoTecnicoNome: a.tecnico.nome, atualizadoEm: AGORA }));
+      } else {
+        const nova = trocarTecnico(linha, a.de.uid, a.para);
+        operacoes.push(op.atualizar(`${caminho(empresaId)}/${id}`, {
+          ...camposDosTecnicos(tecnicosDoServico(nova).map((uid, i) => ({ uid, nome: nomesDosTecnicos(nova)[i] }))),
+          ocupacaoPorTecnico: nova.ocupacaoPorTecnico,
+          reatribuidoDeNome: a.de.nome, reatribuidoDeUid: a.de.uid, reatribuicaoVista: false, atualizadoEm: AGORA,
+        }));
+      }
+    }
+  }
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return total;
+}
+
+/** Serviços que passaram de um técnico para outro por atraso e que o administrador ainda não viu. */
+export function listarReatribuidosNaoVistos({ empresaId }) {
+  return listar(caminho(empresaId), { onde: [['reatribuicaoVista', '==', false], ['status', '==', STATUS.AGENDADO]], limite: 50 });
+}
+
+/** O administrador abriu o agendamento: as trocas por atraso passam a "vistas". */
+export async function marcarReatribuicoesComoVistas(empresaId, linhas) {
+  const novas = linhas.filter((l) => l.reatribuicaoVista === false);
+  if (novas.length === 0) return 0;
+  await gravar(novas.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, { reatribuicaoVista: true })));
+  invalidarCache(`${empresaId}:servicos`);
+  return novas.length;
 }
 
 /** Agendados que já passaram da data e ainda não foram concluídos. */

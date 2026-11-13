@@ -5,7 +5,7 @@ filtro por técnico; técnico comum só vê azul.
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote10.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, SELETOR, _abrir_no_mes
+from _quando import escolher_quando, SELETOR, CALENDARIO as CAL, _abrir_no_mes
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -31,8 +31,8 @@ with sync_playwright() as p:
     pag.click("#form-entrar [type=submit]"); pag.wait_for_selector(".menu-topo__item"); pag.wait_for_timeout(1000)
 
     # ---- Aviso neutro do técnico: antes de escolher dia e hora ----
-    novo_agendamento("Ana Lima")
-    pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Janela")
+    novo_agendamento("Maria Souza")
+    pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Quarto")
     pag.locator("[data-acao=adicionar-servico]").first.click(); pag.wait_for_timeout(300); dialogo("Limpeza")
     ok(pag.locator(".aviso-neutro").count() == 1 and "Escolha o dia e o horário" in pag.inner_text(".aviso-neutro"), "sem dia e hora: aviso neutro no cartão do serviço")
     ok("Nenhum técnico está livre" not in texto(), "sem dia e hora: não diz que não há técnico livre")
@@ -78,8 +78,7 @@ with sync_playwright() as p:
     def dia_lotado(iso):
         novo_agendamento("Maria Souza")
         _abrir_no_mes(pag, iso)
-        lotado = "calendario__dia--lotado" in (pag.locator(f"{SELETOR} [data-iso='{iso}']").get_attribute("class") or "")
-        pag.click(f"{SELETOR} [data-acao=seletor-fechar]"); pag.wait_for_selector(SELETOR, state="detached")
+        lotado = "calendario__dia--lotado" in (pag.locator(f"{CAL} [data-iso='{iso}']").get_attribute("class") or "")
         return lotado
     lotou = False
     for _ in range(8):
@@ -91,25 +90,25 @@ with sync_playwright() as p:
     ok(lotou, "depois de agendar todos os técnicos às 09:00, a segunda 09/06/2031 fica lotada")
     novo_agendamento("Maria Souza")
     _abrir_no_mes(pag, "2031-06-09")
-    dia = pag.locator(f"{SELETOR} [data-iso='2031-06-09']")
+    dia = pag.locator(f"{CAL} [data-iso='2031-06-09']")
     ok(dia.is_enabled() and dia.locator(".calendario__ponto").count() == 1, "dia lotado é tocável e tem o ponto")
     cor = dia.locator(".calendario__ponto").evaluate("e => getComputedStyle(e).backgroundColor")
     ok(cor == "rgb(201, 59, 59)", f"o ponto do dia lotado é vermelho ({cor})")
-    ok(pag.locator(f"{SELETOR} .calendario__ponto--lotado").count() == 1 and dia.locator(".calendario__ponto").count() == 1, "só o dia lotado tem ponto vermelho, e é um ponto só por dia")
-    d10 = pag.locator(f"{SELETOR} [data-iso='2031-06-10']")
+    ok(pag.locator(f"{CAL} .calendario__ponto--lotado").count() == 1 and dia.locator(".calendario__ponto").count() == 1, "só o dia lotado tem ponto vermelho, e é um ponto só por dia")
+    d10 = pag.locator(f"{CAL} [data-iso='2031-06-10']")
     ok(d10.is_enabled() and d10.locator(".calendario__ponto").count() == 1 and d10.locator(".calendario__ponto--lotado").count() == 0, "dia com agendamento que ainda comporta mais: ligado e com ponto azul (também no seletor)")
     cor10 = d10.locator(".calendario__ponto").evaluate("e => getComputedStyle(e).backgroundColor")
     ok(cor10 == "rgb(11, 110, 153)", f"o ponto do dia com agendamento é azul no seletor ({cor10})")
-    d12 = pag.locator(f"{SELETOR} [data-iso='2031-06-12']")
+    d12 = pag.locator(f"{CAL} [data-iso='2031-06-12']")
     ok(d12.is_enabled() and d12.locator(".calendario__ponto").count() == 0, "dia sem agendamento: ligado e sem ponto")
-    dom = pag.locator(f"{SELETOR} [data-iso='2031-06-08']")
+    dom = pag.locator(f"{CAL} [data-iso='2031-06-08']")
     ok(dom.is_disabled() and dom.locator(".calendario__ponto").count() == 0, "domingo (fechado): apagado e sem ponto")
     dia.click(); pag.wait_for_timeout(300)
     ok("Nenhum horário livre neste dia." in pag.inner_text(f"{SELETOR} [data-secao=horarios]"), "tocar no dia lotado mostra 'Nenhum horário livre neste dia.'")
     ok(pag.locator(f"{SELETOR} [data-acao=seletor-hora]").count() == 0 and pag.locator(f"{SELETOR} [data-acao=seletor-confirmar]").is_disabled(), "dia lotado não oferece horário e Confirmar fica desligado")
-    pag.click(f"{SELETOR} [data-acao=seletor-mes][data-passo='1']"); pag.wait_for_timeout(500)
-    ok(pag.locator(f"{SELETOR} .calendario__ponto").count() == 0, "mês seguinte sem agendamentos: nenhum ponto")
     pag.click(f"{SELETOR} [data-acao=seletor-fechar]"); pag.wait_for_selector(SELETOR, state="detached")
+    pag.click(f"{CAL} [data-acao=quando-mes][data-passo='1']"); pag.wait_for_timeout(800)
+    ok(pag.locator(f"{CAL} .calendario__ponto").count() == 0, "mês seguinte sem agendamentos: nenhum ponto")
 
     # ---- Agenda: o mesmo calendário, e o filtro por técnico ----
     novo_agendamento("Maria Souza")

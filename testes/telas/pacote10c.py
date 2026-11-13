@@ -5,7 +5,7 @@ texto da Equipe, Termos só na Minha conta, botões da Configurações e detalhe
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote10c.py
 """
 from playwright.sync_api import sync_playwright
-from _quando import escolher_quando, SELETOR, _abrir_no_mes
+from _quando import escolher_quando, SELETOR, _abrir_no_mes, _abrir_dia
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
 def ok(c, m):
@@ -59,8 +59,7 @@ with sync_playwright() as p:
     ok(pag.locator(".aviso-rapido--erro").count() >= 1 or pag.locator(".campo__erro").count() >= 1, "tocar em Agendar sem dia e hora mostra o erro")
 
     # ---- Seletor: hora extra com aviso discreto ----
-    _abrir_no_mes(pag, "2031-06-10")
-    pag.click(f"{SELETOR} [data-acao=seletor-dia][data-iso='2031-06-10']")
+    _abrir_dia(pag, "2031-06-10")
     horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]").all_inner_texts()
     ok(horas[-1] == "17:30", f"o último início é 30 min antes de fechar ({horas[-1]})")
     ok(pag.locator(f"{SELETOR} [data-aviso=hora-extra]").count() == 0, "sem horário escolhido: sem aviso de hora extra")

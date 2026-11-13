@@ -1086,3 +1086,27 @@ body.modo-demonstracao::before {
 
 /* Aviso discreto de hora extra no seletor de horário */
 .seletor__aviso-extra { margin: var(--espaco-2, 8px) 0 0; font-size: 0.8125rem; color: var(--cor-texto-suave, #5b6b7a); }
+
+/* Pontos do histórico na Agenda (dias que já passaram): verde = concluído, amarelo = atrasado ou cancelado. Podem ser dois. */
+.calendario__pontos {
+  position: absolute;
+  bottom: 5px;
+  display: flex;
+  gap: 3px;
+}
+.calendario__pontos .calendario__ponto {
+  position: static;
+}
+.calendario__ponto--verde {
+  background: var(--cor-sucesso, #1b8a52);
+}
+.calendario__ponto--amarelo {
+  background: var(--cor-aviso, #d9a000);
+}
+.calendario__dia--selecionado .calendario__ponto--verde,
+.calendario__dia--selecionado .calendario__ponto--amarelo {
+  background: #fff;
+}
+.calendario__dia--passado {
+  color: var(--cor-texto-suave);
+}
