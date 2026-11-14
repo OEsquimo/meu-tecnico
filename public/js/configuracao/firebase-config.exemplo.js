@@ -8,8 +8,8 @@
 //   3. Nunca coloque aqui senhas, chaves de "conta de serviço" ou tokens privados.
 //
 // Estes valores NÃO são segredos: o que protege os dados são as regras do
-// Firestore (firestore.rules) e o login. Mesmo assim, o "firebase-config.js"
-// real está no .gitignore para cada ambiente ter o seu.
+// Firestore (firestore.rules) e o login. Por isso o "firebase-config.js" real
+// pode ficar no repositório (o GitHub Pages precisa dele no ar).
 // =============================================================================
 
 export const firebaseConfig = {

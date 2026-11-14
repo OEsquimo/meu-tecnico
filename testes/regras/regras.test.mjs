@@ -501,3 +501,15 @@ test('pacote 9: só o administrador grava o horário de funcionamento (mapa com 
   await assertFails(updateDoc(doc(como(TEC), `empresas/${E}`), { expediente: semana }));
   await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}`), { expediente: semana }));
 });
+
+test('pacote 15: só o administrador grava atraso do técnico e a troca de técnico (campos com tipo certo)', async () => {
+  await semear();
+  const admin = como(ADMIN);
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: true, atrasoTecnicoNome: 'Rafael Costa', atualizadoEm: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: false, reatribuidoDeNome: 'Rafael Costa', reatribuidoDeUid: TEC, reatribuicaoVista: false, atualizadoEm: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}/servicos/s-tec`), { reatribuicaoVista: true }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: 'sim' }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}/servicos/s-tec`), { reatribuicaoVista: 'sim' }));
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: true }));
+  await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}/servicos/s-tec`), { reatribuicaoVista: true }));
+});

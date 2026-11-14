@@ -505,7 +505,7 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
@@ -514,6 +514,11 @@ service cloud.firestore {
         && (!('reagendado' in d) || d.reagendado is bool)
         && (!('adicionadoPeloTecnico' in d) || d.adicionadoPeloTecnico is bool)
         && (!('vistoPeloAdmin' in d) || d.vistoPeloAdmin is bool)
+        && (!('atrasoPorTecnico' in d) || d.atrasoPorTecnico is bool)
+        && (!('reatribuicaoVista' in d) || d.reatribuicaoVista is bool)
+        && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120))
+        && (!('reatribuidoDeNome' in d) || (d.reatribuidoDeNome is string && d.reatribuidoDeNome.size() <= 120))
+        && (!('reatribuidoDeUid' in d) || (d.reatribuidoDeUid is string && d.reatribuidoDeUid.size() <= 128))
         && (!('agendamentoId' in d) || (d.agendamentoId is string && d.agendamentoId.size() <= 40))
         && (!('obsAgendamento' in d) || (d.obsAgendamento is string && d.obsAgendamento.size() <= 2000))
         && (!('obsAparelho' in d) || (d.obsAparelho is string && d.obsAparelho.size() <= 500))
