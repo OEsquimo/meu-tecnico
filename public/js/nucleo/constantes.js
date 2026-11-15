@@ -39,6 +39,8 @@ export const VALIDADE_CACHE_MS = 2 * 60 * 1000;
 
 /** Serviços concluídos mostrados de cada vez (e a cada "Carregar mais"). */
 export const PAGINA_HISTORICO = 30;
+/** Página "Serviços": quantos serviços aparecem de cada vez (e a cada "Ver mais 30"). */
+export const PAGINA_SERVICOS = 30;
 /** Ao buscar/filtrar os concluídos, quantos são lidos do banco (os mais recentes do período). */
 export const LIMITE_BUSCA_HISTORICO = 1000;
 
