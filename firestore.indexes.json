@@ -159,6 +159,38 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pendente",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "reagendado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

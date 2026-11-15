@@ -56,6 +56,7 @@ export const ROTAS = [
   // ---- Só administrador ----
   { padrao: '/agendar', carregar: () => import('../telas/agendar.js'), acesso: 'admin', menu: 'agenda', titulo: 'Agendar serviço' },
   { padrao: '/servico/:id/editar', carregar: () => import('../telas/agendar.js'), acesso: 'admin', menu: 'agenda', titulo: 'Editar agendamento' },
+  { padrao: '/servicos', carregar: () => import('../telas/servicos-lista.js'), acesso: 'admin', menu: 'servicos', titulo: 'Serviços' },
   { padrao: '/reagendamentos', carregar: () => import('../telas/reagendamentos.js'), acesso: 'admin', menu: null, titulo: 'Aguardando reagendamento' },
   { padrao: '/retornos', carregar: () => import('../telas/retornos.js'), acesso: 'admin', menu: null, titulo: 'Retornos' },
   { padrao: '/financeiro', carregar: () => import('../telas/financeiro.js'), acesso: 'admin', menu: 'financeiro', titulo: 'Financeiro' },
@@ -172,8 +173,8 @@ export function itensDoMenu(s, tipo = 'principal') {
     return [
       { id: 'inicio', rotulo: 'Início', href: '#/' },
       { id: 'agenda', rotulo: 'Agenda', href: '#/agenda' },
+      { id: 'servicos', rotulo: 'Serviços', href: '#/servicos' },
       { id: 'clientes', rotulo: 'Clientes', href: '#/clientes' },
-      { id: 'historico', rotulo: 'Concluídos', href: '#/historico' },
       { id: 'financeiro', rotulo: 'Financeiro', href: '#/financeiro' },
     ];
   }

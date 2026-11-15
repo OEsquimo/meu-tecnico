@@ -24,6 +24,7 @@ import { acharAparelhoComAgendamentoAberto, mensagemAparelhoOcupado } from '../d
 import { planejarAjustesDeAtraso, trocarTecnico } from '../dominio/atraso.js';
 import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
+import { montarConsultaDaLista } from '../dominio/lista-servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { documentoDeValores, lerDocumentoDeValores } from '../dominio/valores.js';
 
@@ -688,6 +689,11 @@ export function listarHistorico({ empresaId, tecnicoUid = null, limite = PAGINA_
   if (ate) onde.push(['dataConclusao', '<', ate]);
   const opcoes = { ordenarPor: [['dataConclusao', 'desc']], limite };
   return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
+}
+
+/** Página "Serviços" (só administrador): serviços de uma situação, no máximo `limite` (a tela pede 30, 60, 90...). */
+export function listarServicosDaLista({ empresaId, status, ano, mes, limite }) {
+  return listar(caminho(empresaId), montarConsultaDaLista({ status, ano, mes, limite }));
 }
 
 /** Todos os serviços de um cliente (qualquer situação), mais recentes primeiro. Só administrador. */
