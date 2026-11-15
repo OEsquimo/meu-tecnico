@@ -191,6 +191,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataAgendada",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

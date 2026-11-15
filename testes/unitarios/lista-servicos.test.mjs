@@ -52,10 +52,13 @@ test('consulta de cada situação', () => {
 
 test('as consultas combinam com índices declarados', () => {
   const indices = JSON.parse(readFileSync(new URL('../../firestore.indexes.json', import.meta.url), 'utf8')).indexes;
-  const tem = (campos) => indices.some((i) => i.fields.length === campos.length && campos.every((c, k) => i.fields[k].fieldPath === c));
-  assert.ok(tem(['status', 'dataAgendada']), 'agendados/concluídos/cancelados');
-  assert.ok(tem(['status', 'pendente', 'dataAgendada']), 'pendentes');
-  assert.ok(tem(['reagendado', 'dataAgendada']), 'reagendados');
+  // campos = [[campo, ordem], ...]; a ordem importa (a lista usa desc, exceto Agendados).
+  const tem = (campos) => indices.some((i) => i.fields.length === campos.length
+    && campos.every(([c, o], k) => i.fields[k].fieldPath === c && i.fields[k].order === o));
+  assert.ok(tem([['status', 'ASCENDING'], ['dataAgendada', 'ASCENDING']]), 'agendados (mais próximo primeiro)');
+  assert.ok(tem([['status', 'ASCENDING'], ['dataAgendada', 'DESCENDING']]), 'concluídos e cancelados (mais recente primeiro)');
+  assert.ok(tem([['status', 'ASCENDING'], ['pendente', 'ASCENDING'], ['dataAgendada', 'DESCENDING']]), 'pendentes');
+  assert.ok(tem([['reagendado', 'ASCENDING'], ['dataAgendada', 'DESCENDING']]), 'reagendados');
 });
 
 test('atrasados vêm primeiro; depois hoje antes de amanhã', () => {
