@@ -616,6 +616,13 @@ export default async function montar(ctx) {
     if (quando) mostrar(quando, '');
     if (!resumo) return;
     const nomes = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]?.nome).filter(Boolean);
+    if (!estado.cliente && estado.hora) {
+      // Escolhendo o cliente: só uma linha de texto com o dia, a hora e o técnico (sem cartão nem botão).
+      // O cartão com "Alterar horário" aparece depois que o cliente é escolhido.
+      mostrar(resumo, html`
+        <p class="agendar-linha" id="linha-quando" data-campo="data">${formatarDiaExtenso(estado.data)} às ${estado.hora}${nomes.length > 0 ? ` · ${nomes.join(', ')}` : ''}</p>`);
+      return;
+    }
     mostrar(resumo, html`
       <div class="campo" data-campo="data">
         <span class="campo__rotulo">Quando</span>

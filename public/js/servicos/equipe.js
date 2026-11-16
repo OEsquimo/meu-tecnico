@@ -129,13 +129,16 @@ export async function removerFuncionario(empresaId, membro) {
 }
 
 /**
- * Salva os dados do próprio administrador: nome e WhatsApp (no vínculo dele) e se ele atende serviços
- * (na empresa: `adminAtende`, ligado quando não existe). Não mexe em serviços já agendados.
+ * Salva os dados do próprio administrador: nome e WhatsApp (no vínculo dele), se ele atende serviços
+ * (na empresa: `adminAtende`, ligado quando não existe) e o nome da empresa. Não mexe em serviços já agendados.
  */
-export async function salvarDadosDoAdministrador(empresaId, uid, { nome, telefone, atende }) {
+export async function salvarDadosDoAdministrador(empresaId, uid, { nome, telefone, atende, nomeEmpresa }) {
+  // O nome do administrador também fica na empresa (`nomeAdmin`, que o dono do app vê); o nome da empresa só muda se vier preenchido.
+  const naEmpresa = { adminAtende: atende === true, nomeAdmin: nome };
+  if (nomeEmpresa) naEmpresa.nome = nomeEmpresa;
   await gravar([
     op.atualizar(`usuarios/${uid}`, { nome, telefone }),
-    op.atualizar(`empresas/${empresaId}`, { adminAtende: atende === true }),
+    op.atualizar(`empresas/${empresaId}`, naEmpresa),
   ]);
   invalidarCache(`${empresaId}:equipe`);
 }

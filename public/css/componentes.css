@@ -1089,6 +1089,8 @@ body.modo-demonstracao::before {
 .agendar-resumo { display: flex; flex-direction: column; gap: var(--espaco-2, 8px); }
 .agendar-resumo__dia { font-weight: 700; font-size: 1.0625rem; }
 .agendar-resumo__sub { color: var(--cor-texto-suave, #5b6b7a); }
+/* Escolhendo o cliente: o dia, a hora e o técnico numa linha só, sem cartão. */
+.agendar-linha { margin: 0; font-weight: 700; font-size: 1.0625rem; }
 .seletor__aviso-extra { margin: var(--espaco-2, 8px) 0 0; font-size: 0.8125rem; color: var(--cor-texto-suave, #5b6b7a); }
 
 /* Pontos do histórico na Agenda (dias que já passaram): verde = concluído, amarelo = atrasado ou cancelado. Podem ser dois. */

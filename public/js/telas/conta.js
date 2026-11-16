@@ -13,6 +13,7 @@ import { sairDaSessao, empresaId } from '../nucleo/sessao.js';
 import { excluirContaCompleta } from '../servicos/empresas.js';
 import { ehAdminMesmoBloqueado } from '../nucleo/permissoes.js';
 import { traduzirErro } from '../nucleo/erros.js';
+import { formatarTelefone } from '../dominio/telefone.js';
 
 export default async function montar({ raiz, sessao, ir }) {
   const admin = ehAdminMesmoBloqueado(sessao);
@@ -25,10 +26,12 @@ export default async function montar({ raiz, sessao, ir }) {
         ${listaDeDados([
           ['Nome', sessao.vinculo?.nome],
           ['E-mail', email],
+          ['Telefone', sessao.vinculo?.telefone ? formatarTelefone(sessao.vinculo.telefone) : ''],
           ['Papel', admin ? 'Administrador' : 'Técnico'],
           ['Empresa', sessao.empresa?.nome],
         ])}
       </div>
+      ${admin ? botao({ texto: 'Editar meus dados', variante: 'secundario', iconeNome: 'editar', href: '#/equipe/eu?de=conta', bloco: true, id: 'botao-editar-conta' }) : ''}
       ${botao({ texto: 'Trocar senha (enviar e-mail)', variante: 'secundario', iconeNome: 'cadeado', acao: 'senha', bloco: true })}
       ${botao({ texto: 'Sair', variante: 'secundario', iconeNome: 'sair', acao: 'sair', bloco: true })}
       <p class="texto-suave texto-pequeno"><a href="#/termos">Termos de uso</a> · <a href="#/privacidade">Política de privacidade</a></p>

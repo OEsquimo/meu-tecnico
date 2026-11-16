@@ -178,6 +178,18 @@ test('cliente: excluir exige descer o contador; técnico nunca exclui', async ()
   await assertFails(deleteDoc(doc(como(TEC), `empresas/${E}/clientes/c1`)));
 });
 
+test('pacote 18: o administrador muda o nome da empresa e o próprio nome (nomeAdmin), com limites', async () => {
+  const admin = como(ADMIN);
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}`), { nome: 'Frio Novo', nomeAdmin: 'Novo Nome', adminAtende: true }));
+  await assertSucceeds(updateDoc(doc(admin, `usuarios/${ADMIN}`), { nome: 'Novo Nome', telefone: '(81) 98325-9346' }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { nomeAdmin: '' }), 'nomeAdmin vazio');
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { nomeAdmin: 'x'.repeat(101) }), 'nomeAdmin longo demais');
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { nomeAdmin: 123 }), 'nomeAdmin não texto');
+  await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}`), { nomeAdmin: 'Invasor' }), 'admin de outra empresa');
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}`), { nomeAdmin: 'Técnico' }), 'técnico não muda');
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { emailAdmin: 'outro@x.com' }), 'e-mail do login não muda por aqui');
+});
+
 test('empresa: administrador não troca plano, validade nem bloqueio; dono do app troca', async () => {
   const admin = como(ADMIN);
   await assertFails(updateDoc(doc(admin, `empresas/${E}`), { planoId: 'ilimitado' }));
