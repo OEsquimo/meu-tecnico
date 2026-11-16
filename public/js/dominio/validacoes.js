@@ -253,8 +253,11 @@ export function validarFuncionario({ nome, telefone }) {
 }
 
 /** Dados do próprio administrador: nome obrigatório; WhatsApp opcional (se vier, precisa ser válido). */
-export function validarAdministrador({ nome, telefone }) {
+export function validarAdministrador({ nome, telefone, nomeEmpresa }) {
   const erros = {};
+  const empresa = texto(nomeEmpresa);
+  if (nomeEmpresa !== undefined && empresa.length < 2) erros.nomeEmpresa = 'Digite o nome da empresa.';
+  else if (empresa.length > 100) erros.nomeEmpresa = 'O nome da empresa está muito longo (máximo 100 letras).';
   const n = texto(nome);
   if (n.length < 2) erros.nome = 'Digite o seu nome.';
   else if (n.length > 100) erros.nome = 'O nome está muito longo (máximo 100 letras).';
@@ -265,7 +268,7 @@ export function validarAdministrador({ nome, telefone }) {
     if (!normal) erros.telefone = 'Número inválido. Digite com DDD, por exemplo (11) 91234-5678.';
     else telefoneLimpo = normal;
   }
-  return resultado(erros, { nome: n, telefone: telefoneLimpo });
+  return resultado(erros, nomeEmpresa === undefined ? { nome: n, telefone: telefoneLimpo } : { nome: n, telefone: telefoneLimpo, nomeEmpresa: empresa });
 }
 
 // -----------------------------------------------------------------------------

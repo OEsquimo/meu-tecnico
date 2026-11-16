@@ -335,7 +335,8 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende', 'nomeAdmin'])
+              && (!('nomeAdmin' in request.resource.data) || (request.resource.data.nomeAdmin is string && request.resource.data.nomeAdmin.size() > 0 && request.resource.data.nomeAdmin.size() <= 100))
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)
         || contadorValido(emp)

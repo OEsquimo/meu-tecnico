@@ -13,14 +13,16 @@ import { validarAdministrador } from '../dominio/validacoes.js';
 import { formatarTelefone, mascararTelefoneDigitando } from '../dominio/telefone.js';
 import { traduzirErro } from '../nucleo/erros.js';
 
-export default async function montar({ raiz, sessao, ir }) {
+export default async function montar({ raiz, sessao, ir, consulta }) {
+  const deConta = consulta?.get('de') === 'conta'; // veio de "Minha conta": volta para lá
   const vinculo = sessao.vinculo || {};
   const atende = sessao.empresa?.adminAtende !== false;
   mostrar(raiz, html`
-    ${cabecalho({ titulo: 'Meus dados', subtitulo: 'Administrador', voltarPara: '#/equipe' })}
+    ${cabecalho({ titulo: 'Meus dados', subtitulo: 'Administrador', voltarPara: deConta ? '#/conta' : '#/equipe' })}
     <form id="form-admin" class="formulario" novalidate>
       <div data-erros-gerais></div>
       ${campoTexto({ nome: 'nome', rotulo: 'Nome', valor: vinculo.nome || '', maximo: 100, autocompletar: 'off' })}
+      ${campoTexto({ nome: 'nomeEmpresa', rotulo: 'Nome da empresa', valor: sessao.empresa?.nome || '', maximo: 100, autocompletar: 'off' })}
       ${campoTexto({ nome: 'telefone', rotulo: 'WhatsApp', tipo: 'tel', modo: 'tel', placeholder: '(11) 91234-5678', valor: vinculo.telefone ? formatarTelefone(vinculo.telefone) : '', opcional: true })}
       ${interruptor({ nome: 'atende', titulo: 'Eu atendo serviços', descricao: 'Desligado, você não aparece como técnico ao agendar. Os serviços já agendados com você ficam como estão.', marcado: atende })}
       ${botao({ texto: 'Salvar', tipo: 'submit', bloco: true })}
@@ -39,7 +41,7 @@ export default async function montar({ raiz, sessao, ir }) {
         await salvarDadosDoAdministrador(empresaId(), sessao.usuario.uid, { ...r.dados, atende: campos.atende === true });
         await recarregarSessao(); // nome, WhatsApp e "atende" passam a valer em todas as telas
         toast('Dados salvos.', 'sucesso');
-        ir('/equipe');
+        ir(deConta ? '/conta' : '/equipe');
       } catch (erro) {
         mostrarErrosNosCampos(form, { geral: traduzirErro(erro) });
       }

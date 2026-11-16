@@ -83,7 +83,9 @@ with sync_playwright() as p:
 
     # ---------------- Escolher cliente ----------------
     ok("#/agendar" in pag.url and "agenda=1" in pag.url, "confirmar leva à tela de escolher o cliente")
-    ok("09:00" in pag.inner_text("#resumo-quando") and f"{d.day}" in pag.inner_text("#resumo-quando"), "no alto, o resumo com dia e hora escolhidos")
+    linha = pag.inner_text("#linha-quando")
+    ok("09:00" in linha and f"{d.day}" in linha, f"escolhendo o cliente: uma linha de texto com dia e hora ({linha!r})")
+    ok(pag.locator("#resumo-quando").count() == 0 and pag.locator("#botao-quando").count() == 0, "escolhendo o cliente: sem cartão 'Quando' e sem botão 'Alterar horário'")
     ok(pag.locator("#botao-cliente-novo").count() == 1 and pag.locator("#botao-cliente-novo").evaluate("e => e.tagName") == "A", "botão 'Cadastrar cliente novo' (não é mais um link no texto)")
     ok(pag.locator("[data-acao=quando-dia]").count() == 0 and pag.locator(".quando-calendario").count() == 0, "sem calendário na escolha do cliente")
     pag.locator("[data-acao=escolher-cliente]", has_text="Maria Souza").click(); pag.wait_for_timeout(700)

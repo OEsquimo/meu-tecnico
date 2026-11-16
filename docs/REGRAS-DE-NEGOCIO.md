@@ -168,3 +168,10 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **30 por vez:** abre com 30; "Ver mais 30" lê mais 30 e some quando não há mais.
 - **Cartão:** cliente, serviço, técnico e data (sem hora, aparelho nem motivo); tocar abre o serviço completo. Sem contagens nos status (para a página ficar leve).
 - **Índices novos (precisam ser publicados):** `status + dataAgendada (decrescente)` (Concluídos e Cancelados), `status + pendente + dataAgendada` e `reagendado + dataAgendada`. Comando: `npx firebase-tools@latest deploy --only firestore:indexes --project meu-tecnico-app-d2977`. Sem eles, Pendentes e Reagendados dão erro.
+
+## Pacote 18 — escolher o cliente mais limpo e editar os meus dados
+- **Escolher o cliente (fluxo pela Agenda):** enquanto o cliente não foi escolhido, o dia, a hora e o técnico aparecem só como **uma linha de texto** ("Quarta-feira, 16 de dezembro às 09:00 · Marcos"), sem cartão e sem botão. Depois de escolher o cliente, aparece o cartão **Quando** com o botão **Alterar horário**. "Não é o cliente?" volta para a linha de texto.
+- **Minha conta (administrador):** botão **Editar meus dados**. Abre a tela de Meus dados (`#/equipe/eu?de=conta`) com **Nome**, **Nome da empresa** e **WhatsApp**, e ao salvar volta para Minha conta. O mesmo formulário continua acessível por Equipe → Você (e volta para a Equipe). A Minha conta passa a mostrar o telefone.
+- **E-mail e papel** só aparecem; não se editam (trocar o e-mail do login ficou de fora de propósito).
+- **Onde o nome fica salvo:** no vínculo do usuário (`usuarios/{uid}`: nome e telefone) e na empresa (`nome` e `nomeAdmin`, que o dono do app vê).
+- **Regras do Firebase mudaram:** o administrador pode atualizar `nomeAdmin` da própria empresa (texto de 1 a 100 letras). **É preciso publicar as regras:** `npx firebase-tools@latest deploy --only firestore:rules --project meu-tecnico-app-d2977`.
