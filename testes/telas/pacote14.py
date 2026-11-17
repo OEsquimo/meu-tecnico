@@ -17,7 +17,7 @@ def ok(c, m):
 
 with sync_playwright() as p:
     nav = p.chromium.launch()
-    pag = nav.new_page(viewport={"width": 390, "height": 844})
+    pag = nav.new_page(viewport={"width": 390, "height": 844}); pag.add_init_script(path='testes/telas/sem-aviso.js')
     erros = []
     pag.on("console", lambda m: erros.append(m.text) if m.type == "error" else None)
     pag.on("pageerror", lambda e: erros.append(str(e)))

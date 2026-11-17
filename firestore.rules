@@ -279,6 +279,10 @@ service cloud.firestore {
         && (!('chavePix' in d) || (d.chavePix is string && d.chavePix.size() <= 100))
         && (!('mensagemCobranca' in d) || (d.mensagemCobranca is string && d.mensagemCobranca.size() <= 600))
         && (!('tomCobranca' in d) || d.tomCobranca in ['amigavel', 'formal'])
+        // Aviso ao cliente pelo WhatsApp (opcionais): texto de agendado, cancelado e reagendado
+        && (!('avisoAgendado' in d) || (d.avisoAgendado is string && d.avisoAgendado.size() <= 600))
+        && (!('avisoCancelado' in d) || (d.avisoCancelado is string && d.avisoCancelado.size() <= 600))
+        && (!('avisoReagendado' in d) || (d.avisoReagendado is string && d.avisoReagendado.size() <= 600))
         // Horário de funcionamento (opcional): um mapa com, no máximo, os 7 dias da semana
         && (!('expediente' in d) || (d.expediente is map && d.expediente.keys().hasOnly(['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'])))
         // Pausa de almoço e limite de horas por técnico por dia (opcionais)
@@ -335,7 +339,7 @@ service cloud.firestore {
       allow update:
         // (1) o administrador ajusta as configurações da própria empresa
         if (ehAdmin(emp)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende', 'nomeAdmin'])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'permiteTecnicoCliente', 'diasAvisoRetorno', 'mensagemWhatsapp', 'chavePix', 'mensagemCobranca', 'tomCobranca', 'avisoAgendado', 'avisoCancelado', 'avisoReagendado', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende', 'nomeAdmin'])
               && (!('nomeAdmin' in request.resource.data) || (request.resource.data.nomeAdmin is string && request.resource.data.nomeAdmin.size() > 0 && request.resource.data.nomeAdmin.size() <= 100))
               && configEmpresaValida(request.resource.data))
         // (2) contador de clientes (acoplado à criação/exclusão do cliente)

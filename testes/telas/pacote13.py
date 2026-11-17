@@ -29,7 +29,7 @@ with sync_playwright() as p:
 
     def nova(ctx_nav=None):
         c = nav.new_context(viewport={"width": 390, "height": 844})
-        pg = c.new_page()
+        pg = c.new_page(); pg.add_init_script(path='testes/telas/sem-aviso.js')
         pg.on("console", lambda m: erros.append(m.text) if m.type == "error" else None)
         pg.on("pageerror", lambda e: erros.append(str(e)))
         return c, pg

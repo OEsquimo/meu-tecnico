@@ -15,6 +15,9 @@ import { validarConfiguracoes } from '../dominio/validacoes.js';
 import { montarMensagem } from '../dominio/whatsapp.js';
 import { montarCobranca, modeloDaEmpresa, MODELOS_COBRANCA, TONS_COBRANCA, TOM_COBRANCA_PADRAO, COBRANCA_MAX_LETRAS, PIX_MAX_LETRAS } from '../dominio/cobranca.js';
 import { MENSAGEM_WHATSAPP_PADRAO } from '../nucleo/constantes.js';
+import { MODELOS_DE_AVISO, CAMPO_DO_AVISO, modeloDoAviso, montarAviso, AVISO_MAX_LETRAS } from '../dominio/aviso-cliente.js';
+
+const ROTULOS_DO_AVISO = { agendado: 'Aviso de agendamento', cancelado: 'Aviso de cancelamento', reagendado: 'Aviso de reagendamento' };
 
 export default async function montar({ raiz, sessao, ir }) {
   const e = sessao.empresa;
@@ -51,6 +54,18 @@ export default async function montar({ raiz, sessao, ir }) {
         <div class="mensagem-previa" id="previa-cobranca" aria-live="polite"></div>
         ${botao({ texto: 'Voltar à cobrança padrão', variante: 'fantasma', acao: 'padrao-cobranca', pequeno: true })}
       </div>
+      <h2 class="titulo-secao">Aviso ao cliente pelo WhatsApp</h2>
+      <p class="texto-suave">Depois de agendar, cancelar ou reagendar, o app oferece abrir o WhatsApp do cliente com estas mensagens prontas. Você só toca em enviar. O endereço do cliente não vai na mensagem.</p>
+      ${['agendado', 'cancelado', 'reagendado'].map((tipo) => html`
+        ${campoTextoLongo({
+    nome: CAMPO_DO_AVISO[tipo], rotulo: ROTULOS_DO_AVISO[tipo], valor: modeloDoAviso(e, tipo), linhas: 4, maximo: AVISO_MAX_LETRAS,
+    ajuda: tipo === 'agendado' ? 'Variáveis: {nome} {servico} {data} {hora} {empresa}.' : '',
+  })}
+        <div class="pilha pilha--pequena">
+          <span class="campo__rotulo">Prévia</span>
+          <div class="mensagem-previa" id="previa-${tipo}" aria-live="polite"></div>
+          ${botao({ texto: 'Voltar ao aviso padrão', variante: 'fantasma', acao: 'padrao-aviso', pequeno: true, dados: { tipo } })}
+        </div>`)}
       ${interruptor({
         nome: 'permiteTecnicoCliente',
         titulo: 'Técnicos podem cadastrar clientes',
@@ -95,7 +110,25 @@ export default async function montar({ raiz, sessao, ir }) {
   });
   atualizarPreviaCobranca();
 
+  // Prévia dos 3 avisos com dados de exemplo.
+  const exemploDeAviso = { nome: 'Maria', servicos: ['Limpeza'], dataHora: new Date(2026, 10, 16, 7, 0) };
+  const atualizarPreviaDoAviso = (tipo) => {
+    raiz.querySelector(`#previa-${tipo}`).textContent = montarAviso(form.elements[CAMPO_DO_AVISO[tipo]].value, {
+      ...exemploDeAviso, empresa: form.elements.nome.value.trim() || e.nome,
+    });
+  };
+  for (const tipo of Object.keys(MODELOS_DE_AVISO)) {
+    form.elements[CAMPO_DO_AVISO[tipo]].addEventListener('input', () => atualizarPreviaDoAviso(tipo));
+    form.elements.nome.addEventListener('input', () => atualizarPreviaDoAviso(tipo));
+    atualizarPreviaDoAviso(tipo);
+  }
+
   aoClicar(raiz, {
+    'padrao-aviso': (el) => {
+      const tipo = el.dataset.tipo;
+      form.elements[CAMPO_DO_AVISO[tipo]].value = MODELOS_DE_AVISO[tipo];
+      atualizarPreviaDoAviso(tipo);
+    },
     'padrao-cobranca': () => {
       form.elements.mensagemCobranca.value = MODELOS_COBRANCA[tomAtual()];
       atualizarPreviaCobranca();

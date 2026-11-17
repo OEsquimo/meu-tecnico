@@ -86,8 +86,8 @@ export async function salvarRegrasDeTrabalho(empresaId, { almoco, limiteHorasDia
 }
 
 /** Salva as configurações da empresa (nome, aviso de retorno, texto do WhatsApp, permissão do técnico, cobrança: Pix, texto e tom). */
-export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
-  await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca })]);
+export async function salvarConfiguracoes(empresaId, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca, avisoAgendado, avisoCancelado, avisoReagendado }) {
+  await gravar([op.atualizar(`empresas/${empresaId}`, { nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca, avisoAgendado, avisoCancelado, avisoReagendado })]);
 }
 
 /** Apaga em lotes todos os documentos de uma coleção. Retorna quantos apagou. */

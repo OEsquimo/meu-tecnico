@@ -13,7 +13,7 @@ def ok(c, m):
     if not c: falhas.append(m)
 
 with sync_playwright() as p:
-    nav = p.chromium.launch(); pag = nav.new_page(viewport={"width": 390, "height": 844})
+    nav = p.chromium.launch(); pag = nav.new_page(viewport={"width": 390, "height": 844}); pag.add_init_script(path='testes/telas/sem-aviso.js')
     erros = []
     pag.on("console", lambda m: erros.append(m.text) if m.type == "error" else None)
     pag.on("pageerror", lambda e: erros.append(str(e)))
@@ -173,7 +173,7 @@ with sync_playwright() as p:
         achou = False
     ok(achou, f"edição comum continua com 'Agendamento atualizado' ({pag.locator('.aviso-rapido').all_inner_texts()})")
     # ---- Técnico comum: só azul, nunca vermelho ----
-    nav2 = p.chromium.launch(); pg2 = nav2.new_page(viewport={"width": 390, "height": 844})
+    nav2 = p.chromium.launch(); pg2 = nav2.new_page(viewport={"width": 390, "height": 844}); pg2.add_init_script(path='testes/telas/sem-aviso.js')
     erros2 = []
     pg2.on("pageerror", lambda e: erros2.append(str(e)))
     pg2.goto(BASE + "#/entrar"); pg2.wait_for_selector("#form-entrar")
