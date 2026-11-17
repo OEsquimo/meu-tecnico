@@ -16,7 +16,7 @@ def entrar(pag, email):
     pag.click("#form-entrar [type=submit]"); pag.wait_for_selector(".menu-topo__item"); pag.wait_for_timeout(1000)
 
 with sync_playwright() as p:
-    nav = p.chromium.launch(); pag = nav.new_page(viewport={"width": 390, "height": 844})
+    nav = p.chromium.launch(); pag = nav.new_page(viewport={"width": 390, "height": 844}); pag.add_init_script(path='testes/telas/sem-aviso.js')
     erros = []
     pag.on("console", lambda m: erros.append(m.text) if m.type == "error" else None)
     pag.on("pageerror", lambda e: erros.append(str(e)))

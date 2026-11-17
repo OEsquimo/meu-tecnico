@@ -25,7 +25,7 @@ import { seloDoServico, agruparAgendamentos, precisaInformarAparelhoEServico, ST
 import { formatarDataBR } from '../dominio/datas.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { telaDeErro, carregarEstilosClientes, lerDescricaoAparelho } from './clientes-comum.js';
-import { linkLigar } from './servicos-comum.js';
+import { linkLigar, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 /** Quantos agendamentos (visitas) aparecem na ficha. */
 const MAXIMO_HISTORICO = 15;
@@ -223,6 +223,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
           await cancelarAgendamentoCompleto(empresaId, v.linhas);
           toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
           recarregar();
+          await oferecerAvisoDasLinhas('cancelado', v.linhas);
         } catch (e) { mostrarErro(e); }
       });
     },

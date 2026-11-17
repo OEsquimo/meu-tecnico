@@ -47,7 +47,7 @@ import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, form
 import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
-import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
+import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, oferecerAviso } from './servicos-comum.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
 import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import {
@@ -76,6 +76,7 @@ export default async function montar(ctx) {
   let servicoComErro = null; // chave do cartão de serviço destacado em vermelho (falta o técnico)
   let linhasPreservadas = []; // ids de linhas abertas que não dá para mostrar (aparelho/tipo excluído)
   let linhasExistentes = []; // todas as linhas do agendamento em edição
+  let quandoOriginal = ''; // 'AAAA-MM-DD HH:MM' do agendamento antes de editar (para saber se mudou o dia ou a hora)
   let agendamentoId = null;
   let origemRetornoId = null;
   let pedidoDoCliente = null; // pedido que veio do link de horários (só em agendamento novo)
@@ -176,6 +177,7 @@ export default async function montar(ctx) {
       tipoExiste: (id) => sessao.tipos.some((t) => t.id === id),
     });
     if (estado.tecnicoUids.length === 0) estado.tecnicoUids = tecnicosDoServico(servico);
+    quandoOriginal = `${estado.data} ${estado.hora}`;
   }
 
   /** Volta de "Editar cliente / aparelho / Novo aparelho": devolve o que já estava preenchido. */
@@ -1005,6 +1007,17 @@ export default async function montar(ctx) {
       if (reagendouAgora) toast('Agendamento reagendado.', 'sucesso');
       else if (editando) toast('Agendamento atualizado.', 'sucesso');
       else toast(`Agendado para ${formatarDataHoraBR(new Date(`${limpos.data}T${limpos.hora}:00`))}.`, 'sucesso');
+      // Avisa o cliente (só administrador, e só se ele tem WhatsApp): novo agendamento, ou mudou o dia/hora.
+      const mudouQuando = quandoOriginal !== `${limpos.data} ${limpos.hora}`;
+      const tipoDoAviso = reagendouAgora ? 'reagendado' : (!editando ? 'agendado' : (mudouQuando ? 'reagendado' : null));
+      if (tipoDoAviso) {
+        await oferecerAviso(tipoDoAviso, {
+          whatsapp: estado.cliente?.whatsapp,
+          nome: estado.cliente?.nome,
+          servicos: linhas.map((l) => l.tipo?.nome),
+          dataHora: new Date(`${limpos.data}T${limpos.hora}:00`),
+        });
+      }
       ctx.ir(`/servico/${encodeURIComponent(destino?.id || params.id || id)}`, { substituir: true });
     });
     // Se falhou (ex.: técnico ocupado), atualiza a lista de livres e mostra o motivo já exibido pelo comCarregando.

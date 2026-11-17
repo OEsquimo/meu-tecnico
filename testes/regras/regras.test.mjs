@@ -190,6 +190,15 @@ test('pacote 18: o administrador muda o nome da empresa e o próprio nome (nomeA
   await assertFails(updateDoc(doc(admin, `empresas/${E}`), { emailAdmin: 'outro@x.com' }), 'e-mail do login não muda por aqui');
 });
 
+test('pacote 19: o administrador edita os 3 avisos ao cliente (até 600 letras, só texto)', async () => {
+  const admin = como(ADMIN);
+  await assertSucceeds(updateDoc(doc(admin, `empresas/${E}`), { avisoAgendado: 'Olá {nome}', avisoCancelado: 'Cancelamos', avisoReagendado: 'Remarcamos' }));
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { avisoAgendado: 'x'.repeat(601) }), 'aviso longo demais');
+  await assertFails(updateDoc(doc(admin, `empresas/${E}`), { avisoCancelado: 123 }), 'aviso não texto');
+  await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}`), { avisoAgendado: 'Invasor' }), 'admin de outra empresa');
+  await assertFails(updateDoc(doc(como(TEC), `empresas/${E}`), { avisoAgendado: 'Técnico' }), 'técnico não muda');
+});
+
 test('empresa: administrador não troca plano, validade nem bloqueio; dono do app troca', async () => {
   const admin = como(ADMIN);
   await assertFails(updateDoc(doc(admin, `empresas/${E}`), { planoId: 'ilimitado' }));

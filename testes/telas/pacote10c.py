@@ -13,7 +13,7 @@ def ok(c, m):
     if not c: falhas.append(m)
 
 def entrar(nav, email):
-    pag = nav.new_page(viewport={"width": 390, "height": 844})
+    pag = nav.new_page(viewport={"width": 390, "height": 844}); pag.add_init_script(path='testes/telas/sem-aviso.js')
     pag.on("pageerror", lambda e: falhas.append(f"pageerror: {e}"))
     pag.goto(BASE + "#/entrar"); pag.wait_for_selector("#form-entrar")
     pag.fill("input[name=email]", email); pag.fill("input[name=senha]", "demo123")

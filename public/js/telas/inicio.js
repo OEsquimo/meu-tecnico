@@ -23,7 +23,7 @@ import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReage
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
 import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento, nomesDosTecnicos } from '../dominio/servicos.js';
-import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 /** Quantos dias antes do fim do teste/plano o aviso aparece. */
 const DIAS_AVISO_PLANO = 7;
@@ -50,6 +50,7 @@ export default async function montar(ctx) {
           await cancelarAgendamentoCompleto(usuario.empresaId, linhasDaVisita);
           toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
           ctx.recarregar();
+          await oferecerAvisoDasLinhas('cancelado', linhasDaVisita);
         } catch (e) { mostrarErro(e); }
       });
     },

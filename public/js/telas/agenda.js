@@ -29,7 +29,7 @@ import { formatarMesAno, formatarDiaExtenso, hojeISO, paraISO } from '../dominio
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
-import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao } from './servicos-comum.js';
+import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
@@ -217,6 +217,7 @@ export default async function montar(ctx) {
           await cancelarAgendamentoCompleto(usuario.empresaId, linhas);
           toast('Agendamento cancelado. Ele aguarda reagendamento.', 'sucesso');
           carregarMes();
+          await oferecerAvisoDasLinhas('cancelado', linhas);
         } catch (e) { mostrarErro(e); }
       });
     },

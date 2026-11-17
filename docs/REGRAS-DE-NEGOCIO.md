@@ -175,3 +175,11 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **E-mail e papel** só aparecem; não se editam (trocar o e-mail do login ficou de fora de propósito).
 - **Onde o nome fica salvo:** no vínculo do usuário (`usuarios/{uid}`: nome e telefone) e na empresa (`nome` e `nomeAdmin`, que o dono do app vê).
 - **Regras do Firebase mudaram:** o administrador pode atualizar `nomeAdmin` da própria empresa (texto de 1 a 100 letras). **É preciso publicar as regras:** `npx firebase-tools@latest deploy --only firestore:rules --project meu-tecnico-app-d2977`.
+
+## Pacote 19 — aviso ao cliente pelo WhatsApp (só administrador)
+- **Quando oferece:** depois de **agendar** (novo agendamento), de **reagendar** (salvar um agendamento cancelado, ou mudar o dia ou a hora de um agendado) e de **cancelar** (nas telas Início, Agenda, Cliente e Agendamento). Editar sem mudar dia nem hora **não pergunta**.
+- **Como funciona:** abre uma janela com a mensagem pronta e o botão **Avisar no WhatsApp** (abre o WhatsApp do cliente; o administrador só toca em enviar) ou **Agora não**. O app **não envia nada sozinho**. A tela só segue (ex.: vai para o agendamento) depois da resposta.
+- **Sem telefone válido** no cliente, ou para quem **não é administrador**, a janela não aparece.
+- **Mensagem:** variáveis `{nome}` (primeiro nome), `{servico}` (serviços da visita; "Serviço a definir" não entra), `{data}`, `{hora}` e `{empresa}`. **O endereço do cliente nunca entra.** Sem serviço, os parênteses vazios somem.
+- **Textos editáveis** em Configurações → "Aviso ao cliente pelo WhatsApp" (agendado, cancelado, reagendado), com prévia e "Voltar ao aviso padrão". Texto vazio volta ao modelo pronto; máximo 600 letras. Ficam na empresa: `avisoAgendado`, `avisoCancelado`, `avisoReagendado`.
+- **Regras do Firebase mudaram:** o administrador pode gravar esses 3 campos (texto, até 600 letras). **É preciso publicar as regras:** `npx firebase-tools@latest deploy --only firestore:rules --project meu-tecnico-app-d2977`.

@@ -13,6 +13,7 @@ import { reaisParaCentavos } from './dinheiro.js';
 import { ehISOValido, ehHoraValida } from './datas.js';
 import { PRAZOS_RETORNO_MESES, TIPOS_APARELHO, MAXIMO_ENDERECOS, DURACAO_PADRAO_MIN, DURACAO_MIN_LIMITE, DURACAO_MAX_LIMITE } from '../nucleo/constantes.js';
 import { cepValido, somenteDigitosCEP } from './endereco.js';
+import { MODELOS_DE_AVISO } from './aviso-cliente.js';
 
 const texto = (v) => String(v ?? '').trim();
 
@@ -296,7 +297,7 @@ export function validarTipoServico({ nome, geraRetorno, retornoPadraoMeses, dura
   return resultado(erros, { nome: n, geraRetorno: gera, retornoPadraoMeses: gera ? meses : 0, duracaoMin: duracao });
 }
 
-export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca }) {
+export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp, permiteTecnicoCliente, chavePix, mensagemCobranca, tomCobranca, avisoAgendado, avisoCancelado, avisoReagendado }) {
   const erros = {};
   const n = texto(nome);
   if (!n) erros.nome = 'Digite o nome da empresa.';
@@ -314,9 +315,16 @@ export function validarConfiguracoes({ nome, diasAvisoRetorno, mensagemWhatsapp,
   else if (cobranca.length > 600) erros.mensagemCobranca = 'A mensagem está muito longa (máximo 600 letras).';
   const tom = texto(tomCobranca) || 'amigavel';
   if (!['amigavel', 'formal'].includes(tom)) erros.tomCobranca = 'Escolha o tom da mensagem.';
+  // Aviso ao cliente (agendado, cancelado, reagendado): texto vazio volta ao modelo pronto.
+  const avisos = {};
+  for (const [campo, valor, rotulo] of [['avisoAgendado', avisoAgendado, 'agendamento'], ['avisoCancelado', avisoCancelado, 'cancelamento'], ['avisoReagendado', avisoReagendado, 'reagendamento']]) {
+    const t = texto(valor);
+    if (t.length > 600) erros[campo] = `O aviso de ${rotulo} está muito longo (máximo 600 letras).`;
+    avisos[campo] = t || MODELOS_DE_AVISO[campo.replace('aviso', '').toLowerCase()];
+  }
   return resultado(erros, {
     nome: n, diasAvisoRetorno: dias, mensagemWhatsapp: msg, permiteTecnicoCliente: permiteTecnicoCliente === true,
-    chavePix: pix, mensagemCobranca: cobranca, tomCobranca: tom,
+    chavePix: pix, mensagemCobranca: cobranca, tomCobranca: tom, ...avisos,
   });
 }
 

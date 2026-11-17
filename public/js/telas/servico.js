@@ -26,7 +26,7 @@ import { formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
 import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
 import { textoDoRetorno } from './agendamento-comum.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao } from './servicos-comum.js';
+import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz, params, ir } = ctx;
@@ -305,6 +305,7 @@ export default async function montar(ctx) {
           try {
             await cancelarAgendamentoCompleto(usuario.empresaId, linhas);
             toast('Agendamento cancelado.', 'sucesso');
+            await oferecerAvisoDasLinhas('cancelado', linhas);
             ir('/agenda');
           } catch (e) { mostrarErro(e); }
         });
