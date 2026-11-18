@@ -1007,15 +1007,13 @@ export default async function montar(ctx) {
       if (reagendouAgora) toast('Agendamento reagendado.', 'sucesso');
       else if (editando) toast('Agendamento atualizado.', 'sucesso');
       else toast(`Agendado para ${formatarDataHoraBR(new Date(`${limpos.data}T${limpos.hora}:00`))}.`, 'sucesso');
-      // Avisa o cliente (só administrador, e só se ele tem WhatsApp): novo agendamento, ou mudou o dia/hora.
+      // Avisa cliente e técnicos (só administrador, e só quem tem WhatsApp): novo agendamento, ou mudou o dia/hora.
       const mudouQuando = quandoOriginal !== `${limpos.data} ${limpos.hora}`;
       const tipoDoAviso = reagendouAgora ? 'reagendado' : (!editando ? 'agendado' : (mudouQuando ? 'reagendado' : null));
       if (tipoDoAviso) {
-        await oferecerAviso(tipoDoAviso, {
-          whatsapp: estado.cliente?.whatsapp,
-          nome: estado.cliente?.nome,
-          servicos: linhas.map((l) => l.tipo?.nome),
-          dataHora: new Date(`${limpos.data}T${limpos.hora}:00`),
+        const abertas = restantes.filter((l) => l.status === STATUS.AGENDADO);
+        await oferecerAviso(tipoDoAviso, abertas.length > 0 ? abertas : restantes, {
+          anterior: tipoDoAviso === 'reagendado' && quandoOriginal ? new Date(`${quandoOriginal.replace(' ', 'T')}:00`) : null,
         });
       }
       ctx.ir(`/servico/${encodeURIComponent(destino?.id || params.id || id)}`, { substituir: true });

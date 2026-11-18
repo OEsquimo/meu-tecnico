@@ -4,12 +4,12 @@
 // Cria o convite (nome + WhatsApp). Depois leva à tela do link do convite.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, interruptor, botao } from '../nucleo/componentes.js';
 import { criarConvite } from '../servicos/equipe.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { validarFuncionario } from '../dominio/validacoes.js';
-import { mascararTelefoneDigitando } from '../dominio/telefone.js';
+import { mascararTelefoneDigitando, normalizarWhatsappBR, somenteDigitos } from '../dominio/telefone.js';
 import { traduzirErro } from '../nucleo/erros.js';
 
 export default async function montar({ raiz, ir }) {
@@ -25,6 +25,8 @@ export default async function montar({ raiz, ir }) {
     </form>`);
 
   const form = raiz.querySelector('#form-func');
+  avancarEntreCampos(form, { automatico: { telefone: (v) => somenteDigitos(v).length === 11 && Boolean(normalizarWhatsappBR(v)) }, validos: { telefone: (v) => Boolean(normalizarWhatsappBR(v)) } }); // Enter e telefone completo passam ao próximo campo
+
   form.elements.telefone.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); });
 
   aoEnviar(form, async () => {

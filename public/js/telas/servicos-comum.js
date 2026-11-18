@@ -16,8 +16,7 @@ import { estaAtrasado, precisaInformarAparelhoEServico, seloDoServico, textoDosT
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
-import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
-import { modeloDoAviso, montarAviso, TITULOS_DE_AVISO } from '../dominio/aviso-cliente.js';
+import { abrirAvisos } from './avisos-whatsapp.js';
 import { STATUS, ehLinhaSemServico } from '../dominio/servicos.js';
 
 // -----------------------------------------------------------------------------
@@ -215,39 +214,15 @@ export function tituloSecao(texto, direita = null) {
   return html`<div class="linha linha--entre"><h2 class="titulo-secao">${texto}</h2>${direita}</div>`;
 }
 
-/**
- * Depois de agendar, cancelar ou reagendar: oferece ao ADMINISTRADOR abrir o WhatsApp do
- * cliente com a mensagem pronta (o app não envia nada sozinho). Não pergunta nada se o
- * cliente não tem telefone válido ou se quem usa não é administrador.
- *
- * @param {'agendado'|'cancelado'|'reagendado'} tipo
- * @param {{ whatsapp:string, nome:string, servicos:string[], dataHora:Date }} dados
- */
-export async function oferecerAviso(tipo, { whatsapp, nome, servicos, dataHora }) {
-  if (!ehAdmin(sessao) || !dataHora) return;
-  const empresa = sessao.empresa || {};
-  const texto = montarAviso(modeloDoAviso(empresa, tipo), {
-    nome: primeiroNome(nome), servicos, dataHora, empresa: empresa.nome,
-  });
-  const link = linkWhatsappDoCliente(whatsapp, texto);
-  if (!link) return;
-  await escolher({
-    titulo: TITULOS_DE_AVISO[tipo],
-    mensagem: texto,
-    opcoes: [{ id: 'avisar', rotulo: 'Avisar no WhatsApp', href: link }],
-    cancelar: 'Agora não',
-  });
+/** Abre o painel de avisos pelo WhatsApp (cliente e técnicos). Só administrador. */
+export async function oferecerAviso(tipo, linhas, extra = {}) {
+  await abrirAvisos(tipo, linhas, extra);
 }
 
 /** O mesmo aviso, a partir das linhas de um agendamento (só as ainda agendadas contam; sem elas, todas). */
-export function oferecerAvisoDasLinhas(tipo, linhas) {
+export function oferecerAvisoDasLinhas(tipo, linhas, extra = {}) {
   const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
   const base = abertas.length > 0 ? abertas : linhas;
   if (base.length === 0) return Promise.resolve();
-  return oferecerAviso(tipo, {
-    whatsapp: base[0].clienteWhatsapp,
-    nome: base[0].clienteNome,
-    servicos: base.filter((l) => !ehLinhaSemServico(l)).map((l) => l.tipoServicoNome),
-    dataHora: base[0].dataAgendada,
-  });
+  return abrirAvisos(tipo, base, extra);
 }

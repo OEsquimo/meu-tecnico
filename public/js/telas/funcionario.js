@@ -5,12 +5,12 @@
 // Bloquear mantém os dados; remover tira da equipe (o histórico de serviços fica).
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast, mostrarErro } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast, mostrarErro, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, interruptor, botao, esqueletos } from '../nucleo/componentes.js';
 import { buscarMembro, editarFuncionario, alterarBloqueio, removerFuncionario } from '../servicos/equipe.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { validarFuncionario } from '../dominio/validacoes.js';
-import { formatarTelefone, mascararTelefoneDigitando } from '../dominio/telefone.js';
+import { formatarTelefone, mascararTelefoneDigitando, normalizarWhatsappBR, somenteDigitos } from '../dominio/telefone.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { mostrarFalha, seloStatusEquipe } from './_auxiliar-admin.js';
 import { mostrarNaoEncontrado } from './servicos-comum.js';
@@ -41,6 +41,8 @@ export default async function montar(ctx) {
       </div>`);
 
     const form = raiz.querySelector('#form-func');
+    avancarEntreCampos(form, { automatico: { telefone: (v) => somenteDigitos(v).length === 11 && Boolean(normalizarWhatsappBR(v)) }, validos: { telefone: (v) => Boolean(normalizarWhatsappBR(v)) } }); // Enter e telefone completo passam ao próximo campo
+
     form.elements.telefone.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); });
     aoEnviar(form, async () => {
       limparErrosGerais(form);

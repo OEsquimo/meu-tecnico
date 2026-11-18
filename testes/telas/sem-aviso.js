@@ -5,6 +5,8 @@
   const fechar = () => {
     const janela = document.querySelector('dialog[open] a[data-escolha="avisar"]')?.closest('dialog');
     if (janela) janela.querySelector('button[data-escolha=""]')?.click();
+    // Painel de avisos (pacote 20): fecha pelo botão "Fechar".
+    document.querySelector('dialog[open][data-avisos] [data-fechar]')?.click();
   };
   new MutationObserver(fechar).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
 })();

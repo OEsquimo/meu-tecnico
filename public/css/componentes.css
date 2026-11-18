@@ -1116,3 +1116,9 @@ body.modo-demonstracao::before {
 .calendario__dia--passado {
   color: var(--cor-texto-suave);
 }
+
+/* ---------- Painel de avisos pelo WhatsApp ---------- */
+.avisos__botoes { display: grid; gap: var(--espaco-3, 12px); margin: var(--espaco-3, 12px) 0; }
+.avisos__botao { display: flex; justify-content: center; text-decoration: none; }
+.avisos__rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.avisos__botao--tocado { background: #d9dde2; border-color: #d9dde2; color: #5b6570; }

@@ -6,7 +6,7 @@
 // Variáveis do texto: {nome} {empresa} {servico} {aparelho}
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, interruptor, botao } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId, recarregarEmpresa } from '../nucleo/sessao.js';
@@ -55,11 +55,11 @@ export default async function montar({ raiz, sessao, ir }) {
         ${botao({ texto: 'Voltar à cobrança padrão', variante: 'fantasma', acao: 'padrao-cobranca', pequeno: true })}
       </div>
       <h2 class="titulo-secao">Aviso ao cliente pelo WhatsApp</h2>
-      <p class="texto-suave">Depois de agendar, cancelar ou reagendar, o app oferece abrir o WhatsApp do cliente com estas mensagens prontas. Você só toca em enviar. O endereço do cliente não vai na mensagem.</p>
+      <p class="texto-suave">Depois de agendar, cancelar ou reagendar, o app mostra um painel para avisar o cliente (com estas mensagens) e os técnicos do serviço (mensagem fixa). Você só toca em enviar no WhatsApp.</p>
       ${['agendado', 'cancelado', 'reagendado'].map((tipo) => html`
         ${campoTextoLongo({
-    nome: CAMPO_DO_AVISO[tipo], rotulo: ROTULOS_DO_AVISO[tipo], valor: modeloDoAviso(e, tipo), linhas: 4, maximo: AVISO_MAX_LETRAS,
-    ajuda: tipo === 'agendado' ? 'Variáveis: {nome} {servico} {data} {hora} {empresa}.' : '',
+    nome: CAMPO_DO_AVISO[tipo], rotulo: ROTULOS_DO_AVISO[tipo], valor: modeloDoAviso(e, tipo), linhas: 9, maximo: AVISO_MAX_LETRAS,
+    ajuda: 'Variáveis: {nome} {servico} {data} {hora} {tecnico} {endereco} {empresa}' + (tipo === 'cancelado' ? ' {link}' : '') + '. Linha sem informação não aparece.',
   })}
         <div class="pilha pilha--pequena">
           <span class="campo__rotulo">Prévia</span>
@@ -76,6 +76,7 @@ export default async function montar({ raiz, sessao, ir }) {
     </form>`);
 
   const form = raiz.querySelector('#form-config');
+  avancarEntreCampos(form); // Enter vai ao próximo campo
   const previa = raiz.querySelector('#previa');
 
   // Atualiza a prévia com dados de exemplo a cada letra digitada.
@@ -111,7 +112,7 @@ export default async function montar({ raiz, sessao, ir }) {
   atualizarPreviaCobranca();
 
   // Prévia dos 3 avisos com dados de exemplo.
-  const exemploDeAviso = { nome: 'Maria', servicos: ['Limpeza'], dataHora: new Date(2026, 10, 16, 7, 0) };
+  const exemploDeAviso = { nome: 'Maria', servicos: ['Limpeza'], dataHora: new Date(2026, 10, 16, 7, 0), tecnico: 'João', endereco: 'Rua das Flores, 120 · Centro', link: 'https://…' };
   const atualizarPreviaDoAviso = (tipo) => {
     raiz.querySelector(`#previa-${tipo}`).textContent = montarAviso(form.elements[CAMPO_DO_AVISO[tipo]].value, {
       ...exemploDeAviso, empresa: form.elements.nome.value.trim() || e.nome,

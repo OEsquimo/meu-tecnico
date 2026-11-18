@@ -116,7 +116,7 @@ export function mostrarErro(erro) {
 // JANELAS (confirmar / escolher)
 // -----------------------------------------------------------------------------
 
-function criarJanela() {
+export function criarJanela() {
   const janela = document.createElement('dialog');
   janela.className = 'janela';
   document.body.appendChild(janela);
