@@ -15,7 +15,7 @@
 // 3/4/6/12 meses (já vem marcado o prazo padrão do tipo).
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos, estadoVazio } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente } from '../servicos/servicos.js';
@@ -183,6 +183,7 @@ export default async function montar(ctx) {
       </form>`);
 
     const form = raiz.querySelector('#form-concluir');
+    avancarEntreCampos(form); // Enter vai ao próximo campo
     const blocoRetorno = raiz.querySelector('#bloco-retorno');
     const editor = editaValores ? ligarEditorDeValores(form) : null;
     let valorMexido = false; // se a pessoa já mexeu no valor, trocar o tipo não o sobrescreve

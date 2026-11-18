@@ -17,7 +17,7 @@
 // administrador exclui.
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoSelecao, campoPilulas, botao, estadoVazio } from '../nucleo/componentes.js';
 import { ehAdmin, podeGerirClientes } from '../nucleo/permissoes.js';
 import { traduzirErro } from '../nucleo/erros.js';
@@ -120,6 +120,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
     </form>`);
 
   const form = raiz.querySelector('#form-aparelho');
+  avancarEntreCampos(form); // Enter vai ao próximo campo
   const areaOutro = raiz.querySelector('#area-btus-outro');
 
   /** Depois de gravar/excluir: vai para a ficha do cliente (ou volta, se o técnico não a enxerga). */

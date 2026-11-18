@@ -1,11 +1,12 @@
 """
-PACOTE 19 (modo demonstração): aviso ao cliente pelo WhatsApp.
-Depois de agendar, reagendar (mudar dia/hora) e cancelar, o ADMINISTRADOR vê uma janela com a mensagem pronta e o botão
-"Avisar no WhatsApp" (link wa.me do cliente, sem endereço). Editar sem mudar dia/hora não pergunta. Os 3 textos são
+PACOTE 19 (modo demonstração; ajustado no pacote 20): aviso ao cliente pelo WhatsApp.
+Depois de agendar, reagendar (mudar dia/hora) e cancelar, o ADMINISTRADOR vê o painel de avisos com o botão "Mensagem para ..."
+(link wa.me do cliente com a mensagem pronta; a mensagem vai dentro do link). Editar sem mudar dia/hora não pergunta. Os 3 textos são
 editáveis em Configurações (com prévia e "voltar ao padrão").
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote19.py
 """
 import datetime
+from urllib.parse import unquote
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:5173/?demo=1"
@@ -49,20 +50,27 @@ with sync_playwright() as p:
     def texto_aviso():
         return pag.inner_text("dialog[open]:not(.seletor)")
 
+    def msg_cliente():
+        href = pag.locator("dialog[open][data-avisos] a[data-abrir=cliente]").get_attribute("href")
+        return unquote(href.split("text=")[1])
+
+    def fechar_aviso():
+        pag.locator("dialog[open][data-avisos] [data-fechar]").click(); pag.wait_for_timeout(1200)
+
     pag.goto(BASE + "#/entrar"); pag.wait_for_selector("#form-entrar")
     pag.fill("input[name=email]", "demo@meutecnico.app"); pag.fill("input[name=senha]", "demo123")
     pag.click("#form-entrar [type=submit]"); pag.wait_for_selector(".menu-topo__item"); pag.wait_for_timeout(1000)
 
     # ---------------- Configurações: os 3 avisos ----------------
     ir("/configuracoes")
-    for campo, trecho in [("avisoAgendado", "agendado"), ("avisoCancelado", "cancelar"), ("avisoReagendado", "remarcado")]:
+    for campo, trecho in [("avisoAgendado", "confirmado"), ("avisoCancelado", "cancelado"), ("avisoReagendado", "reagendado")]:
         ok(pag.locator(f"textarea[name={campo}]").count() == 1 and trecho in pag.input_value(f"textarea[name={campo}]"), f"Configurações tem o campo {campo} com o texto padrão")
     previa = pag.inner_text("#previa-agendado")
     ok("Maria" in previa and "16 de novembro" in previa and "07:00" in previa and "{" not in previa, f"prévia do aviso de agendamento: {previa[:70]!r}")
     pag.fill("textarea[name=avisoCancelado]", "Oi {nome}, cancelamos o {servico} de {data} às {hora}. {empresa}"); pag.wait_for_timeout(200)
     ok(pag.inner_text("#previa-cancelado").startswith("Oi Maria, cancelamos o Limpeza de"), "a prévia acompanha o que se digita")
     pag.locator("[data-acao=padrao-aviso][data-tipo=cancelado]").click(); pag.wait_for_timeout(200)
-    ok("Precisamos cancelar" in pag.input_value("textarea[name=avisoCancelado]"), "'Voltar ao aviso padrão' restaura o texto")
+    ok("foi cancelado" in pag.input_value("textarea[name=avisoCancelado]"), "'Voltar ao aviso padrão' restaura o texto")
     pag.fill("textarea[name=avisoCancelado]", "Oi {nome}, cancelamos o {servico} de {data} às {hora}. {empresa}")
     pag.click("#form-config [type=submit]"); pag.wait_for_timeout(1200)
     ir("/configuracoes")
@@ -84,15 +92,15 @@ with sync_playwright() as p:
     pag.click("#botao-salvar"); pag.wait_for_timeout(1800)
     ok(aviso_aberto(), "depois de agendar, abre a janela do aviso")
     t = texto_aviso()
-    ok("Avisar o cliente do agendamento?" in t, "título: avisar do agendamento")
-    ok("Maria" in t and "09:00" in t and f"{d.day} de" in t, f"a mensagem traz nome, dia e hora: {t[:160]!r}")
-    ok("Rua das Flores" not in t and "Jardim" not in t and "120" not in t.replace("09:00", ""), "o endereço do cliente NÃO vai na mensagem")
-    href = pag.locator("dialog[open] a[data-escolha=avisar]").get_attribute("href")
+    ok("Avisar sobre o agendamento" in t, "título: avisar sobre o agendamento")
+    m = msg_cliente()
+    ok("Maria" in m and "09:00" in m and f"{d.day} de" in m, f"a mensagem traz nome, dia e hora: {m[:160]!r}")
+    href = pag.locator("dialog[open] a[data-abrir=cliente]").get_attribute("href")
     ok(href.startswith("https://wa.me/5511912345678?text="), f"o botão abre o WhatsApp da Maria ({href[:40]})")
-    ok(pag.locator("dialog[open] a[data-escolha=avisar]").inner_text().strip() == "Avisar no WhatsApp", "botão 'Avisar no WhatsApp'")
+    ok(pag.locator("dialog[open] a[data-abrir=cliente]").inner_text().strip() == "Mensagem para Maria", "botão 'Mensagem para Maria'")
     ok("/servico/" not in pag.url, "a tela espera a resposta antes de seguir")
-    pag.locator("dialog[open] button", has_text="Agora não").click(); pag.wait_for_timeout(1200)
-    ok("/servico/" in pag.url and not aviso_aberto(), "'Agora não' fecha e segue para o agendamento")
+    fechar_aviso()
+    ok("/servico/" in pag.url and not aviso_aberto(), "'Fechar' fecha e segue para o agendamento")
     url_servico = pag.url.split("#")[1]
 
     # ---------------- Editar sem mudar dia/hora: não pergunta ----------------
@@ -112,17 +120,17 @@ with sync_playwright() as p:
     pag.click(f"{SEL} [data-acao=seletor-hora][data-hora='11:00']"); pag.click(f"{SEL} [data-acao=seletor-confirmar]")
     pag.wait_for_selector(SEL, state="detached"); pag.wait_for_timeout(600)
     pag.click("#botao-salvar"); pag.wait_for_timeout(1800)
-    ok(aviso_aberto() and "Avisar o cliente da nova data?" in texto_aviso(), "mudou a hora: oferece o aviso de reagendamento")
-    ok("remarcado" in texto_aviso() and "11:00" in texto_aviso(), "a mensagem diz que foi remarcado, com a hora nova")
-    pag.locator("dialog[open] button", has_text="Agora não").click(); pag.wait_for_timeout(1200)
+    ok(aviso_aberto() and "Avisar sobre a nova data" in texto_aviso(), "mudou a hora: oferece o aviso de reagendamento")
+    ok("reagendado" in msg_cliente() and "11:00" in msg_cliente(), "a mensagem diz que foi reagendado, com a hora nova")
+    fechar_aviso()
 
     # ---------------- Cancelar: aviso de cancelamento (texto da empresa) ----------------
     pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
     pag.locator("dialog[open] [data-resposta=sim]").click(); pag.wait_for_timeout(1500)
-    ok(aviso_aberto() and "Avisar o cliente do cancelamento?" in texto_aviso(), "depois de cancelar, oferece o aviso de cancelamento")
-    ok("Oi Maria, cancelamos o" in texto_aviso() and "11:00" in texto_aviso(), f"usa o texto editado em Configurações: {texto_aviso()[:120]!r}")
-    ok("a definir" not in texto_aviso(), "'Serviço a definir' (aparelho sem serviço) não vai na mensagem")
-    pag.locator("dialog[open] button", has_text="Agora não").click(); pag.wait_for_timeout(1200)
+    ok(aviso_aberto() and "Avisar sobre o cancelamento" in texto_aviso(), "depois de cancelar, oferece o aviso de cancelamento")
+    ok("Oi Maria, cancelamos o" in msg_cliente() and "11:00" in msg_cliente(), f"usa o texto editado em Configurações: {msg_cliente()[:120]!r}")
+    ok("a definir" not in msg_cliente(), "'Serviço a definir' (aparelho sem serviço) não vai na mensagem")
+    fechar_aviso()
     ok("#/agenda" in pag.url, "depois do aviso, volta para a Agenda")
 
     # ---------------- Reagendar o cancelado: aviso de reagendamento ----------------

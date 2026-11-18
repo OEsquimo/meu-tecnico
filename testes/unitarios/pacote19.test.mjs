@@ -15,16 +15,15 @@ test('juntar serviços: um, dois, três e repetidos', () => {
   assert.equal(juntarServicos(['Limpeza', 'Limpeza', ' ', null]), 'Limpeza');
 });
 
-test('montar aviso: troca nome, serviço, dia, hora e empresa; não leva endereço', () => {
+test('montar aviso: troca nome, serviço, dia, hora e empresa', () => {
   const t = montarAviso(MODELOS_DE_AVISO.agendado, { nome: 'Maria', servicos: ['Limpeza'], dataHora: quando, empresa: 'O Esquimó' });
   assert.match(t, /Olá, Maria!/);
   assert.match(t, /Limpeza/);
-  assert.match(t, /Segunda-feira, 16 de novembro às 07:00/);
+  assert.match(t, /Data: Segunda-feira, 16 de novembro/);
+  assert.match(t, /Horário: 07:00/);
   assert.match(t, /O Esquimó/);
   assert.doesNotMatch(t, /\{/);
-  for (const tipo of TIPOS_DE_AVISO) {
-    assert.doesNotMatch(MODELOS_DE_AVISO[tipo], /\{(endereco|rua|bairro)\}/, 'os modelos prontos não têm endereço');
-  }
+  assert.doesNotMatch(t, /Endereço/, 'sem endereço informado, a linha do endereço some');
 });
 
 test('montar aviso: sem serviço some o parêntese vazio; variável desconhecida fica', () => {
@@ -35,8 +34,8 @@ test('montar aviso: sem serviço some o parêntese vazio; variável desconhecida
 test('os três modelos prontos são diferentes e cada tipo tem o seu campo', () => {
   assert.equal(new Set(TIPOS_DE_AVISO.map((t) => MODELOS_DE_AVISO[t])).size, 3);
   assert.deepEqual(CAMPO_DO_AVISO, { agendado: 'avisoAgendado', cancelado: 'avisoCancelado', reagendado: 'avisoReagendado' });
-  assert.match(MODELOS_DE_AVISO.cancelado, /cancelar/);
-  assert.match(MODELOS_DE_AVISO.reagendado, /remarcado/);
+  assert.match(MODELOS_DE_AVISO.cancelado, /cancelado/);
+  assert.match(MODELOS_DE_AVISO.reagendado, /reagendado/);
 });
 
 test('modelo da empresa: usa o texto salvo; vazio ou ausente usa o modelo pronto', () => {
