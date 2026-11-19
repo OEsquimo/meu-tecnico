@@ -16,17 +16,20 @@ import { mostrarFalha, seloStatusEquipe } from './_auxiliar-admin.js';
 import { mostrarNaoEncontrado } from './servicos-comum.js';
 
 export default async function montar(ctx) {
-  const { raiz, params, ir } = ctx;
+  const { raiz, params, ir, consulta } = ctx;
+  const editandoConvite = consulta?.get('editar') === '1'; // vindo do convite pendente: só dados, sem bloquear
   mostrar(raiz, html`${cabecalho({ titulo: 'Funcionário', voltarPara: '#/equipe' })}${esqueletos(2)}`);
   try {
     const m = await buscarMembro(empresaId(), params.id);
     if (!ctx.ativo()) return;
     if (!m) return mostrarNaoEncontrado(raiz, 'Funcionário não encontrado', 'Ele pode ter sido removido.', '#/equipe');
-    if (m.status === 'convite') { ir(`/equipe/convite/${m.id}`); return; }
+    const convite = m.status === 'convite';
+    if (convite && !editandoConvite) { ir(`/equipe/convite/${m.id}`); return; }
+    const voltar = convite ? `#/equipe/convite/${m.id}` : '#/equipe';
     const bloqueado = m.status === 'bloqueado';
 
     mostrar(raiz, html`
-      ${cabecalho({ titulo: m.nome, voltarPara: '#/equipe', acaoDireita: seloStatusEquipe(m.status) })}
+      ${cabecalho({ titulo: m.nome, voltarPara: voltar, acaoDireita: seloStatusEquipe(m.status) })}
       <div class="pilha">
         <form id="form-func" class="formulario" novalidate>
           <div data-erros-gerais></div>
@@ -36,8 +39,9 @@ export default async function montar(ctx) {
       ${interruptor({ nome: 'alterarValores', titulo: 'Pode alterar valor e extras', descricao: 'Ao concluir, pode mudar o valor e acrescentar extras e desconto. Quem altera também vê.', marcado: m.alterarValores === true })}
           ${botao({ texto: 'Salvar', tipo: 'submit', bloco: true })}
         </form>
+        ${convite ? '' : html`
         ${botao({ texto: bloqueado ? 'Reativar acesso' : 'Bloquear acesso', variante: 'secundario', iconeNome: 'cadeado', acao: 'bloqueio', bloco: true })}
-        ${botao({ texto: 'Remover da equipe', variante: 'perigo', iconeNome: 'lixeira', acao: 'remover', bloco: true })}
+        ${botao({ texto: 'Remover da equipe', variante: 'perigo', iconeNome: 'lixeira', acao: 'remover', bloco: true })}`}
       </div>`);
 
     const form = raiz.querySelector('#form-func');
@@ -53,7 +57,7 @@ export default async function montar(ctx) {
         try {
           await editarFuncionario(empresaId(), m, { ...r.dados, verValores: campos.verValores === true, alterarValores: campos.alterarValores === true });
           toast('Salvo.', 'sucesso');
-          ir('/equipe');
+          ir(convite ? `/equipe/convite/${m.id}` : '/equipe');
         } catch (erro) { mostrarErrosNosCampos(form, { geral: traduzirErro(erro) }); }
       });
     });

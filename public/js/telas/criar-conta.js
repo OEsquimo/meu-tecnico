@@ -6,7 +6,7 @@
 // os técnicos depois, em Administrativa > Equipe.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, botao } from '../nucleo/componentes.js';
 import { cadastrarEmpresaEAdmin } from '../servicos/empresas.js';
 import { traduzirErro } from '../nucleo/erros.js';
@@ -39,6 +39,7 @@ export default async function montar({ raiz }) {
     </form>`);
 
   const form = raiz.querySelector('#form-conta');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   aoEnviar(form, async () => {
     limparErrosGerais(form);
     const r = validarCriarConta(lerCampos(form));

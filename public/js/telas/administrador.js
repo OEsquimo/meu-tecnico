@@ -5,7 +5,7 @@
 // Desligado: ele deixa de aparecer na lista de técnicos ao agendar (serviços já agendados ficam como estão).
 // =============================================================================
 
-import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, interruptor, botao } from '../nucleo/componentes.js';
 import { salvarDadosDoAdministrador } from '../servicos/equipe.js';
 import { empresaId, recarregarSessao } from '../nucleo/sessao.js';
@@ -29,6 +29,7 @@ export default async function montar({ raiz, sessao, ir, consulta }) {
     </form>`);
 
   const form = raiz.querySelector('#form-admin');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   form.elements.telefone.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); });
 
   aoEnviar(form, async () => {

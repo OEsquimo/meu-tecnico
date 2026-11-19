@@ -8,7 +8,7 @@
 // Primeiro uso: botão "Criar planos e regras padrão".
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, confirmar, mostrarErro } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, confirmar, mostrarErro, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, botao, campoTexto, campoTextoLongo, interruptor, itemLista, selo, estadoVazio, esqueletos } from '../nucleo/componentes.js';
 import { listarPlanos, lerRegras, salvarPlano, excluirPlano, salvarRegras, criarPlanosEregrasPadrao } from '../servicos/planos.js';
 import { validarPlano, validarRegrasGlobais } from '../dominio/validacoes.js';
@@ -73,6 +73,7 @@ export default async function montar(ctx) {
       </div>`);
 
     const form = raiz.querySelector('#form-regras');
+    if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
     aoEnviar(form, async () => {
       limparErrosGerais(form);
       const c = lerCampos(form);
@@ -116,6 +117,7 @@ export default async function montar(ctx) {
       </form>`);
 
     const form = raiz.querySelector('#form-plano');
+    if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
     aoEnviar(form, async () => {
       limparErrosGerais(form);
       const c = lerCampos(form);

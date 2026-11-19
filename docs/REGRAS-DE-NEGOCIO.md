@@ -22,7 +22,7 @@ Cliente tem **quantos endereços precisar** (limite técnico de 20, não mostrad
 - **Erros**: qualquer pendência mostra a mensagem junto do item, rola a tela até ele e coloca o cursor; o botão Agendar nunca fica desativado. Avisos rápidos somem sozinhos (um toque fecha), sem botão de fechar.
 - Cliente, aparelhos e serviços podem ser editados/removidos na tela de agendamento. "Remover" tira só do agendamento; excluir o cadastro é feito na ficha do cliente (com confirmação).
 - **Conclusão**: cada serviço tem seu botão "Concluir serviço". **Não conclui sem aparelho** (o técnico escolhe um do cliente ou cadastra na hora). Se o agendamento foi feito sem serviço, o tipo é escolhido na conclusão. O técnico pode adicionar um serviço na visita (depois de escolher o aparelho).
-- **Serviço com vários técnicos**: qualquer um deles pode concluir; a conclusão vale para o serviço inteiro. No Financeiro o valor é **dividido igualmente** entre os técnicos (centavos que sobram vão para o primeiro) e o serviço conta para cada um. Na agenda, cada técnico fica ocupado pelo tempo dele na visita.
+- **Serviço com vários técnicos**: qualquer um deles pode concluir; a conclusão vale para o serviço inteiro. O Financeiro **não mostra mais "Por técnico"** (pacote 21: a empresa não paga por técnico). Na agenda, cada técnico fica ocupado pelo tempo dele na visita.
 - Retornos continuam por aparelho × serviço (um lembrete por linha concluída que gera retorno).
 - Serviços antigos (sem `agendamentoId`) continuam funcionando como uma visita de uma linha.
 
@@ -191,4 +191,14 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Mensagem do técnico (texto fixo):** só os dados da visita dele: cliente, data, horário, endereço, link do WhatsApp do cliente, o número escrito (para ligar) e o link `#/servico/<id>` do app; **sem lista de serviços**. Reagendamento mostra data/horário anterior e novo. Cancelamento não leva link do app.
 - **Avanço entre campos** (Aparelho, Concluir serviço, Funcionário, Configurações, além do cadastro de cliente do Pacote 14): Enter num campo preenchido leva o cursor ao próximo; campo vazio obrigatório não avança; WhatsApp completo passa sozinho; em texto longo o Enter continua sendo quebra de linha. As demais telas ficam para o Pacote 21.
 - **As regras do Firebase não mudaram** neste pacote (não precisa publicar regras).
+
+## Pacote 21 — atrasos, atualização do técnico, conta do técnico e ajustes
+- **Atraso (técnico):** o técnico que abre o app e passou do tempo de um serviço só **marca** o próximo agendamento dele de hoje como atrasado (ele só vê os próprios serviços; não troca de técnico). O **administrador**, ao abrir o Início, troca o técnico dos agendamentos atrasados se houver alguém livre; sem ninguém livre, o agendamento continua marcado para ele avisar o cliente. Regras do Firebase: `tecnicoMarcaAtraso` (só `atrasoPorTecnico: true`, nome opcional e `atualizadoEm` = hora do servidor).
+- **Atualização automática (só técnico):** Início e Agenda se atualizam ao voltar para o app e a cada 1 minuto (mínimo 20 s entre atualizações), sem piscar e mantendo a rolagem. Não atualiza com janela aberta nem com campo em uso. A conferência de atraso roda só ao abrir a tela, não a cada minuto.
+- **Menu do técnico:** item **Conta** (rota `/conta`), onde ele troca a senha e **sai** do app.
+- **Convite pendente:** o administrador pode **editar nome e WhatsApp** do técnico convidado (botão "Editar dados" na tela do convite). Sem Bloquear nem Remover enquanto o convite está pendente; o link do convite continua o mesmo.
+- **Mensagem do técnico:** o endereço vai escrito e com links do **Google Maps** e do **Waze** (ponto exato quando o endereço tem coordenadas). No cancelamento não vão links.
+- **Financeiro:** sem o card "Por técnico".
+- **Avanço entre campos:** Enter leva ao próximo campo também em Entrar, Criar conta, Recuperar senha, Expediente, Tipo de serviço, Valor, Convite, Enviar horários, Meus dados e demais formulários.
+- **Regras do Firebase mudaram** (`tecnicoMarcaAtraso`): publicar `npx firebase-tools@latest deploy --only firestore:rules --project meu-tecnico-app-d2977`.
 
