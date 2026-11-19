@@ -57,8 +57,9 @@ export default async function montar(ctx) {
   // ---------------------------------------------------------------------------
   // Carregar o mês
   // ---------------------------------------------------------------------------
-  async function carregarMes() {
-    mostrar(raiz, html`${topo()}${esqueletos(3)}`);
+  async function carregarMes({ silencioso = false } = {}) {
+    if (!silencioso) mostrar(raiz, html`${topo()}${esqueletos(3)}`);
+    const rolagem = window.scrollY;
     try {
       await carregarEstilos();
       const tarefas = [listarAgendados({
@@ -81,7 +82,9 @@ export default async function montar(ctx) {
       fechadosDoMes = fechados;
       if (equipe) tecnicos = equipe;
       desenhar();
+      if (silencioso) window.scrollTo(0, rolagem);
     } catch (erro) {
+      if (silencioso) throw erro;
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregarMes, topo());
     }
   }
@@ -245,6 +248,8 @@ export default async function montar(ctx) {
   raiz.addEventListener('change', aoMudar);
 
   await carregarMes();
+  // Técnico: atualiza o mês aberto ao voltar para o app e a cada minuto, sem mudar o dia escolhido.
+  if (!usuario.admin) ctx.aoAtualizar?.(() => carregarMes({ silencioso: true }));
   return () => {
     desligar();
     raiz.removeEventListener('change', aoMudar);

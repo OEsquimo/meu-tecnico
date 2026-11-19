@@ -6,7 +6,7 @@
 // Aqui também ficam a pausa de almoço e o limite de horas de serviço por técnico por dia.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, interruptor, botao } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId, recarregarEmpresa } from '../nucleo/sessao.js';
@@ -44,6 +44,7 @@ export default async function montar({ raiz, sessao, ir }) {
     </form>`);
 
   const form = raiz.querySelector('#form-expediente');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   aoEnviar(form, async () => {
     limparErrosGerais(form);
     const entrada = {};

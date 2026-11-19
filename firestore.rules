@@ -450,6 +450,7 @@ service cloud.firestore {
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoConcluiServico(emp, sid)
           || tecnicoMarcaPendente(emp)
+          || tecnicoMarcaAtraso(emp)
           || tecnicoCorrigeServicoAdicionado(emp)
           || tecnicoInformaServico(emp);
         allow delete: if ehAdmin(emp) || tecnicoApagaServicoAdicionado(emp);
@@ -584,6 +585,18 @@ service cloud.firestore {
         && d.status == 'cancelado'
         && d.pendente == true
         && d.motivoPendencia is string && d.motivoPendencia.size() <= 200;
+    }
+
+    // Atraso: quem abre o app e está atrasado em outro serviço MARCA o próximo agendamento dele como
+    // atrasado (o administrador avisa o cliente e troca o técnico). Só liga o aviso, nada mais.
+    function tecnicoMarcaAtraso(emp) {
+      let d = request.resource.data;
+      return ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && d.diff(resource.data).affectedKeys().hasOnly(['atrasoPorTecnico', 'atrasoTecnicoNome', 'atualizadoEm'])
+        && d.atrasoPorTecnico == true
+        && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120));
     }
 
     // O técnico pode acrescentar um serviço NA SUA visita (para ele mesmo, ainda

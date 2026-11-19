@@ -17,34 +17,12 @@ import { carregarFinanceiro } from '../servicos/valores.js';
 import { listarSemValor } from '../servicos/servicos.js';
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarDataBR } from '../dominio/datas.js';
-import { nomesDosTecnicos, dividirCentavos } from '../dominio/servicos.js';
 import { mostrarFalha } from './_auxiliar-admin.js';
 
 const ABAS = [
   { id: 'hoje', rotulo: 'Hoje' }, { id: 'semana', rotulo: 'Semana' },
   { id: 'mes', rotulo: 'Mês' }, { id: 'ano', rotulo: 'Ano' },
 ];
-
-/**
- * Soma por técnico (visão do administrador) a partir dos serviços e valores do período.
- * Serviço com mais de um técnico: o valor é dividido igualmente entre eles (os centavos
- * que sobram vão para o primeiro) e o serviço conta para cada um.
- */
-function totaisPorTecnico(servicos, valores) {
-  const mapa = new Map();
-  for (const s of servicos) {
-    const nomes = nomesDosTecnicos(s).filter(Boolean);
-    const lista = nomes.length > 0 ? nomes : [s.concluidoPorNome || 'Sem nome'];
-    const partes = Number.isInteger(valores[s.id]) ? dividirCentavos(valores[s.id], lista.length) : null;
-    lista.forEach((nome, i) => {
-      const g = mapa.get(nome) || { nome, quantidade: 0, totalCentavos: 0 };
-      g.quantidade += 1;
-      if (partes) g.totalCentavos += partes[i];
-      mapa.set(nome, g);
-    });
-  }
-  return [...mapa.values()].sort((a, b) => b.totalCentavos - a.totalCentavos);
-}
 
 export default async function montar(ctx) {
   const { raiz, sessao } = ctx;
@@ -73,8 +51,6 @@ export default async function montar(ctx) {
     const r = d.resumo;
     const maiorBarra = Math.max(1, ...d.serie.map((b) => b.totalCentavos));
     const maiorTipo = Math.max(1, ...r.porTipo.map((t) => t.totalCentavos));
-    const porTecnico = totaisPorTecnico(d.servicos, d.valores);
-    const maiorTec = Math.max(1, ...porTecnico.map((t) => t.totalCentavos));
 
     mostrar(raiz, html`
       ${topo}
@@ -107,16 +83,6 @@ export default async function montar(ctx) {
               <div class="linha-resumo">
                 <div class="linha-resumo__topo"><span class="linha-resumo__nome">${t.nome} (${t.quantidade})</span><span class="linha-resumo__valor">${formatarReais(t.totalCentavos)}</span></div>
                 <div class="barra-horizontal"><div class="barra-horizontal__preenchimento" data-largura="${Math.round((t.totalCentavos / maiorTipo) * 100)}"></div></div>
-              </div>`)}
-          </div>` : ''}
-
-        ${completo && porTecnico.length > 1 ? html`
-          <div class="cartao pilha">
-            <h2 class="titulo-secao">Por técnico</h2>
-            ${porTecnico.map((t) => html`
-              <div class="linha-resumo">
-                <div class="linha-resumo__topo"><span class="linha-resumo__nome">${t.nome} (${t.quantidade})</span><span class="linha-resumo__valor">${formatarReais(t.totalCentavos)}</span></div>
-                <div class="barra-horizontal"><div class="barra-horizontal__preenchimento" data-largura="${Math.round((t.totalCentavos / maiorTec) * 100)}"></div></div>
               </div>`)}
           </div>` : ''}
 

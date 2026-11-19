@@ -623,9 +623,10 @@ export async function listarConcluidosECancelados({ empresaId, de, ate, tecnicoU
  * vai para outro técnico livre; sem ninguém livre, fica "Atrasado" (o administrador avisa o cliente).
  * Devolve quantas linhas mudaram. Falha em silêncio (a tela não pode quebrar por isso): quem chama trata.
  */
-export async function conferirAtrasosDoDia({ empresaId, tecnicos, regras = null, agora = new Date() }) {
-  const agendados = await listarAgendados({ empresaId, de: inicioDoDia(agora), ate: new Date(inicioDoDia(agora).getTime() + 24 * 3600000) });
-  const acoes = planejarAjustesDeAtraso({ agendados, tecnicos, regras, agora });
+export async function conferirAtrasosDoDia({ empresaId, tecnicos, regras = null, agora = new Date(), soMarcar = false, tecnicoUid = null }) {
+  // Técnico: lê só os serviços dele (as regras não deixam ler os dos outros) e só marca o atraso.
+  const agendados = await listarAgendados({ empresaId, de: inicioDoDia(agora), ate: new Date(inicioDoDia(agora).getTime() + 24 * 3600000), tecnicoUid });
+  const acoes = planejarAjustesDeAtraso({ agendados, tecnicos, regras, agora, soMarcar });
   if (acoes.length === 0) return 0;
   const operacoes = [];
   let total = 0;
@@ -641,7 +642,7 @@ export async function conferirAtrasosDoDia({ empresaId, tecnicos, regras = null,
         operacoes.push(op.atualizar(`${caminho(empresaId)}/${id}`, {
           ...camposDosTecnicos(tecnicosDoServico(nova).map((uid, i) => ({ uid, nome: nomesDosTecnicos(nova)[i] }))),
           ocupacaoPorTecnico: nova.ocupacaoPorTecnico,
-          reatribuidoDeNome: a.de.nome, reatribuidoDeUid: a.de.uid, reatribuicaoVista: false, atualizadoEm: AGORA,
+          reatribuidoDeNome: a.de.nome, reatribuidoDeUid: a.de.uid, reatribuicaoVista: false, atrasoPorTecnico: false, atualizadoEm: AGORA,
         }));
       }
     }

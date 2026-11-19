@@ -6,7 +6,7 @@
 //   1. criar a própria empresa;  2. usar um convite;  3. sair.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { campoTexto, botao, aviso } from '../nucleo/componentes.js';
 import { usuarioAtual } from '../nucleo/autenticacao.js';
 import { comSessaoPausada, sairDaSessao } from '../nucleo/sessao.js';
@@ -52,6 +52,7 @@ export default async function montar({ raiz, ir, sessao }) {
   });
 
   const formEmpresa = raiz.querySelector('#form-empresa');
+  if (formEmpresa) avancarEntreCampos(formEmpresa); // Enter vai ao próximo campo
   aoEnviar(formEmpresa, async () => {
     limparErrosGerais(formEmpresa);
     const campos = lerCampos(formEmpresa);
@@ -72,6 +73,7 @@ export default async function montar({ raiz, ir, sessao }) {
   });
 
   const formConvite = raiz.querySelector('#form-convite');
+  if (formConvite) avancarEntreCampos(formConvite); // Enter vai ao próximo campo
   aoEnviar(formConvite, () => {
     const convite = extrairConvite(lerCampos(formConvite).link);
     if (!convite) {

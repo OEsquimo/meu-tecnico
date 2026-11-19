@@ -10,7 +10,7 @@
 // por isso o administrador precisa ter o WhatsApp dele cadastrado (pedimos aqui mesmo, se faltar).
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, copiarTexto, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, copiarTexto, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoPilulas, aviso, botao, esqueletos } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos, recarregarSessao, empresaId } from '../nucleo/sessao.js';
 import { traduzirErro } from '../nucleo/erros.js';
@@ -67,6 +67,7 @@ export default async function montar(ctx) {
         ${botao({ texto: 'Salvar e continuar', tipo: 'submit', bloco: true })}
       </form>`);
     const form = raiz.querySelector('#form-whatsapp');
+    if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
     form.elements.telefone.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); });
     aoEnviar(form, async () => {
       limparErrosGerais(form);
@@ -135,6 +136,7 @@ export default async function montar(ctx) {
   }
 
   const form = raiz.querySelector('#form-servico');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   escutaMudanca = (e) => {
     if (e.target.name !== 'servico') return;
     tipoEscolhido = e.target.value;

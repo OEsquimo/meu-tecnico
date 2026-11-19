@@ -44,7 +44,7 @@ export const ROTAS = [
   { padrao: '/historico', carregar: () => import('../telas/historico.js'), acesso: 'membro', menu: 'historico', titulo: 'Serviços concluídos' },
   { padrao: '/aparelho/:id/editar', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Aparelho' },
   { padrao: '/cliente/:clienteId/aparelho/novo', carregar: () => import('../telas/aparelho-form.js'), acesso: 'membro', menu: null, titulo: 'Novo aparelho' },
-  { padrao: '/conta', carregar: () => import('../telas/conta.js'), acesso: 'membro', menu: null, titulo: 'Minha conta' },
+  { padrao: '/conta', carregar: () => import('../telas/conta.js'), acesso: 'membro', menu: 'conta', titulo: 'Minha conta' },
   { padrao: '/ferramentas', carregar: () => import('../telas/ferramentas.js'), acesso: 'membro', menu: null, titulo: 'Ferramentas' },
 
   // ---- Clientes (administrador; técnico só se liberado) ----
@@ -185,6 +185,7 @@ export function itensDoMenu(s, tipo = 'principal') {
       { id: 'historico', rotulo: 'Concluídos', href: '#/historico' },
     ];
     if (podeGerirClientes(s)) itens.splice(2, 0, { id: 'clientes', rotulo: 'Clientes', href: '#/clientes' });
+    itens.push({ id: 'conta', rotulo: 'Conta', href: '#/conta' }); // onde o técnico sai do app
     return itens;
   }
   return [];

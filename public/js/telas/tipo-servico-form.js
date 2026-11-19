@@ -6,7 +6,7 @@
 // Excluir um tipo não altera o histórico: o nome fica copiado em cada serviço.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, confirmar, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoPilulas, interruptor, botao, estadoVazio } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { empresaId } from '../nucleo/sessao.js';
@@ -73,6 +73,7 @@ export default async function montar({ raiz, params, sessao, ir }) {
     </form>`);
 
   const form = raiz.querySelector('#form-tipo');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   const blocoPrazo = raiz.querySelector('#bloco-prazo');
 
   // Mostra/esconde o prazo conforme o interruptor.

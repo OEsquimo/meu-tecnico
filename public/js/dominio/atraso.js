@@ -6,7 +6,8 @@
 //   2) se ninguém está livre, o próximo agendamento fica ATRASADO (`atrasoPorTecnico`), para o
 //      administrador avisar o cliente do atraso e decidir se reagenda.
 // Só "olha para a frente" um agendamento por técnico em cada conferência; a conferência roda quando o
-// administrador abre o app (não existe um robô rodando sozinho sem o Firebase de verdade).
+// app é aberto (não existe um robô rodando sozinho sem o Firebase de verdade). O TÉCNICO que abre o app só
+// marca o atraso dele; o ADMINISTRADOR, ao abrir o Início, também troca o técnico quando há alguém livre.
 // =============================================================================
 
 import { STATUS, tecnicosDoServico, nomesDosTecnicos, chaveDoAgendamento } from './servicos.js';
@@ -49,8 +50,11 @@ export function visitaEmAtraso(uid, agendados, agora) {
  *   { tipo: 'atrasar',    chave, linhaIds, tecnico: {uid,nome} }
  * @param {object[]} agendados linhas agendadas do dia (qualquer técnico)
  * @param {Array<{uid,nome}>} tecnicos técnicos que atendem
+ * @param {boolean} soMarcar quando o app é aberto por um TÉCNICO: ele só vê os próprios serviços, então
+ *   apenas MARCA o próximo agendamento dele como atrasado (nunca troca de técnico). O administrador, ao
+ *   abrir o Início, troca o técnico dos agendamentos marcados se houver alguém livre.
  */
-export function planejarAjustesDeAtraso({ agendados, tecnicos, regras = null, agora = new Date() }) {
+export function planejarAjustesDeAtraso({ agendados, tecnicos, regras = null, agora = new Date(), soMarcar = false }) {
   const acoes = [];
   let atual = agendados.map((l) => ({ ...l }));
   const iso = paraISO(agora);
@@ -61,8 +65,16 @@ export function planejarAjustesDeAtraso({ agendados, tecnicos, regras = null, ag
       && v.inicio.getTime() >= emAtraso.inicio.getTime()
       && paraISO(v.inicio) === iso
       && v.inicio.getTime() <= agora.getTime() + ANTECEDENCIA_AJUSTE_MIN * MIN);
-    if (!proxima || proxima.linhas.every((l) => l.atrasoPorTecnico === true)) continue;
+    if (!proxima) continue;
+    const jaMarcada = proxima.linhas.every((l) => l.atrasoPorTecnico === true);
+    if (soMarcar && jaMarcada) continue;
     const doTecnico = proxima.linhas.filter((l) => tecnicosDoServico(l).includes(t.uid));
+    if (soMarcar) {
+      const linhaIds = doTecnico.map((l) => l.id);
+      acoes.push({ tipo: 'atrasar', chave: proxima.chave, linhaIds, tecnico: { uid: t.uid, nome: t.nome } });
+      atual = atual.map((l) => (linhaIds.includes(l.id) ? { ...l, atrasoPorTecnico: true } : l));
+      continue;
+    }
     const janela = Math.max(...proxima.linhas.map((l) => (fimDoServico(l, t.uid).getTime() - l.dataAgendada.getTime()) / MIN));
     const jaNaVisita = new Set(proxima.linhas.flatMap(tecnicosDoServico));
     const livres = tecnicos.filter((c) => !jaNaVisita.has(c.uid)
@@ -73,7 +85,7 @@ export function planejarAjustesDeAtraso({ agendados, tecnicos, regras = null, ag
     if (escolhido) {
       acoes.push({ tipo: 'reatribuir', chave: proxima.chave, linhaIds, de: { uid: t.uid, nome: t.nome }, para: { uid: escolhido.uid, nome: escolhido.nome }, motivoNome: t.nome });
       atual = atual.map((l) => (linhaIds.includes(l.id) ? trocarTecnico(l, t.uid, escolhido) : l));
-    } else {
+    } else if (!jaMarcada) {
       acoes.push({ tipo: 'atrasar', chave: proxima.chave, linhaIds, tecnico: { uid: t.uid, nome: t.nome } });
       atual = atual.map((l) => (linhaIds.includes(l.id) ? { ...l, atrasoPorTecnico: true } : l));
     }

@@ -8,7 +8,7 @@
 // O convite é uma chave longa e aleatória; quem não tem o link não consegue usá-lo.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, botao, aviso, abas, estadoVazio } from '../nucleo/componentes.js';
 import { entrar, criarLogin, usuarioAtual } from '../nucleo/autenticacao.js';
 import { comSessaoPausada } from '../nucleo/sessao.js';
@@ -59,6 +59,7 @@ export default async function montar({ raiz, params, sessao }) {
       ${aviso({ texto: 'O administrador da empresa vê o seu nome e o seu telefone. Você só enxerga os serviços que ele atribuir a você, sem valores.' })}`);
 
     const form = raiz.querySelector('#form-convite');
+    if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
     aoEnviar(form, () => enviar(form));
   }
 

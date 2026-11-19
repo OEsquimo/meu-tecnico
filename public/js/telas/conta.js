@@ -6,7 +6,7 @@
 // A exclusão exige a senha e a digitação de "EXCLUIR".
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, confirmar } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, confirmar, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, botao, campoTexto, listaDeDados, aviso } from '../nucleo/componentes.js';
 import { usuarioAtual, redefinirSenha } from '../nucleo/autenticacao.js';
 import { sairDaSessao, empresaId } from '../nucleo/sessao.js';
@@ -60,6 +60,7 @@ export default async function montar({ raiz, sessao, ir }) {
   });
 
   const form = raiz.querySelector('#form-excluir');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   if (form) {
     aoEnviar(form, async () => {
       limparErrosGerais(form);

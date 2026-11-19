@@ -10,6 +10,7 @@
 
 import { resolverRota, decidirAcesso, itensDoMenu } from './rotas.js';
 import { sessao, aoMudarSessao, recarregarSessao } from './sessao.js';
+import { ehTecnico } from './permissoes.js';
 import { mostrar, html, toast, limparCliques } from './ui.js';
 import { esqueletos, menuSuperior, estadoVazio, botao } from './componentes.js';
 import { traduzirErro, ehErroDeRede } from './erros.js';
@@ -78,9 +79,32 @@ function telaDeErro(erro, { recarregar = navegar } = {}) {
   elementos.raiz.querySelector('[data-acao="tentar-de-novo"]')?.addEventListener('click', () => recarregar());
 }
 
+// Atualização automática da tela do TÉCNICO (ele não tem tempo real): ao voltar para o app e a cada minuto,
+// a tela aberta pode registrar uma função com ctx.aoAtualizar. Nunca atualiza com janela aberta ou campo em uso.
+let atualizarTela = null;
+let atualizando = false;
+let ultimaAtualizacao = Date.now();
+const INTERVALO_ATUALIZACAO_MS = 60000;
+const ATUALIZACAO_MINIMA_MS = 20000;
+
+async function tentarAtualizarTela() {
+  if (!atualizarTela || atualizando || !ehTecnico(sessao)) return;
+  if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+  if (Date.now() - ultimaAtualizacao < ATUALIZACAO_MINIMA_MS) return;
+  if (document.querySelector('dialog[open]')) return;
+  const ativo = document.activeElement;
+  if (ativo && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ativo.tagName)) return;
+  atualizando = true;
+  try { await atualizarTela(); } catch { /* tenta de novo no próximo minuto */ } finally {
+    atualizando = false;
+    ultimaAtualizacao = Date.now();
+  }
+}
+
 async function navegar() {
   if (!elementos) return;
   const meu = ++token;
+  atualizarTela = null;
   if (limparTelaAtual) {
     try { limparTelaAtual(); } catch (e) { console.error(e); }
     limparTelaAtual = null;
@@ -143,6 +167,7 @@ async function navegar() {
       ir,
       voltar,
       recarregar: recarregarTela,
+      aoAtualizar: (fn) => { if (meu === token) { atualizarTela = fn; ultimaAtualizacao = Date.now(); } },
       ativo: () => meu === token, // a tela pode conferir se o usuário já saiu dela
     };
     const resultado = await modulo.default(contexto);
@@ -162,6 +187,9 @@ async function navegar() {
 export function iniciarRoteador({ raiz, menu }) {
   elementos = { raiz, menu };
   window.addEventListener('hashchange', navegar);
+  document.addEventListener('visibilitychange', tentarAtualizarTela);
+  window.addEventListener('focus', tentarAtualizarTela);
+  setInterval(tentarAtualizarTela, INTERVALO_ATUALIZACAO_MS);
   // Se o estado da sessão mudar (saiu, foi bloqueado...), reavalia a tela.
   // Mudanças pequenas (contador de clientes) NÃO redesenham a tela aberta.
   aoMudarSessao(() => {
