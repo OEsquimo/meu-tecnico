@@ -31,6 +31,7 @@ export default async function montar(ctx) {
         <div class="codigo-copiavel">${link}</div>
         ${whats ? botao({ texto: 'Enviar pelo WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', href: whats, externo: true, bloco: true }) : ''}
         ${botao({ texto: 'Copiar link', variante: 'secundario', iconeNome: 'copiar', acao: 'copiar', bloco: true })}
+        ${botao({ texto: 'Editar dados', variante: 'secundario', iconeNome: 'editar', href: `#/equipe/${membro.id}?editar=1`, bloco: true })}
         ${botao({ texto: 'Cancelar convite', variante: 'perigo', iconeNome: 'lixeira', acao: 'cancelar', bloco: true })}
       </div>`);
 

@@ -67,6 +67,8 @@ export function montarDestinatarios({ tipo, empresa, linhas, equipe = [], adminU
       dataHora,
       anterior,
       endereco: primeira.local || '',
+      lat: primeira.localLat ?? null,
+      lng: primeira.localLng ?? null,
       whatsappCliente: primeira.clienteWhatsapp,
       telefoneCliente: primeira.clienteWhatsapp || '',
       servicos: nomeDosServicos(dados.linhas),

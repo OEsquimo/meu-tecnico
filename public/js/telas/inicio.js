@@ -68,13 +68,14 @@ export default async function montar(ctx) {
     },
   });
 
-  async function carregar() {
-    mostrar(raiz, html`${topo}${esqueletos(3)}`);
+  async function carregar({ silencioso = false } = {}) {
+    if (!silencioso) mostrar(raiz, html`${topo}${esqueletos(3)}`);
     try {
       await carregarEstilos();
       if (usuario.admin) await carregarAdmin();
-      else await carregarTecnico();
+      else await carregarTecnico({ silencioso });
     } catch (erro) {
+      if (silencioso) throw erro; // atualização automática que falhou: mantém a tela como está
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregar, topo);
     }
   }
@@ -213,12 +214,21 @@ export default async function montar(ctx) {
   // ---------------------------------------------------------------------------
   // TÉCNICO
   // ---------------------------------------------------------------------------
-  async function carregarTecnico() {
+  async function carregarTecnico({ silencioso = false } = {}) {
     const agora = new Date();
+    // Se ele passou do tempo em um serviço, o próximo agendamento dele de hoje é MARCADO como atrasado
+    // (só marca; o administrador avisa o cliente e troca o técnico se houver alguém livre). Falha em silêncio.
+    try {
+      if (!silencioso) await conferirAtrasosDoDia({
+        empresaId: usuario.empresaId, tecnicos: [{ uid: usuario.uid, nome: usuario.nome }], regras: regrasDaEmpresa(sessao.empresa),
+        agora, soMarcar: true, tecnicoUid: usuario.uid,
+      });
+    } catch { /* sem marcação desta vez */ }
     // Uma consulta só: tudo dele que está agendado até o fim de hoje (atrasados + hoje).
     const lista = await listarAgendados({ empresaId: usuario.empresaId, ate: inicioDoDiaSeguinte(agora), tecnicoUid: usuario.uid });
     if (!ctx.ativo()) return;
     servicosNaTela = lista;
+    const rolagem = window.scrollY;
     const inicioHoje = inicioDoDia(agora).getTime();
     const antigos = lista.filter((s) => s.dataAgendada.getTime() < inicioHoje);
     const hoje = lista.filter((s) => s.dataAgendada.getTime() >= inicioHoje);
@@ -244,9 +254,12 @@ export default async function montar(ctx) {
           ${ferramentasDoUsuario(sessao).length > 0 ? atalho('#/ferramentas', 'ferramenta', 'Ferramentas', 'Ferramentas do dia a dia') : ''}
         </div>
       </div>`);
+    if (silencioso) window.scrollTo(0, rolagem);
   }
 
   await carregar();
+  // Técnico: a tela se atualiza ao voltar para o app e a cada minuto (sem piscar e sem voltar ao topo).
+  if (!usuario.admin) ctx.aoAtualizar?.(() => carregar({ silencioso: true }));
   return desligar;
 }
 

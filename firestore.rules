@@ -450,6 +450,7 @@ service cloud.firestore {
         allow update: if (ehAdmin(emp) && servicoValido(request.resource.data))
           || tecnicoConcluiServico(emp, sid)
           || tecnicoMarcaPendente(emp)
+          || tecnicoMarcaAtraso(emp)
           || tecnicoCorrigeServicoAdicionado(emp)
           || tecnicoInformaServico(emp);
         allow delete: if ehAdmin(emp) || tecnicoApagaServicoAdicionado(emp);
@@ -584,6 +585,23 @@ service cloud.firestore {
         && d.status == 'cancelado'
         && d.pendente == true
         && d.motivoPendencia is string && d.motivoPendencia.size() <= 200;
+    }
+
+    // Atraso: quem abre o app e está atrasado em outro serviço MARCA o próximo agendamento dele como
+    // atrasado (o administrador avisa o cliente e troca o técnico). Só liga o aviso, nada mais, e só no
+    // formato exato que o app grava: atrasoPorTecnico = true + atualizadoEm = hora do servidor (+ nome).
+    // A primeira condição é barata de propósito: o Firestore limita cada regra a 1000 expressões, e quase
+    // toda gravação de técnico que passa por aqui não tem nada a ver com atraso.
+    function tecnicoMarcaAtraso(emp) {
+      let d = request.resource.data;
+      return d.get('atrasoPorTecnico', false) == true
+        && ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && d.diff(resource.data).affectedKeys().hasAll(['atrasoPorTecnico', 'atualizadoEm'])
+        && d.diff(resource.data).affectedKeys().hasOnly(['atrasoPorTecnico', 'atrasoTecnicoNome', 'atualizadoEm'])
+        && d.atualizadoEm == request.time
+        && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120));
     }
 
     // O técnico pode acrescentar um serviço NA SUA visita (para ele mesmo, ainda

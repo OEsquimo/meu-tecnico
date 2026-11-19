@@ -462,6 +462,18 @@ test('pendente: o técnico devolve o próprio serviço agendado com motivo, e na
   await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { status: 'agendado', pendente: false, motivoPendencia: '', atualizadoEm: serverTimestamp() }));
 });
 
+test('pacote 21: o técnico só MARCA o atraso no próprio serviço agendado', async () => {
+  const db = como(TEC);
+  const atraso = { atrasoPorTecnico: true, atrasoTecnicoNome: 'Tec', atualizadoEm: serverTimestamp() };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-outro`), atraso)); // serviço de outro técnico
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoPorTecnico: false })); // não desmarca
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, status: 'concluido' })); // nada além do atraso
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoTecnicoNome: 'x'.repeat(121) }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: true })); // sem a hora do servidor: não passa
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atualizadoEm: new Date(2020, 0, 1) })); // hora inventada
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), atraso));
+});
+
 test('pacote 3: o administrador marca "reagendado" no serviço (só booleano)', async () => {
   await assertSucceeds(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: true, atualizadoEm: serverTimestamp() }));
   await assertFails(updateDoc(doc(como(ADMIN), `empresas/${E}/servicos/s-tec`), { reagendado: 'sim', atualizadoEm: serverTimestamp() }));

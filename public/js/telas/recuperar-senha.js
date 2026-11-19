@@ -2,7 +2,7 @@
 // TELA: Esqueci a senha (o Firebase manda um e-mail com o link para criar outra)
 // =============================================================================
 
-import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, botao, aviso } from '../nucleo/componentes.js';
 import { redefinirSenha } from '../nucleo/autenticacao.js';
 import { traduzirErro } from '../nucleo/erros.js';
@@ -20,6 +20,7 @@ export default async function montar({ raiz }) {
     <div id="resultado"></div>`);
 
   const form = raiz.querySelector('#form-recuperar');
+  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
   aoEnviar(form, async () => {
     limparErrosGerais(form);
     const { erro, email } = validarEmail(lerCampos(form).email);

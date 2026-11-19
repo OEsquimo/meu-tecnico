@@ -5,7 +5,7 @@
 // Se o serviço ainda não tem valor, já vem o valor padrão do tipo de serviço.
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, botao, esqueletos } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { buscarServico, buscarValores, definirValor } from '../servicos/servicos.js';
@@ -44,6 +44,7 @@ export default async function montar(ctx) {
         ${botao({ texto: 'Salvar valor', tipo: 'submit', bloco: true })}
       </form>`);
     const form = raiz.querySelector('#form-valor');
+    if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
     const editor = ligarEditorDeValores(form);
     aoClicar(raiz, editor.acoes);
     aoEnviar(form, async () => {
