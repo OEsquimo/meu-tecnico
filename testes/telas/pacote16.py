@@ -40,7 +40,7 @@ with sync_playwright() as p:
         pag.evaluate(f"location.hash='#{h}'"); pag.wait_for_timeout(1000)
 
     def cartoes():
-        return pag.locator("#itens a.item-lista")
+        return pag.locator("#itens .servico-cartao a.visita-cartao__corpo")
 
     # ---------------- Menu e abertura ----------------
     itens = pag.locator(".menu-topo__item").all_inner_texts()
@@ -61,14 +61,14 @@ with sync_playwright() as p:
     n = cartoes().count()
     ok(n > 0, f"há agendamentos na demonstração ({n})")
 
-    # ---------------- Cartão: cliente, serviço, técnico, data; sem hora ----------------
+    # ---------------- Cartão (pacote 22): cliente, serviço, técnico, data e hora ----------------
     c1 = cartoes().first.inner_text()
     ok(re.search(r"\d{2}/\d{2}/\d{4}", c1) is not None, f"cartão traz a data: {c1!r}")
     ok("Técnico:" in c1, "cartão traz o técnico")
-    ok(re.search(r"\d{2}:\d{2}", c1) is None, "cartão não mostra a hora")
+    ok(re.search(r"\d{2}:\d{2}", c1) is not None, "cartão mostra a hora (pacote 22)")
 
     # ---------------- Atrasados primeiro, depois por data ----------------
-    selos = pag.locator("#itens a.item-lista .selo").all_inner_texts()
+    selos = pag.locator("#itens .servico-cartao a.visita-cartao__corpo .selo").all_inner_texts()
     if "Atrasado" in selos:
         ult = max(i for i, s in enumerate(selos) if s == "Atrasado")
         ok(all(s == "Atrasado" for s in selos[: ult + 1]), "os atrasados vêm todos primeiro")

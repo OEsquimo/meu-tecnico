@@ -7,20 +7,20 @@
 //     com o selo "Atrasado"; depois o que será feito primeiro (hoje antes de amanhã).
 //   * Demais situações: um mês de cada vez (setas), do mais recente ao mais antigo.
 //   * 30 serviços por vez; no fim, "Ver mais 30" (some quando não há mais).
-//   * O cartão mostra cliente, serviço, técnico e data. Tocar abre o serviço completo.
+//   * Um cartão por AGENDAMENTO (pacote 22): cliente, status, hora/dia, endereço, serviço(s) e técnico(s). Tocar abre a página do agendamento.
 // Excluídos não aparecem (ao excluir, o agendamento é apagado de vez).
 // =============================================================================
 
 import { html, mostrar, aoClicar, comCarregando, mostrarErro } from '../nucleo/ui.js';
-import { cabecalho, botao, selo, estadoVazio, esqueletos, campoSelecao } from '../nucleo/componentes.js';
+import { cabecalho, botao, estadoVazio, esqueletos, campoSelecao } from '../nucleo/componentes.js';
 import { listarServicosDaLista } from '../servicos/servicos.js';
 import { PAGINA_SERVICOS } from '../nucleo/constantes.js';
-import { formatarDataBR, formatarMesAno } from '../dominio/datas.js';
-import { textoDosTecnicos } from '../dominio/servicos.js';
+import { formatarMesAno } from '../dominio/datas.js';
+import { agruparConcluidos } from '../dominio/servicos.js';
 import {
-  STATUS_DA_LISTA, STATUS_PADRAO_DA_LISTA, statusValido, usaFiltroDeMes, mesVizinho, ordenarAgendados, seloDaLista, haMais,
+  STATUS_DA_LISTA, STATUS_PADRAO_DA_LISTA, statusValido, usaFiltroDeMes, mesVizinho, ordenarAgendados, haMais,
 } from '../dominio/lista-servicos.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar } from './servicos-comum.js';
+import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita } from './servicos-comum.js';
 
 export default async function montar(ctx) {
   const { raiz } = ctx;
@@ -63,22 +63,6 @@ export default async function montar(ctx) {
       </div></div>`;
   }
 
-  function cartao(s) {
-    const x = seloDaLista(s);
-    const tecnicos = textoDosTecnicos(s);
-    return html`
-      <a class="item-lista" href="#/servico/${s.id}">
-        <div class="item-lista__textos">
-          <div class="item-lista__titulo">${s.clienteNome}</div>
-          <div class="item-lista__servico">${s.tipoServicoNome}</div>
-          ${tecnicos && html`<div class="item-lista__sub">Técnico: ${tecnicos}</div>`}
-          <div class="item-lista__sub">${formatarDataBR(s.dataAgendada)}</div>
-        </div>
-        ${selo(x.texto, x.tom)}
-        <span class="item-lista__seta" aria-hidden="true">›</span>
-      </a>`;
-  }
-
   function desenhar() {
     const temMais = haMais(lista.length, estado.limite);
     mostrar(raiz, html`
@@ -94,7 +78,7 @@ export default async function montar(ctx) {
       titulo: 'Nenhum serviço aqui',
       texto: usaFiltroDeMes(estado.status) ? 'Não há serviços nesta situação neste mês. Tente outro mês.' : 'Não há agendamentos em aberto.',
     })}</div>`
-    : html`<div class="lista" id="itens">${lista.map(cartao)}</div>`}
+    : html`<div class="lista" id="itens">${agruparConcluidos(lista).map((g) => cartaoDaVisita(g, { mostrarData: true }))}</div>`}
         ${temMais ? botao({ texto: `Ver mais ${PAGINA_SERVICOS}`, variante: 'secundario', acao: 'ver-mais', bloco: true }) : ''}
         ${!temMais && lista.length > 0 ? html`<p class="fim-da-lista">Fim da lista</p>` : ''}
       </div>`);
