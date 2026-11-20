@@ -158,7 +158,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
       ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
       ${unica
     ? (precisaInformarAparelhoEServico(unica)
-      ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${unica.id}?informar=1`, pequeno: true })
+      ? botao({ texto: unica.aparelhoId ? 'Informar o serviço' : 'Informar aparelho e serviço', iconeNome: 'editar', href: `#/servico/${unica.id}?informar=1`, pequeno: true })
       : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${unica.id}`, pequeno: true }))
     : botao({ texto: 'Concluir', iconeNome: 'check', href, pequeno: true })}
     </div>`;

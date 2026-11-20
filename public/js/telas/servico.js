@@ -32,6 +32,7 @@ export default async function montar(ctx) {
   const { raiz, params, ir } = ctx;
   const usuario = contextoDoUsuario();
   const voltarPara = '#/agenda';
+  let linhasDaTela = []; // linhas da visita que estão na tela (para saber quais serviços cada aparelho já tem)
   let desligar = () => {}; // remove os cliques ao sair da tela (não vazam para a próxima)
 
   async function carregar() {
@@ -55,7 +56,7 @@ export default async function montar(ctx) {
       desenhar(servico, linhas, valores);
       if (ctx.consulta?.get('informar') === '1' && linhas.some((l) => l.status === STATUS.AGENDADO)) {
         history.replaceState(null, '', `#/servico/${encodeURIComponent(servico.id)}`); // tira o "?informar=1" para não reabrir ao voltar
-        setTimeout(() => raiz.querySelector('[data-acao="adicionar-servico"]')?.click(), 0);
+        setTimeout(() => raiz.querySelector('[data-acao="informar-servico"], [data-acao="adicionar-servico"]')?.click(), 0);
       }
       // O administrador abriu: o aviso de "incluído em campo" some do Início (sem atrapalhar a tela se falhar).
       if (usuario.admin) marcarIncluidosComoVistos(usuario.empresaId, linhas).catch(() => {});
@@ -74,6 +75,28 @@ export default async function montar(ctx) {
       mapa.get(chave).push(l);
     }
     return [...mapa.entries()];
+  }
+
+  /** Serviços ainda NÃO informados neste aparelho (nesta visita): os já informados não aparecem mais. */
+  function servicosQueFaltam(aparelhoId) {
+    const jaTem = linhasDaTela.filter((x) => x.status === STATUS.AGENDADO && x.aparelhoId === aparelhoId && x.tipoServicoId).map((x) => x.tipoServicoId);
+    return tiposAtivos().filter((t) => !jaTem.includes(t.id));
+  }
+
+  /**
+   * O botão principal de uma linha ainda aberta (pacote 23):
+   *   - sem aparelho: "Informar aparelho e serviço" (pergunta os dois);
+   *   - com aparelho e sem serviço: "Informar o serviço" (não pergunta o aparelho; só oferece o que ainda falta);
+   *   - tudo informado: "Concluir serviço".
+   */
+  function botaoDaLinha(l) {
+    if (!precisaInformarAparelhoEServico(l)) return botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true });
+    if (l.aparelhoId && !l.tipoServicoId) {
+      return servicosQueFaltam(l.aparelhoId).length > 0
+        ? botao({ texto: 'Informar o serviço', iconeNome: 'mais', acao: 'informar-servico', dados: { id: l.id }, bloco: true })
+        : html`<p class="texto-suave texto-pequeno">Todos os serviços deste aparelho já foram informados.</p>`;
+    }
+    return botao({ texto: 'Informar aparelho e serviço', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true });
   }
 
   /** `repetidos`: o que o cabeçalho e o cartão de cima já dizem (título do serviço, técnicos, situação) e não precisa se repetir na linha. */
@@ -115,9 +138,7 @@ export default async function montar(ctx) {
         ${concluida && usuario.admin && cobraveis.some((c) => c.id === l.id) && botao({ texto: 'Cobrar no WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: l.id }, pequeno: true })}
         ${concluida && usuario.admin ? html`<div class="acoes-cartao">${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}</div>` : ''}
         ${concluida && usuario.admin && !valor ? aviso({ tom: 'amarelo', texto: 'Este serviço ainda não tem valor. Informe aqui ou em Financeiro > Concluídos sem valor.' }) : ''}
-        ${agendada && (precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar aparelho e serviço', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true })
-    : botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true }))}
+        ${agendada && botaoDaLinha(l)}
         ${agendada && !usuario.admin && l.adicionadoPeloTecnico === true && html`
           <div class="acoes-cartao">
             ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-adicionado', dados: { id: l.id }, pequeno: true })}
@@ -138,6 +159,7 @@ export default async function montar(ctx) {
   }
 
   function desenhar(s, linhas, valores) {
+    linhasDaTela = linhas;
     const totalDaVisita = linhas.reduce((t, l) => t + (valores[l.id]?.valorCentavos || 0), 0);
     const concluidasComValor = linhas.filter((l) => valores[l.id]).length;
     const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
@@ -299,6 +321,7 @@ export default async function montar(ctx) {
         registrarCobranca(usuario.empresaId, ids).then(() => ctx.recarregar()).catch(mostrarErro);
       },
       'adicionar-servico': (el) => adicionarServico(el, s, abertas),
+      'informar-servico': (el) => informarServicoDoAparelho(el, linhas.find((l) => l.id === el.dataset.id), abertas),
       cancelar: async (el) => {
         if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data. O cliente não será avisado automaticamente.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;
         await comCarregando(el, async () => {
@@ -320,6 +343,34 @@ export default async function montar(ctx) {
           } catch (e) { mostrarErro(e); }
         });
       },
+    });
+  }
+
+  /** O aparelho já está na linha: só falta o serviço. Oferece apenas os serviços que o aparelho ainda não tem na visita. */
+  async function informarServicoDoAparelho(el, linha, abertas) {
+    if (!linha) return;
+    await comCarregando(el, async () => {
+      try {
+        const aparelhos = await listarAparelhosDoCliente(usuario.empresaId, linha.clienteId).catch(() => []);
+        const aparelho = aparelhos.find((a) => a.id === linha.aparelhoId);
+        if (!aparelho) { await adicionarServico(el, linha, abertas); return; } // aparelho apagado: volta ao caminho completo
+        const tipos = servicosQueFaltam(aparelho.id);
+        if (tipos.length === 0) { toast('Este aparelho já tem todos os serviços disponíveis nesta visita.', 'erro'); return; }
+        const tipoId = await escolher({
+          titulo: 'Qual serviço?',
+          opcoes: tipos.map((t) => ({ id: t.id, rotulo: `${t.nome} · ${textoDoRetorno(t)}` })),
+        });
+        if (!tipoId) return;
+        await informarServicoNaVisita({
+          empresaId: usuario.empresaId,
+          aparelho,
+          tipo: sessao.tipos.find((t) => t.id === tipoId),
+          tecnico: usuario.admin ? null : { uid: usuario.uid, nome: usuario.nome },
+          linhasDaVisita: abertas,
+        });
+        toast('Serviço informado.', 'sucesso');
+        ctx.recarregar();
+      } catch (e) { mostrarErro(e); }
     });
   }
 

@@ -211,3 +211,10 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - Técnico em campo: nas listas do dia continua vendo "Ir até o cliente" e "Concluir" no próprio cartão (com vários serviços abertos, "Concluir" abre a página para escolher).
 - O destaque vermelho dos atrasados e os avisos "Passou de..." e "avisou atraso" continuam no cartão.
 - Nada mudou nas regras do Firestore: não há deploy de regras neste pacote.
+
+## Pacote 23 — "Informar o serviço" e dados completos na página do cliente
+
+- **Botão da linha "Serviço a definir":** sem aparelho = "Informar aparelho e serviço" (pergunta os dois). Com aparelho e sem serviço = "Informar o serviço": não pergunta o aparelho e só oferece os serviços que ESSE aparelho ainda não tem na visita (os já informados saem da lista; vale por aparelho, cada aparelho tem o seu botão). Se todos já foram informados, o botão some e aparece o aviso. O mesmo vale para o técnico (o serviço continua "incluído pelo técnico"). Nas listas, o cartão do técnico usa os mesmos textos.
+- **Página do cliente (link de horários), passo 3:** Nome, **WhatsApp** e **endereço** obrigatórios (rua, número e cidade); bairro, complemento, estado e **ponto de referência** opcionais. Botão "Usar minha localização": antes de pedir a permissão do aparelho, pergunta "Você está no local do atendimento?". Sim = GPS + Nominatim preenchem rua, bairro, cidade e estado (o número o cliente digita). Não = o botão some e o endereço é à mão. Falha do GPS ou da internet = mensagem e preenchimento à mão (o botão continua).
+- **Ponto no mapa:** só vai na mensagem (link do Google Maps) se o endereço veio do GPS e o cliente NÃO mudou a rua nem a cidade depois.
+- **Mensagem do pedido** ganha 📍 endereço, 📌 referência e 🗺️ mapa. O botão "Técnico: abrir no app" leva tudo no endereço do link; o Agendar mostra endereço e referência no aviso "Pedido do cliente", e "Cadastrar cliente novo" já vem com o endereço preenchido (a referência vai para as observações). Nada é guardado no banco pela página pública. Regras do Firestore não mudam.
