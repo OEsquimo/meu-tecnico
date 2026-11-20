@@ -12,6 +12,7 @@ import { botao, selo, estadoVazio, cabecalho } from '../nucleo/componentes.js';
 import { traduzirErro, ehErroDeRede } from '../nucleo/erros.js';
 import { sessao } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
+import { seloDaLista } from '../dominio/lista-servicos.js';
 import { estaAtrasado, precisaInformarAparelhoEServico, seloDoServico, textoDosTecnicos, nomesDosTecnicos, nomesDosServicos, tecnicosDaVisita, diaDaConclusao } from '../dominio/servicos.js';
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
@@ -121,7 +122,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
   const atrasada = linhas.find((l) => estaAtrasado(l));
   const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
   const principal = atrasada || abertas[0] || linhas.find((l) => l.status === STATUS.CANCELADO) || primeira;
-  const situacao = seloDoServico(principal);
+  const situacao = seloDaLista(principal);
   const concluido = linhas.every((l) => l.status === STATUS.CONCLUIDO);
   const doTecnico = acoes && !editar;
   const unica = doTecnico && abertas.length === 1 ? abertas[0] : null;

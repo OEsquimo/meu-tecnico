@@ -73,6 +73,13 @@ with sync_playwright() as p:
     pag.locator(".servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1200)
     ok("/servico/" in pag.url and "Carlos Menezes" in pag.inner_text("#conteudo"), "tocar no concluído abre a página do agendamento")
 
+    # Menu Serviços: também um cartão por agendamento, com o(s) serviço(s)
+    ir("/servicos")
+    ok(pag.locator("#itens .servico-cartao").count() >= 1 and pag.locator("#itens a.item-lista").count() == 0, "Serviços lista um cartão por agendamento")
+    ok(pag.locator("#itens .servico-cartao [data-resumo=servicos]").count() >= 1, "Serviços mostra o(s) serviço(s) no resumo")
+    pag.locator("#itens .servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1000)
+    ok("/servico/" in pag.url, "em Serviços, tocar abre a página do agendamento")
+
     # Ficha do cliente
     ir("/clientes")
     pag.locator(".item-lista:has-text('Maria Souza')").first.click(); pag.wait_for_timeout(1200)
