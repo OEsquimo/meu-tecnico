@@ -3,7 +3,7 @@
 // =============================================================================
 // É a página que o cliente abre pelo link que o administrador mandou no WhatsApp. Uma tela só,
 // de cima para baixo, em 3 passos numerados:
-//   1) Escolha o dia   2) Escolha o horário (manhã e tarde)   3) Seus dados (nome; WhatsApp é opcional)
+//   1) Escolha o dia   2) Escolha o horário (manhã e tarde)   3) Seus dados (nome, WhatsApp e endereço; referência é opcional)
 // Ao tocar em "Pedir este horário" aparece "Quase lá": o cliente toca em enviar no WhatsApp e o pedido
 // chega ao administrador (com o botão "Técnico: abrir no app"). A página NÃO agenda nada sozinha.
 //
@@ -11,7 +11,7 @@
 // guarda dado nenhum de cliente. Linguagem simples, botões grandes, nunca fica sem saída.
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, levarAte, avancarEntreCampos } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, levarAte, avancarEntreCampos, escolher, comCarregando } from '../nucleo/ui.js';
 import { botao, aviso, estadoVazio, campoTexto } from '../nucleo/componentes.js';
 import { icone } from '../nucleo/icones.js';
 import { mesVizinho } from '../dominio/agenda.js';
@@ -19,9 +19,11 @@ import { calendarioDoMes } from './calendario-comum.js';
 import { formatarDiaExtenso, formatarMesAno, hojeISO } from '../dominio/datas.js';
 import { mascararTelefoneDigitando, formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
+import { linhaDoEndereco } from '../dominio/endereco.js';
 import {
   lerLinkDeHorarios, periodoDoHorario, validarPedidoDoCliente, mensagemDoPedido, linkDoPedidoNoApp, enderecoBaseDoApp,
 } from '../dominio/link-horarios.js';
+import { obterLocalizacao, buscarPorCoordenadas } from '../servicos/cep.js';
 import { carregarEstilos } from './servicos-comum.js';
 
 const ROTULOS_PERIODO = { manha: 'Manhã', tarde: 'Tarde' };
@@ -60,6 +62,9 @@ export default async function montar(ctx) {
   let hora = '';
   let nome = '';
   let whatsapp = '';
+  let semGps = false; // o cliente disse que NÃO está no local: o botão da localização some
+  let coordenadas = null; // só existe se o endereço veio do GPS e a rua e a cidade não foram mexidas depois
+  let origemGps = null; // rua e cidade que o GPS trouxe (para saber se o cliente mexeu)
 
   const temDiaNoMes = (a, m) => link.dias.some((d) => d.iso.startsWith(`${a}-${String(m + 1).padStart(2, '0')}-`));
 
@@ -118,27 +123,80 @@ export default async function montar(ctx) {
       <form id="form-pedido" class="formulario" novalidate>
         <div data-erros-gerais></div>
         ${campoTexto({ nome: 'nome', rotulo: 'Seu nome', valor: nome, maximo: 100, autocompletar: 'name' })}
-        ${campoTexto({ nome: 'whatsapp', rotulo: 'Seu WhatsApp', opcional: true, tipo: 'tel', modo: 'tel', placeholder: '(11) 91234-5678', autocompletar: 'tel', valor: whatsapp })}
+        ${campoTexto({ nome: 'whatsapp', rotulo: 'Seu WhatsApp', tipo: 'tel', modo: 'tel', placeholder: '(11) 91234-5678', autocompletar: 'tel', valor: whatsapp })}
+        <h3 class="passo__subtitulo">Onde será o atendimento?</h3>
+        <div id="area-gps"></div>
+        ${campoTexto({ nome: 'rua', rotulo: 'Rua ou avenida', maximo: 120, autocompletar: 'street-address' })}
+        ${campoTexto({ nome: 'numero', rotulo: 'Número', maximo: 15, placeholder: 'Se não tiver, escreva S/N' })}
+        ${campoTexto({ nome: 'complemento', rotulo: 'Complemento', opcional: true, maximo: 60, placeholder: 'Apto, bloco, casa dos fundos...' })}
+        ${campoTexto({ nome: 'bairro', rotulo: 'Bairro', opcional: true, maximo: 80 })}
+        ${campoTexto({ nome: 'cidade', rotulo: 'Cidade', maximo: 80, autocompletar: 'address-level2' })}
+        ${campoTexto({ nome: 'uf', rotulo: 'Estado (sigla)', opcional: true, maximo: 2, placeholder: 'Ex.: PE' })}
+        ${campoTexto({ nome: 'referencia', rotulo: 'Ponto de referência', opcional: true, maximo: 120, placeholder: 'Ex.: portão azul, em frente à padaria' })}
         ${botao({ texto: 'Pedir este horário', tipo: 'submit', bloco: true })}
       </form>`);
     const form = raiz.querySelector('#form-pedido');
     form.elements.nome.addEventListener('input', (e) => { nome = e.target.value; });
     form.elements.whatsapp.addEventListener('input', (e) => { e.target.value = mascararTelefoneDigitando(e.target.value); whatsapp = e.target.value; });
-    avancarEntreCampos(form); // Enter no nome vai para o WhatsApp
+    desenharGps();
+    // Mexer na rua ou na cidade depois do GPS: o ponto do mapa deixa de valer.
+    form.addEventListener('input', (e) => {
+      if (!coordenadas || !origemGps) return;
+      if ((e.target.name === 'rua' && e.target.value.trim() !== origemGps.rua) || (e.target.name === 'cidade' && e.target.value.trim() !== origemGps.cidade)) coordenadas = null;
+    });
+    avancarEntreCampos(form); // Enter vai passando de campo em campo
     aoEnviar(form, () => enviar(form));
+  }
+
+  /** Botão "Usar minha localização" (some se o cliente disser que não está no local). */
+  function desenharGps() {
+    const area = raiz.querySelector('#area-gps');
+    if (!area) return;
+    mostrar(area, semGps ? '' : html`
+      ${botao({ texto: 'Usar minha localização', variante: 'secundario', iconeNome: 'local', acao: 'usar-localizacao', bloco: true })}
+      <p class="campo__ajuda">Ou preencha o endereço abaixo.</p>`);
+  }
+
+  async function usarLocalizacao(el) {
+    const form = raiz.querySelector('#form-pedido');
+    limparErrosGerais(form);
+    const resposta = await escolher({
+      titulo: 'Você está no local do atendimento?',
+      mensagem: 'A localização só vale se você estiver agora no lugar onde o serviço será feito.',
+      opcoes: [{ id: 'sim', rotulo: 'Sim, estou aqui' }, { id: 'nao', rotulo: 'Não, vou digitar o endereço' }],
+      cancelar: 'Voltar',
+    });
+    if (resposta === 'nao') { semGps = true; desenharGps(); form.elements.rua.focus(); return; }
+    if (resposta !== 'sim') return;
+    await comCarregando(el, async () => {
+      try {
+        const achado = await buscarPorCoordenadas(await obterLocalizacao());
+        for (const [campo, valor] of Object.entries({ rua: achado.rua, numero: achado.numero, bairro: achado.bairro, cidade: achado.cidade, uf: achado.uf })) {
+          if (valor) form.elements[campo].value = valor;
+        }
+        coordenadas = { lat: achado.lat, lng: achado.lng };
+        origemGps = { rua: (achado.rua || '').trim(), cidade: (achado.cidade || '').trim() };
+        mostrarErrosNosCampos(form, {});
+        (form.elements.numero.value ? form.elements.complemento : form.elements.numero).focus();
+        const dica = raiz.querySelector('#area-gps');
+        dica.insertAdjacentHTML('beforeend', '<p class="campo__ajuda" role="status">Confira o endereço e complete o número.</p>');
+      } catch (erro) {
+        mostrarErrosNosCampos(form, { geral: erro?.message || 'Não consegui pegar sua localização. Preencha o endereço à mão.' });
+      }
+    });
   }
 
   function enviar(form) {
     limparErrosGerais(form);
-    const r = validarPedidoDoCliente(lerCampos(form));
+    const r = validarPedidoDoCliente({ ...lerCampos(form), lat: coordenadas?.lat, lng: coordenadas?.lng });
     if (!r.valido) { mostrarErrosNosCampos(form, r.erros); return; }
     const base = enderecoBaseDoApp(window.location.href);
-    const linkApp = linkDoPedidoNoApp(base, { data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp });
-    const mensagem = mensagemDoPedido({ empresa: link.empresa, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, servico: link.servico, linkApp });
-    desenharQuaseLa({ nome: r.dados.nome, whatsappCliente: r.dados.whatsapp, mensagem });
+    const linkApp = linkDoPedidoNoApp(base, { data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia });
+    const mensagem = mensagemDoPedido({ empresa: link.empresa, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servico: link.servico, linkApp });
+    desenharQuaseLa({ nome: r.dados.nome, whatsappCliente: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, mensagem });
   }
 
-  function desenharQuaseLa({ nome: nomeCliente, whatsappCliente, mensagem }) {
+  function desenharQuaseLa({ nome: nomeCliente, whatsappCliente, endereco, referencia, mensagem }) {
     mostrar(raiz, html`
       <div class="pagina-cliente">
         ${marca(link.empresa)}
@@ -147,6 +205,7 @@ export default async function montar(ctx) {
           <div class="resumo-pedido__linha">${icone('agenda', 20)}<span>${formatarDiaExtenso(dia)} às ${hora}</span></div>
           <div class="resumo-pedido__linha">${icone('clientes', 20)}<span>${nomeCliente}</span></div>
           ${whatsappCliente && html`<div class="resumo-pedido__linha">${icone('whatsapp', 20)}<span>${formatarTelefone(whatsappCliente)}</span></div>`}
+          ${endereco && html`<div class="resumo-pedido__linha">${icone('local', 20)}<span>${linhaDoEndereco(endereco)}${referencia ? ` · Ref.: ${referencia}` : ''}</span></div>`}
         </section>
         ${aviso({ titulo: 'Falta só um toque', texto: 'Toque no botão abaixo e, no WhatsApp, aperte Enviar. É assim que o técnico recebe o seu pedido e confirma o horário com você.' })}
         ${botao({ texto: 'Enviar no WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', bloco: true, externo: true, href: linkWhatsapp(link.whatsapp, mensagem), id: 'enviar-pedido' })}
@@ -178,6 +237,7 @@ export default async function montar(ctx) {
       desenharDados();
       if (primeira) levarAte(raiz.querySelector('#passo-dados'), { focar: false });
     },
+    'usar-localizacao': (el) => usarLocalizacao(el),
     mudar: () => ctx.recarregar(),
   });
   return desligar;

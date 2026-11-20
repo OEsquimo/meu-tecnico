@@ -27,7 +27,7 @@ import { contatosSuportados, escolherContato } from '../servicos/contatos.js';
 import { validarCliente } from '../dominio/validacoes.js';
 import { formatarTelefone, mascararTelefoneDigitando, normalizarWhatsappBR, somenteDigitos } from '../dominio/telefone.js';
 import { formatarCEP, novoEndereco } from '../dominio/endereco.js';
-import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
+import { lerPedidoDaConsulta, pedidoNaConsulta } from '../dominio/link-horarios.js';
 import { acharClientesParecidos, textoDoAvisoDeCliente } from '../dominio/duplicidade.js';
 import { telaDeErro } from './clientes-comum.js';
 
@@ -154,8 +154,8 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
   };
 
   // ---- 2. Desenha o formulário ----
-  const enderecosIniciais = (cliente?.enderecos?.length ? cliente.enderecos : [novoEndereco()]).slice(0, MAXIMO_ENDERECOS);
-  const modoInicial = editando ? 'manual' : 'cep';
+  const enderecosIniciais = (cliente?.enderecos?.length ? cliente.enderecos : [novoEndereco(pedido?.endereco || {})]).slice(0, MAXIMO_ENDERECOS);
+  const modoInicial = editando || pedido?.endereco ? 'manual' : 'cep'; // pedido do cliente com endereço: já vem preenchido
 
   mostrar(raiz, html`
     ${cabecalho({ titulo: editando ? 'Editar cliente' : 'Novo cliente', voltarPara: true })}
@@ -179,7 +179,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
       </div>
 
       <section class="cartao pilha">
-        ${campoTextoLongo({ nome: 'observacoes', rotulo: 'Observações', valor: cliente?.observacoes ?? '', opcional: true, maximo: 1000, placeholder: 'Ex.: portão azul, cachorro bravo, horário preferido...' })}
+        ${campoTextoLongo({ nome: 'observacoes', rotulo: 'Observações', valor: cliente?.observacoes ?? (pedido?.referencia ? `Referência: ${pedido.referencia}` : ''), opcional: true, maximo: 1000, placeholder: 'Ex.: portão azul, cachorro bravo, horário preferido...' })}
       </section>
 
       ${botao({ texto: editando ? 'Salvar alterações' : 'Cadastrar cliente', tipo: 'submit', bloco: true })}
@@ -403,8 +403,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         if (existente) {
           if (daAgenda) voltarAoAgendar(existente.id);
           else if (pedido) {
-            const q = new URLSearchParams({ cliente: existente.id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
-            if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);
+            const q = pedidoNaConsulta(new URLSearchParams({ cliente: existente.id, pedido: '1', data: pedido.data, hora: pedido.hora }), pedido);
             ir(`/agendar?${q.toString()}`, { substituir: true });
           } else ir(`/cliente/${encodeURIComponent(existente.id)}`, { substituir: true });
           return;
@@ -416,8 +415,7 @@ export default async function montar({ raiz, params, consulta, sessao, ir, volta
         if (editando && consulta?.get('voltar') === '1') voltar('/agendar');
         else if (daAgenda) voltarAoAgendar(id);
         else if (pedido) {
-          const q = new URLSearchParams({ cliente: id, pedido: '1', data: pedido.data, hora: pedido.hora, nome: pedido.nome });
-          if (pedido.whatsapp) q.set('whatsapp', pedido.whatsapp);
+          const q = pedidoNaConsulta(new URLSearchParams({ cliente: id, pedido: '1', data: pedido.data, hora: pedido.hora }), pedido);
           ir(`/agendar?${q.toString()}`, { substituir: true });
         } else ir(`/cliente/${encodeURIComponent(id)}`, { substituir: true });
       } catch (erro) {

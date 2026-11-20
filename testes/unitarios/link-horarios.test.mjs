@@ -105,14 +105,25 @@ test('período: manhã antes do meio-dia, tarde depois', () => {
   assert.equal(periodoDoHorario('17:30'), 'tarde');
 });
 
-test('pedido do cliente: nome obrigatório, WhatsApp opcional mas válido', () => {
-  assert.equal(validarPedidoDoCliente({ nome: '', whatsapp: '' }).erros.nome, 'Digite o seu nome.');
-  assert.equal(validarPedidoDoCliente({ nome: 'A', whatsapp: '' }).valido, false);
-  const semZap = validarPedidoDoCliente({ nome: '  Maria   Souza ', whatsapp: '' });
-  assert.equal(semZap.valido, true);
-  assert.deepEqual(semZap.dados, { nome: 'Maria Souza', whatsapp: '' });
-  assert.ok(validarPedidoDoCliente({ nome: 'Maria', whatsapp: '123' }).erros.whatsapp);
-  assert.equal(validarPedidoDoCliente({ nome: 'Maria', whatsapp: '(81) 98325-9341' }).dados.whatsapp, '5581983259341');
+const END = { rua: 'Rua das Flores', numero: '120', cidade: 'Recife' };
+
+test('pedido do cliente (pacote 23): nome, WhatsApp e endereço obrigatórios; referência opcional', () => {
+  assert.equal(validarPedidoDoCliente({ nome: '', whatsapp: '(81) 98325-9341', ...END }).erros.nome, 'Digite o seu nome.');
+  assert.equal(validarPedidoDoCliente({ nome: 'A', whatsapp: '(81) 98325-9341', ...END }).valido, false);
+  assert.equal(validarPedidoDoCliente({ nome: 'Maria', whatsapp: '', ...END }).erros.whatsapp, 'Digite o seu WhatsApp, com DDD.');
+  assert.ok(validarPedidoDoCliente({ nome: 'Maria', whatsapp: '123', ...END }).erros.whatsapp);
+  const semEndereco = validarPedidoDoCliente({ nome: 'Maria', whatsapp: '(81) 98325-9341' });
+  assert.equal(semEndereco.valido, false);
+  assert.ok(semEndereco.erros.rua && semEndereco.erros.numero && semEndereco.erros.cidade, 'rua, número e cidade são obrigatórios');
+  const ok = validarPedidoDoCliente({ nome: '  Maria   Souza ', whatsapp: '(81) 98325-9341', ...END, referencia: ' portão  azul ' });
+  assert.equal(ok.valido, true);
+  assert.equal(ok.dados.nome, 'Maria Souza');
+  assert.equal(ok.dados.whatsapp, '5581983259341');
+  assert.equal(ok.dados.endereco.rua, 'Rua das Flores');
+  assert.equal(ok.dados.endereco.lat, null);
+  assert.equal(ok.dados.referencia, 'portão azul');
+  const gps = validarPedidoDoCliente({ nome: 'Maria', whatsapp: '(81) 98325-9341', ...END, lat: -8.05, lng: -34.9 });
+  assert.equal(gps.dados.endereco.lat, -8.05);
 });
 
 test('mensagens: link do administrador e pedido do cliente com "Técnico: abrir no app"', () => {
@@ -131,11 +142,11 @@ test('mensagens: link do administrador e pedido do cliente com "Técnico: abrir 
 test('ler o pedido no Agendar: só vale com pedido=1, data e hora certas', () => {
   const linkApp = linkDoPedidoNoApp('https://x/', { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341' });
   const consulta = new URLSearchParams(linkApp.split('?')[1]);
-  assert.deepEqual(lerPedidoDaConsulta(consulta), { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341' });
+  assert.deepEqual(lerPedidoDaConsulta(consulta), { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341', endereco: null, referencia: '' });
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('data=2031-04-14&hora=09:00')), null, 'sem pedido=1 é o fluxo normal');
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-02-31&hora=09:00')), null);
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=25:00')), null);
-  assert.deepEqual(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&whatsapp=1')), { data: SEG, hora: '09:00', nome: '', whatsapp: '' }, 'WhatsApp estragado é ignorado');
+  assert.deepEqual(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&whatsapp=1')), { data: SEG, hora: '09:00', nome: '', whatsapp: '', endereco: null, referencia: '' }, 'WhatsApp estragado é ignorado');
   assert.equal(lerPedidoDaConsulta(null), null);
 });
 
@@ -152,4 +163,20 @@ test('o link e o pedido mantêm o ?demo=1 para abrir no modo demonstração', ()
   const link = montarLinkDeHorarios({ base, empresa: 'X', whatsapp: '5581983259341', dias: [{ iso: SEG, horas: ['09:00'] }], geradoEm: SEG });
   assert.ok(link.startsWith('https://a.b/meu-tecnico/?demo=1#/horarios?'), link);
   assert.ok(linkDoPedidoNoApp(base, { data: SEG, hora: '09:00', nome: 'Maria' }).startsWith('https://a.b/meu-tecnico/?demo=1#/agendar?'));
+});
+
+test('pedido com endereço: vai no link do app, volta igual e entra na mensagem (com o mapa só se veio do GPS)', () => {
+  const endereco = { rua: 'Rua das Flores', numero: '120', complemento: 'apto 4', bairro: 'Boa Viagem', cidade: 'Recife', uf: 'PE', lat: -8.05, lng: -34.9 };
+  const linkApp = linkDoPedidoNoApp('https://x/', { data: SEG, hora: '09:00', nome: 'Maria', whatsapp: '5581983259341', endereco, referencia: 'portão azul' });
+  const lido = lerPedidoDaConsulta(new URLSearchParams(linkApp.split('?')[1]));
+  assert.deepEqual(lido.endereco, endereco);
+  assert.equal(lido.referencia, 'portão azul');
+  const msg = mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'Maria', whatsapp: '5581983259341', endereco, referencia: 'portão azul', linkApp });
+  assert.match(msg, /📍 Rua das Flores, 120, apto 4 · Boa Viagem · Recife\/PE/);
+  assert.match(msg, /📌 Referência: portão azul/);
+  assert.match(msg, /🗺️ https:\/\/www\.google\.com\/maps\?q=-8\.05,-34\.9/);
+  const semGps = { ...endereco, lat: null, lng: null };
+  const msg2 = mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'Maria', endereco: semGps, linkApp });
+  assert.ok(!msg2.includes('🗺️') && !msg2.includes('📌'), 'sem GPS não há link de mapa; sem referência não há linha');
+  assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&lat=999&lng=1&rua=R')).endereco.lat, null, 'ponto inválido é ignorado');
 });
