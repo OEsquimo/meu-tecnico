@@ -63,7 +63,10 @@ with sync_playwright() as p:
 
     # ---- Início: Cancelar e Excluir ----
     ir("/")
-    ok(pag.locator("[data-acao=cancelar-visita]").count() == 1 and pag.locator("[data-acao=excluir-visita]").count() == 1, "Início tem Cancelar e Excluir na próxima visita")
+    # Pacote 22: o cartão do Início é só resumo; Cancelar e Excluir ficam na página do agendamento que ele abre.
+    pag.locator(".servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1000)
+    ok(pag.locator("[data-acao=cancelar]").count() == 1 and pag.locator("[data-acao=excluir]").count() == 1, "a página da próxima visita tem Cancelar e Excluir")
+    ir("/")
     ok(sem_rolagem_lateral(), "Início sem rolagem lateral (390px)")
 
     # ---- Telas sem texto espremido (390px) ----

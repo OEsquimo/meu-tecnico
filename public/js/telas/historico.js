@@ -13,15 +13,15 @@
 // =============================================================================
 
 import { html, mostrar, esperarDigitar, comCarregando, mostrarErro } from '../nucleo/ui.js';
-import { cabecalho, botao, itemLista, estadoVazio, esqueletos, selo, campoSelecao } from '../nucleo/componentes.js';
+import { cabecalho, botao, estadoVazio, esqueletos, campoSelecao } from '../nucleo/componentes.js';
 import { textoParaBusca, bruto } from '../nucleo/ui-texto.js';
 import { sessao } from '../nucleo/sessao.js';
 import { listarHistorico } from '../servicos/servicos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { formatarDataBR, combinarDataHora } from '../dominio/datas.js';
 import { PAGINA_HISTORICO, LIMITE_BUSCA_HISTORICO } from '../nucleo/constantes.js';
-import { textoDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
-import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar } from './servicos-comum.js';
+import { servicoTemTecnico, agruparConcluidos, chaveDoAgendamento } from '../dominio/servicos.js';
+import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita } from './servicos-comum.js';
 
 /** AAAA-MM-DD do dia seguinte (para o "até" ser inclusivo). */
 function diaSeguinte(iso) {
@@ -73,12 +73,16 @@ export default async function montar(ctx) {
     }
   }
 
-  /** Lista final: filtra na tela o que foi lido. */
+  /**
+   * Lista final: um cartão por agendamento. Filtra linha a linha; o agendamento aparece se QUALQUER linha
+   * combina, e aberto mostra todas as linhas dele.
+   */
   function filtrados() {
     const t = textoParaBusca(filtro.texto);
-    return dados.filter((s) => (!t || textoParaBusca(`${s.clienteNome} ${s.aparelhoResumo || ''}`).includes(t))
+    const chaves = new Set(dados.filter((s) => (!t || textoParaBusca(`${s.clienteNome} ${s.aparelhoResumo || ''}`).includes(t))
       && (!filtro.servico || s.tipoServicoNome === filtro.servico)
-      && (!filtro.tecnico || servicoTemTecnico(s, filtro.tecnico)));
+      && (!filtro.tecnico || servicoTemTecnico(s, filtro.tecnico))).map(chaveDoAgendamento));
+    return agruparConcluidos(dados).filter((g) => chaves.has(g.chave));
   }
 
   function desenhar() {
@@ -115,12 +119,7 @@ export default async function montar(ctx) {
         titulo: dados.length || comFiltro ? 'Nada encontrado' : 'Nenhum serviço concluído ainda',
         texto: dados.length || comFiltro ? 'Tente outro nome, serviço ou período.' : 'Quando você concluir serviços, eles aparecem aqui.',
       })
-      : html`${aparecem.map((s) => itemLista({
-        href: `#/servico/${s.id}`,
-        titulo: s.clienteNome,
-        sub: `${s.tipoServicoNome} · ${formatarDataBR(s.dataConclusao)}${textoDosTecnicos(s) ? ` · ${textoDosTecnicos(s)}` : ''}${s.adicionadoPeloTecnico === true ? ' · incluído pelo técnico' : ''}`,
-        direita: usuario.admin && s.valorDefinido === false ? selo('Sem valor', 'amarelo') : (s.pago ? selo('Pago', 'verde') : selo('A receber', 'amarelo')),
-      }))}`);
+      : html`${aparecem.map((g) => cartaoDaVisita(g, { mostrarData: true }))}`);
 
     // Mais registros: no modo página, pode haver mais no banco; no modo busca, mais além dos que aparecem.
     const temMais = modoBusca ? todos.length > aparecem.length : dados.length >= lido.limite;

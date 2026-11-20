@@ -25,7 +25,7 @@ import { seloDoServico, agruparAgendamentos, precisaInformarAparelhoEServico, ST
 import { formatarDataBR } from '../dominio/datas.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { telaDeErro, carregarEstilosClientes, lerDescricaoAparelho } from './clientes-comum.js';
-import { linkLigar, oferecerAvisoDasLinhas } from './servicos-comum.js';
+import { linkLigar, oferecerAvisoDasLinhas, cartaoDaVisita } from './servicos-comum.js';
 
 /** Quantos agendamentos (visitas) aparecem na ficha. */
 const MAXIMO_HISTORICO = 15;
@@ -145,46 +145,11 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
           ${visitas.length > 0 && html`
             <div class="pilha pilha--pequena">
               ${visitas.slice(0, MAXIMO_HISTORICO).map((v) => {
-                const principal = v.linhas.find((l) => l.status === STATUS.AGENDADO) || v.linhas.find((l) => l.status === STATUS.CANCELADO) || v.linhas[0];
-                const situacao = seloDoServico(principal);
-                const abertas = v.linhas.filter((l) => l.status === STATUS.AGENDADO);
-                const aguardando = v.status === STATUS.CANCELADO;
-                const aberta = v.status === STATUS.AGENDADO;
-                const nomes = [...new Set(v.linhas.map((l) => l.tipoServicoNome))].join(', ');
-                const aparelhosDaVisita = [...new Set(v.linhas.map((l) => l.aparelhoResumo).filter(Boolean))].join(', ');
-                return html`
-                  <div class="visita-cliente">
-                    ${itemLista({
-                      href: `#/servico/${encodeURIComponent(principal.id)}`,
-                      titulo: nomes,
-                      sub: [formatarDataBR(v.dataAgendada), aparelhosDaVisita].filter(Boolean).join(' · '),
-                      direita: selo(situacao.texto, situacao.tom),
-                    })}
-                    ${abertas.length > 0 && html`
-                      <div class="visita-cliente__servicos">
-                        ${abertas.map((l) => html`
-                          <div class="visita-linha">
-                            <div class="expande">
-                              <div class="visita-linha__nome">${l.tipoServicoNome}</div>
-                              ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
-                              ${l.aparelhoResumo && html`<div class="item-lista__sub">${l.aparelhoResumo}</div>`}
-                            </div>
-                            ${precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${encodeURIComponent(l.id)}?informar=1`, pequeno: true })
-    : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${encodeURIComponent(l.id)}`, pequeno: true })}
-                          </div>`)}
-                      </div>`}
-                    ${(aberta || aguardando) && html`
-                      <div class="acoes-cartao">
-                        ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${encodeURIComponent(principal.id)}/editar`, pequeno: true })}
-                        ${aberta && botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: v.chave }, pequeno: true })}
-                        ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: v.chave }, pequeno: true })}
-                      </div>`}
-                  </div>`;
+                return cartaoDaVisita(v, { mostrarData: true });
               })}
             </div>
             ${visitas.length > MAXIMO_HISTORICO && html`<p class="texto-suave texto-pequeno">Mostrando os ${MAXIMO_HISTORICO} mais recentes de ${visitas.length}.</p>`}
-            <p class="texto-suave texto-pequeno">Para corrigir ou excluir um serviço concluído, toque nele.</p>`}
+            <p class="texto-suave texto-pequeno">Toque num agendamento para ver os detalhes e os botões.</p>`}
         </section>`}
 
       <div class="ficha-acoes">

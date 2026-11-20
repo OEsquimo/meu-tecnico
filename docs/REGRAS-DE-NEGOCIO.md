@@ -202,3 +202,12 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Avanço entre campos:** Enter leva ao próximo campo também em Entrar, Criar conta, Recuperar senha, Expediente, Tipo de serviço, Valor, Convite, Enviar horários, Meus dados e demais formulários.
 - **Regras do Firebase mudaram** (`tecnicoMarcaAtraso`): publicar `npx firebase-tools@latest deploy --only firestore:rules --project meu-tecnico-app-d2977`.
 
+
+## Pacote 22 — Cartões só com o resumo; tocar abre a página do agendamento
+
+- Em toda lista de agendamentos (Início, Agenda, ficha do cliente, Serviços concluídos) cada agendamento é UM cartão só com o resumo, de qualquer status (Agendado, Reagendado, Atrasado, Cancelado, Concluído): cliente, status, hora (no concluído, o dia em que foi feito), endereço, serviço(s) e técnico(s). Mais de um serviço: todos, sem repetir o nome.
+- Tocar no cartão abre a página do agendamento (`#/servico/<id>`), com o cliente, todos os aparelhos e serviços e todos os botões (Concluir, Informar, Editar, Cancelar, Excluir, Ir até o cliente, Ligar, WhatsApp, cobrança, pago...). Os botões do administrador NÃO ficam mais no cartão.
+- Serviços concluídos: um cartão por agendamento (linhas da mesma visita juntas). Busca e filtros valem por linha: a visita aparece se alguma linha combina. "Carregar mais" reagrupa. O resumo não mostra valores.
+- Técnico em campo: nas listas do dia continua vendo "Ir até o cliente" e "Concluir" no próprio cartão (com vários serviços abertos, "Concluir" abre a página para escolher).
+- O destaque vermelho dos atrasados e os avisos "Passou de..." e "avisou atraso" continuam no cartão.
+- Nada mudou nas regras do Firestore: não há deploy de regras neste pacote.

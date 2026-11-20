@@ -33,7 +33,7 @@ with sync_playwright() as p:
     total = itens.count()
     ok(total > 0, f"lista concluídos ({total})")
     ok(total <= 30, "no máximo 30 por vez")
-    nome = itens.first.locator(".item-lista__titulo").inner_text().strip()
+    nome = pag.locator("#resultado .visita-cartao__nome").first.inner_text().strip()  # pacote 22: o nome vem do resumo do cartão
     pag.fill("#busca", nome); pag.wait_for_timeout(900)
     ok(pag.locator("#resultado a[href^='#/servico/']").count() >= 1, "buscar o nome do cliente acha os serviços dele")
     pag.fill("#busca", "zzzxxyy"); pag.wait_for_timeout(900)
