@@ -21,6 +21,8 @@ import { horariosLivresDoDia } from './disponibilidade.js';
 import { horaParaMinutos, minutosParaHora, PASSO_AGENDA_MIN } from './expediente.js';
 import { somarDias, hojeISO, diasEntre, ehISOValido, ehHoraValida, combinarDataHora, formatarDiaExtenso } from './datas.js';
 import { normalizarWhatsappBR, formatarTelefone } from './telefone.js';
+import { validarEndereco } from './validacoes.js';
+import { linhaDoEndereco } from './endereco.js';
 
 /** Quantos dias à frente o link mostra. */
 export const DIAS_A_FRENTE = 14;
@@ -193,19 +195,38 @@ export function periodoDoHorario(hora) {
 // O que o cliente preenche
 // -----------------------------------------------------------------------------
 
-/** Nome obrigatório; WhatsApp opcional (se vier, precisa ser válido). */
-export function validarPedidoDoCliente({ nome, whatsapp }) {
+/**
+ * O que o cliente informa (pacote 23): nome, WhatsApp e ENDEREÇO obrigatórios (rua, número e cidade); bairro,
+ * complemento, estado e ponto de referência são opcionais. As coordenadas (lat/lng) só existem se o endereço veio da
+ * localização do aparelho; o chamador as manda vazias quando o cliente mexeu na rua ou na cidade depois.
+ * Devolve dados: { nome, whatsapp, endereco: {rua, numero, complemento, bairro, cidade, uf, lat, lng}, referencia }.
+ */
+export function validarPedidoDoCliente(entrada) {
+  const { nome, whatsapp } = entrada;
   const erros = {};
   const n = String(nome ?? '').trim().replace(/\s+/g, ' ');
   if (n.length < 2) erros.nome = 'Digite o seu nome.';
   else if (n.length > 100) erros.nome = 'O nome está muito longo (máximo 100 letras).';
   const tel = String(whatsapp ?? '').trim();
   let numero = '';
-  if (tel) {
+  if (!tel) erros.whatsapp = 'Digite o seu WhatsApp, com DDD.';
+  else {
     numero = normalizarWhatsappBR(tel) || '';
     if (!numero) erros.whatsapp = 'Número inválido. Digite com DDD, por exemplo (11) 91234-5678.';
   }
-  return { valido: Object.keys(erros).length === 0, erros, dados: { nome: n, whatsapp: numero } };
+  const e = validarEndereco({
+    rua: entrada.rua, numero: entrada.numero, complemento: entrada.complemento, bairro: entrada.bairro,
+    cidade: entrada.cidade, uf: entrada.uf, lat: entrada.lat, lng: entrada.lng,
+  });
+  Object.assign(erros, e.erros);
+  const referencia = String(entrada.referencia ?? '').trim().replace(/\s+/g, ' ');
+  if (referencia.length > 120) erros.referencia = 'O ponto de referência está muito longo (máximo 120 letras).';
+  const { rua, numero: num, complemento, bairro, cidade, uf, lat, lng } = e.dados || {};
+  return {
+    valido: Object.keys(erros).length === 0,
+    erros,
+    dados: { nome: n, whatsapp: numero, endereco: { rua, numero: num, complemento, bairro, cidade, uf, lat, lng }, referencia },
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -217,15 +238,34 @@ export function mensagemDoLinkDeHorarios({ empresa, link }) {
   return `Olá! Aqui é da ${empresa}. Para escolher o melhor dia e horário do seu atendimento, toque no link:\n${link}\n\nÉ rápido: você escolhe o dia e o horário e informa o seu nome.`;
 }
 
-/** Endereço que abre o Agendar já preenchido com o pedido do cliente (só o administrador consegue usar). */
-export function linkDoPedidoNoApp(base, { data, hora, nome, whatsapp }) {
-  const consulta = new URLSearchParams({ data, hora, pedido: '1', nome });
+/** Coloca no endereço (URL) o que o cliente informou: nome, WhatsApp, endereço e referência. Campos vazios ficam de fora. */
+export function pedidoNaConsulta(consulta, pedido) {
+  const { nome, whatsapp, endereco: e, referencia } = pedido;
+  if (nome) consulta.set('nome', nome);
   if (whatsapp) consulta.set('whatsapp', whatsapp);
+  if (e) {
+    const campos = { rua: e.rua, num: e.numero, comp: e.complemento, bai: e.bairro, cid: e.cidade, uf: e.uf };
+    for (const [chave, valor] of Object.entries(campos)) if (valor) consulta.set(chave, valor);
+    if (Number.isFinite(e.lat) && Number.isFinite(e.lng)) { consulta.set('lat', String(e.lat)); consulta.set('lng', String(e.lng)); }
+  }
+  if (referencia) consulta.set('ref', referencia);
+  return consulta;
+}
+
+/** Endereço que abre o Agendar já preenchido com o pedido do cliente (só o administrador consegue usar). */
+export function linkDoPedidoNoApp(base, { data, hora, nome, whatsapp, endereco = null, referencia = '' }) {
+  const consulta = pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia });
   return `${base}#/agendar?${consulta.toString()}`;
 }
 
+/** Link do mapa com o ponto exato (só quando o endereço veio da localização). */
+export function linkDoMapaDoPonto(endereco) {
+  if (!Number.isFinite(endereco?.lat) || !Number.isFinite(endereco?.lng)) return '';
+  return `https://www.google.com/maps?q=${endereco.lat},${endereco.lng}`;
+}
+
 /** Mensagem que o cliente manda ao administrador. */
-export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', servico = '', linkApp }) {
+export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', endereco = null, referencia = '', servico = '', linkApp }) {
   const linhas = [
     `Olá! Quero marcar um horário com a ${empresa}.`,
     '',
@@ -233,6 +273,9 @@ export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', ser
     `👤 ${nome}`,
   ];
   if (whatsapp) linhas.push(`📱 ${formatarTelefone(whatsapp)}`);
+  if (endereco && linhaDoEndereco(endereco)) linhas.push(`📍 ${linhaDoEndereco(endereco)}`);
+  if (referencia) linhas.push(`📌 Referência: ${referencia}`);
+  if (linkDoMapaDoPonto(endereco)) linhas.push(`🗺️ ${linkDoMapaDoPonto(endereco)}`);
   if (servico) linhas.push(`🔧 ${servico}`);
   linhas.push('', 'Aguardo a confirmação. Obrigado!', '', '— Técnico: abrir no app', linkApp);
   return linhas.join('\n');
@@ -249,5 +292,14 @@ export function lerPedidoDaConsulta(consulta) {
   if (!ehISOValido(data) || !ehHoraValida(hora)) return null;
   const nome = String(consulta.get('nome') ?? '').trim().replace(/\s+/g, ' ').slice(0, 100);
   const whatsapp = normalizarWhatsappBR(consulta.get('whatsapp') ?? '') || '';
-  return { data, hora, nome, whatsapp };
+  const q = (chave, max) => String(consulta.get(chave) ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+  const lat = Number(consulta.get('lat'));
+  const lng = Number(consulta.get('lng'));
+  const temPonto = consulta.get('lat') !== null && consulta.get('lng') !== null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  const endereco = {
+    rua: q('rua', 120), numero: q('num', 15), complemento: q('comp', 60), bairro: q('bai', 80), cidade: q('cid', 80),
+    uf: q('uf', 2).toUpperCase(), lat: temPonto ? lat : null, lng: temPonto ? lng : null,
+  };
+  const temEndereco = Boolean(endereco.rua || endereco.numero || endereco.cidade);
+  return { data, hora, nome, whatsapp, endereco: temEndereco ? endereco : null, referencia: q('ref', 120) };
 }

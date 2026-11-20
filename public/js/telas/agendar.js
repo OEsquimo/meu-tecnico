@@ -44,7 +44,8 @@ import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio
 import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora, formatarDiaExtenso, formatarMesAno } from '../dominio/datas.js';
-import { lerPedidoDaConsulta } from '../dominio/link-horarios.js';
+import { linhaDoEndereco } from '../dominio/endereco.js';
+import { lerPedidoDaConsulta, pedidoNaConsulta } from '../dominio/link-horarios.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, oferecerAviso } from './servicos-comum.js';
@@ -275,8 +276,7 @@ export default async function montar(ctx) {
       return `#/cliente/novo?${q.toString()}`;
     }
     if (!pedidoDoCliente) return '#/cliente/novo';
-    const q = new URLSearchParams({ pedido: '1', data: pedidoDoCliente.data, hora: pedidoDoCliente.hora, nome: pedidoDoCliente.nome });
-    if (pedidoDoCliente.whatsapp) q.set('whatsapp', pedidoDoCliente.whatsapp);
+    const q = pedidoNaConsulta(new URLSearchParams({ pedido: '1', data: pedidoDoCliente.data, hora: pedidoDoCliente.hora }), pedidoDoCliente);
     return `#/cliente/novo?${q.toString()}`;
   }
 
@@ -416,7 +416,7 @@ export default async function montar(ctx) {
     if (!pedidoDoCliente) { mostrar(area, ''); return; }
     const p = pedidoDoCliente;
     mostrar(area, html`
-      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}` })}
+      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}${p.endereco ? html` Endereço: ${linhaDoEndereco(p.endereco)}.` : ''}${p.referencia ? html` Referência: ${p.referencia}.` : ''}` })}
       ${pedidoSemVaga && aviso({ tom: 'amarelo', texto: `O horário pedido (${p.hora}) já não está livre. Escolha outro em "Quando" e avise o cliente.` })}`);
   }
 
