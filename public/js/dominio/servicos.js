@@ -158,6 +158,40 @@ export function textoDosTecnicos(servico) {
   return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
 }
 
+/** Nomes dos serviços de uma visita, sem repetir e sem as linhas ainda sem serviço informado. */
+export function nomesDosServicos(linhas) {
+  return [...new Set(linhas.filter((l) => !ehLinhaSemServico(l)).map((l) => l.tipoServicoNome).filter(Boolean))];
+}
+
+/** Técnicos de todas as linhas da visita, sem repetir: "Ana", "Ana e Rui", "Ana, Rui e Lia". */
+export function tecnicosDaVisita(linhas) {
+  const nomes = [];
+  for (const l of linhas) for (const n of nomesDosTecnicos(l)) if (n && !nomes.includes(n)) nomes.push(n);
+  return nomes.length <= 1 ? (nomes[0] || '') : `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
+
+/** O dia em que a visita foi feita: o mais antigo entre as datas de conclusão das linhas. */
+export function diaDaConclusao(linhas) {
+  const dias = linhas.map((l) => l.dataConclusao?.getTime?.()).filter((n) => Number.isFinite(n));
+  return dias.length ? new Date(Math.min(...dias)) : linhas[0]?.dataConclusao;
+}
+
+/**
+ * Junta as linhas CONCLUÍDAS em um cartão por agendamento (visita). Mantém a ordem em que cada visita
+ * aparece primeiro (a lista já vem do mais recente para o mais antigo).
+ */
+export function agruparConcluidos(linhas) {
+  const mapa = new Map();
+  for (const l of linhas) {
+    const chave = chaveDoAgendamento(l);
+    if (!mapa.has(chave)) mapa.set(chave, []);
+    mapa.get(chave).push(l);
+  }
+  return [...mapa].map(([chave, lista]) => ({
+    chave, linhas: lista, clienteNome: lista[0].clienteNome, tecnicos: tecnicosDaVisita(lista), dataConclusao: diaDaConclusao(lista),
+  }));
+}
+
 /**
  * Divide um valor em centavos igualmente entre `partes` pessoas. Os centavos que sobram
  * vão um a um para as primeiras (ex.: 1000 em 3 -> [334, 333, 333]). A soma é sempre o total.

@@ -26,7 +26,10 @@ with sync_playwright() as p:
 
     # ---- Botões por status: Início e Agenda ----
     ir("/")
-    ok(pag.locator("#conteudo [data-acao=cancelar-visita]").count() == 1 and pag.locator("#conteudo [data-acao=excluir-visita]").count() == 1, "Início: Editar, Cancelar e Excluir")
+    # Pacote 22: o cartão do Início é só resumo; Editar, Cancelar e Excluir ficam na página do agendamento.
+    pag.locator("#conteudo .servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1000)
+    ok(pag.locator("#conteudo [data-acao=cancelar]").count() == 1 and pag.locator("#conteudo [data-acao=excluir]").count() == 1 and pag.locator("#conteudo a:has-text('Editar')").count() >= 1, "Início: a página da visita tem Editar, Cancelar e Excluir")
+    ir("/")
     ok(pag.locator("#conteudo a:has-text('Reagendar'), #conteudo button:has-text('Reagendar')").count() == 0, "Início sem 'Reagendar'")
     ok(sem_rolagem(), "Início sem rolagem lateral")
     ir("/agenda")

@@ -12,7 +12,7 @@ import { botao, selo, estadoVazio, cabecalho } from '../nucleo/componentes.js';
 import { traduzirErro, ehErroDeRede } from '../nucleo/erros.js';
 import { sessao } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
-import { estaAtrasado, precisaInformarAparelhoEServico, seloDoServico, textoDosTecnicos, nomesDosTecnicos } from '../dominio/servicos.js';
+import { estaAtrasado, precisaInformarAparelhoEServico, seloDoServico, textoDosTecnicos, nomesDosTecnicos, nomesDosServicos, tecnicosDaVisita, diaDaConclusao } from '../dominio/servicos.js';
 import { formatarHora, formatarDataBR, paraISO } from '../dominio/datas.js';
 import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
@@ -107,65 +107,62 @@ function blocosPorAparelho(linhas) {
 }
 
 /**
- * Cartão de UMA VISITA agendada (usado no início e na agenda): horário, cliente
- * e endereço aparecem uma vez; dentro, os aparelhos e, em cada um, os serviços
- * com o técnico e o botão "Concluir" de cada serviço.
- * visita: { linhas, clienteNome, ... } (ver agruparAgendamentos).
- * opcoes.mostrarData: mostra o dia junto da hora (lista de atrasados).
- * opcoes.mostrarTecnico: mostra o técnico de cada serviço (visão do administrador).
- * opcoes.acoes: mostra "Ir até o cliente" e os botões "Concluir".
- * opcoes.editar: administrador. Mostra Editar, Cancelar e Excluir (visita agendada, reagendada ou atrasada).
- *   Cancelar e Excluir só agem nos serviços ainda abertos: concluídos ficam guardados.
- * O status (Agendado, Reagendado ou Atrasado) fica no canto superior direito.
+ * Cartão de UMA VISITA (agendamento de qualquer status, concluído também). Mostra só o RESUMO: cliente, status,
+ * hora (ou o dia, no concluído), endereço, serviço(s) e técnico(s). Tocar abre a página do agendamento
+ * (#/servico/<id>) com o cliente, todos os aparelhos e serviços e todos os botões.
+ * visita: { linhas, clienteNome, ... } (ver agruparAgendamentos / agruparConcluidos).
+ * opcoes.mostrarData: mostra o dia junto da hora.
+ * opcoes.acoes: nas listas do dia (Início e Agenda), o TÉCNICO vê "Ir até o cliente" e "Concluir" no próprio cartão.
+ *   Com mais de um serviço aberto, "Concluir" abre a página do agendamento para ele escolher qual.
  */
-export function cartaoDaVisita(visita, { mostrarData = false, mostrarTecnico = false, acoes = false, editar = false } = {}) {
+export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, editar = false } = {}) {
   const linhas = visita.linhas;
   const primeira = linhas[0];
-  const atrasado = linhas.some((l) => estaAtrasado(l));
-  const situacao = seloDoServico(linhas.find((l) => estaAtrasado(l)) || primeira);
-  return html`
-    <div class="cartao servico-cartao ${atrasado ? 'servico-cartao--atrasado' : ''}">
-      <a class="visita-cartao__corpo" href="#/servico/${primeira.id}">
-        <div class="visita-cartao__linha">
-          <div class="item-lista__titulo visita-cartao__nome">${visita.clienteNome}</div>
-          <div class="visita-cartao__lado">
-            ${selo(situacao.texto, situacao.tom)}
-            <div class="servico-cartao__hora">
-              ${formatarHora(primeira.dataAgendada)}
-              ${mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
-            </div>
+  const atrasada = linhas.find((l) => estaAtrasado(l));
+  const abertas = linhas.filter((l) => l.status === STATUS.AGENDADO);
+  const principal = atrasada || abertas[0] || linhas.find((l) => l.status === STATUS.CANCELADO) || primeira;
+  const situacao = seloDoServico(principal);
+  const concluido = linhas.every((l) => l.status === STATUS.CONCLUIDO);
+  const doTecnico = acoes && !editar;
+  const unica = doTecnico && abertas.length === 1 ? abertas[0] : null;
+  const servicos = nomesDosServicos(linhas);
+  const tecnicos = tecnicosDaVisita(linhas);
+  const diaConcluido = diaDaConclusao(linhas);
+  const passou = abertas.find((l) => l.reatribuidoDeNome);
+  const avisouAtraso = abertas.find((l) => l.atrasoPorTecnico === true);
+  const href = `#/servico/${encodeURIComponent(principal.id)}`;
+
+  const corpo = html`
+    <a class="visita-cartao__corpo" href="${href}" data-visita-link>
+      <div class="visita-cartao__linha">
+        <div class="item-lista__titulo visita-cartao__nome">${visita.clienteNome}</div>
+        <div class="visita-cartao__lado">
+          ${selo(situacao.texto, situacao.tom)}
+          <div class="servico-cartao__hora">
+            ${concluido ? formatarDataBR(diaConcluido) : formatarHora(primeira.dataAgendada)}
+            ${!concluido && mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
           </div>
         </div>
-        ${primeira.local && html`<div class="item-lista__sub visita-cartao__local">${primeira.local}</div>`}
-      </a>
-      ${blocosPorAparelho(linhas).map((bloco) => html`
-        <div class="visita-bloco">
-          <div class="visita-bloco__titulo">${bloco.rotulo || 'Aparelho ainda não escolhido'}</div>
-          ${bloco.linhas.map((l) => html`
-            <div class="visita-linha">
-              <div class="expande">
-                <div class="visita-linha__nome">${l.tipoServicoNome}</div>
-                ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
-                ${l.status === 'agendado' && l.reatribuidoDeNome && selo(`Passou de ${l.reatribuidoDeNome.split(' ')[0]} (atraso)`)}
-                ${l.status === 'agendado' && l.atrasoPorTecnico === true && html`<div class="item-lista__sub" data-aviso="atraso-tecnico">${(l.atrasoTecnicoNome || 'O técnico').split(' ')[0]} ainda está em outro serviço. Avise o cliente do atraso.</div>`}
-                ${mostrarTecnico && textoDosTecnicos(l) && html`<div class="item-lista__sub">${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}</div>`}
-              </div>
-              ${acoes && (precisaInformarAparelhoEServico(l)
-    ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${l.id}?informar=1`, pequeno: true })
-    : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${l.id}`, pequeno: true }))}
-            </div>`)}
-        </div>`)}
-      ${acoes && html`
-        <div class="acoes-cartao">
-          ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
-        </div>`}
-      ${editar && html`
-        <div class="acoes-cartao">
-          ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${primeira.id}/editar`, pequeno: true })}
-          ${botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar-visita', dados: { chave: visita.chave }, pequeno: true })}
-          ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-visita', dados: { chave: visita.chave }, pequeno: true })}
-        </div>`}
+      </div>
+      ${primeira.local && html`<div class="item-lista__sub visita-cartao__local">${primeira.local}</div>`}
+      ${servicos.length > 0 && html`<div class="visita-cartao__servicos" data-resumo="servicos">${servicos.join(', ')}</div>`}
+      ${tecnicos && html`<div class="item-lista__sub" data-resumo="tecnicos">${tecnicos.includes(' e ') || tecnicos.includes(',') ? 'Técnicos' : 'Técnico'}: ${tecnicos}</div>`}
+      ${passou && html`<div class="item-lista__sub">Passou de ${passou.reatribuidoDeNome.split(' ')[0]} (atraso)</div>`}
+      ${avisouAtraso && html`<div class="item-lista__sub" data-aviso="atraso-tecnico">${(avisouAtraso.atrasoTecnicoNome || 'O técnico').split(' ')[0]} avisou atraso neste serviço.</div>`}
+      <span class="visita-cartao__seta" aria-hidden="true"></span>
+    </a>`;
+
+  const extra = doTecnico && abertas.length > 0 && html`
+    <div class="acoes-cartao">
+      ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
+      ${unica
+    ? (precisaInformarAparelhoEServico(unica)
+      ? botao({ texto: 'Informar serviço', iconeNome: 'editar', href: `#/servico/${unica.id}?informar=1`, pequeno: true })
+      : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${unica.id}`, pequeno: true }))
+    : botao({ texto: 'Concluir', iconeNome: 'check', href, pequeno: true })}
     </div>`;
+
+  return html`<div class="cartao servico-cartao ${atrasada ? 'servico-cartao--atrasado' : ''}">${corpo}${extra}</div>`;
 }
 
 // -----------------------------------------------------------------------------
