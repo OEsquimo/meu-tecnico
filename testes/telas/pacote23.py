@@ -44,6 +44,7 @@ with sync_playwright() as p:
     cli = ctx2.new_page()
     cli.on("pageerror", lambda e: erros.append(str(e)))
     cli.goto(link); cli.wait_for_selector("#area-calendario"); cli.wait_for_timeout(500)
+    cli.locator("#area-servicos label.chip", has_text="Limpeza").click(); cli.wait_for_timeout(200)
     cli.locator("[data-acao=dia]:not([disabled])").first.click(); cli.wait_for_timeout(300)
     cli.locator("[data-acao=hora]").first.click(); cli.wait_for_timeout(400)
     ok(cli.locator("button:has-text('Usar minha localização')").count() == 1, "a página tem o botão 'Usar minha localização'")
@@ -55,6 +56,7 @@ with sync_playwright() as p:
     ok(cli.locator("button:has-text('Usar minha localização')").count() == 0, "respondeu Não: o botão some")
     ok(cli.locator("input[name=rua]").is_visible(), "o endereço continua para preencher à mão")
     cli.reload(); cli.wait_for_selector("#area-calendario")
+    cli.locator("#area-servicos label.chip", has_text="Limpeza").click(); cli.wait_for_timeout(200)
     cli.locator("[data-acao=dia]:not([disabled])").first.click(); cli.wait_for_timeout(300)
     cli.locator("[data-acao=hora]").first.click(); cli.wait_for_timeout(400)
     # Sim: preenche pelo GPS (o número fica para o cliente)
@@ -74,6 +76,7 @@ with sync_playwright() as p:
 
     # Mexeu na rua depois do GPS: sem link de mapa
     cli.click("[data-acao=mudar]"); cli.wait_for_timeout(800)
+    cli.locator("#area-servicos label.chip", has_text="Limpeza").click(); cli.wait_for_timeout(200)
     cli.locator("[data-acao=dia]:not([disabled])").first.click(); cli.wait_for_timeout(300)
     cli.locator("[data-acao=hora]").first.click(); cli.wait_for_timeout(400)
     cli.click("button:has-text('Usar minha localização')"); cli.wait_for_timeout(300)

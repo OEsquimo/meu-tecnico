@@ -3,7 +3,9 @@
 // =============================================================================
 // É a página que o cliente abre pelo link que o administrador mandou no WhatsApp. Uma tela só,
 // de cima para baixo, em 3 passos numerados:
-//   1) Escolha o dia   2) Escolha o horário (manhã e tarde)   3) Seus dados (nome, WhatsApp e endereço; referência é opcional)
+//   1) Qual serviço você precisa? (marca um ou mais; "Não sei ainda" vale sozinho)   2) Escolha o dia
+//   3) Escolha o horário (manhã e tarde)   4) Seus dados (nome, WhatsApp e endereço; referência é opcional)
+// Link antigo, sem lista de serviços, começa direto no dia (3 passos).
 // Ao tocar em "Pedir este horário" aparece "Quase lá": o cliente toca em enviar no WhatsApp e o pedido
 // chega ao administrador (com o botão "Técnico: abrir no app"). A página NÃO agenda nada sozinha.
 //
@@ -21,7 +23,7 @@ import { mascararTelefoneDigitando, formatarTelefone } from '../dominio/telefone
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { linhaDoEndereco } from '../dominio/endereco.js';
 import {
-  lerLinkDeHorarios, periodoDoHorario, validarPedidoDoCliente, mensagemDoPedido, linkDoPedidoNoApp, enderecoBaseDoApp,
+  lerLinkDeHorarios, periodoDoHorario, validarPedidoDoCliente, validarServicosDoPedido, SERVICO_NAO_SEI, mensagemDoPedido, linkDoPedidoNoApp, enderecoBaseDoApp,
 } from '../dominio/link-horarios.js';
 import { obterLocalizacao, buscarPorCoordenadas } from '../servicos/cep.js';
 import { carregarEstilos } from './servicos-comum.js';
@@ -62,6 +64,9 @@ export default async function montar(ctx) {
   let hora = '';
   let nome = '';
   let whatsapp = '';
+  let servicosMarcados = []; // o que o cliente marcou em "Qual serviço você precisa?"
+  const opcoesDeServico = link.servicos || [];
+  const deslocamento = opcoesDeServico.length > 0 ? 1 : 0; // com a pergunta do serviço, os passos andam um número
   let semGps = false; // o cliente disse que NÃO está no local: o botão da localização some
   let coordenadas = null; // só existe se o endereço veio do GPS e a rua e a cidade não foram mexidas depois
   let origemGps = null; // rua e cidade que o GPS trouxe (para saber se o cliente mexeu)
@@ -72,11 +77,32 @@ export default async function montar(ctx) {
     <div class="pagina-cliente">
       ${marca(link.empresa)}
       <h1 class="pagina-cliente__titulo" id="titulo-da-tela" tabindex="-1">Escolha o melhor dia e horário</h1>
-      ${link.servico && html`<p class="texto-suave pagina-cliente__sub">Atendimento: ${link.servico}</p>`}
-      <section class="passo cartao" aria-labelledby="passo-1"><h2 class="passo__titulo" id="passo-1"><span class="passo__numero">1</span>Escolha o dia</h2><div id="area-calendario"></div></section>
-      <section class="passo cartao" id="passo-horario" aria-labelledby="passo-2" hidden><h2 class="passo__titulo" id="passo-2"><span class="passo__numero">2</span>Escolha o horário</h2><div id="area-horarios"></div></section>
-      <section class="passo cartao" id="passo-dados" aria-labelledby="passo-3" hidden><h2 class="passo__titulo" id="passo-3"><span class="passo__numero">3</span>Seus dados</h2><div id="area-dados"></div></section>
+      ${link.servico && opcoesDeServico.length === 0 && html`<p class="texto-suave pagina-cliente__sub">Atendimento: ${link.servico}</p>`}
+      ${opcoesDeServico.length > 0 && html`
+        <section class="passo cartao" id="passo-servico" aria-labelledby="passo-0"><h2 class="passo__titulo" id="passo-0"><span class="passo__numero">1</span>Qual serviço você precisa?</h2>
+          <div id="area-servicos"></div>
+        </section>`}
+      <section class="passo cartao" aria-labelledby="passo-1"><h2 class="passo__titulo" id="passo-1"><span class="passo__numero">${1 + deslocamento}</span>Escolha o dia</h2><div id="area-calendario"></div></section>
+      <section class="passo cartao" id="passo-horario" aria-labelledby="passo-2" hidden><h2 class="passo__titulo" id="passo-2"><span class="passo__numero">${2 + deslocamento}</span>Escolha o horário</h2><div id="area-horarios"></div></section>
+      <section class="passo cartao" id="passo-dados" aria-labelledby="passo-3" hidden><h2 class="passo__titulo" id="passo-3"><span class="passo__numero">${3 + deslocamento}</span>Seus dados</h2><div id="area-dados"></div></section>
     </div>`);
+
+  /** Quadro "Qual serviço você precisa?" (só em links novos). "Não sei ainda" vale sozinho: marcar um tira o outro. */
+  function desenharServicos() {
+    const area = raiz.querySelector('#area-servicos');
+    if (!area) return;
+    const todos = [...opcoesDeServico, SERVICO_NAO_SEI];
+    mostrar(area, html`
+      <div class="chips" role="group" aria-labelledby="passo-0">
+        ${todos.map((n) => html`
+          <label class="chip">
+            <input type="checkbox" name="servicos" value="${n}" ${servicosMarcados.includes(n) ? html`checked` : ''} />
+            <span class="chip__texto">${n}</span>
+          </label>`)}
+      </div>
+      <p class="campo__ajuda">Marque um ou mais. Se não souber, marque "Não sei ainda": vocês combinam na conversa.</p>
+      <div data-erro-servicos role="alert"></div>`);
+  }
 
   function desenharCalendario() {
     const anterior = mesVizinho(ano, mes, -1);
@@ -188,15 +214,21 @@ export default async function montar(ctx) {
 
   function enviar(form) {
     limparErrosGerais(form);
+    const servicos = validarServicosDoPedido(servicosMarcados, opcoesDeServico);
+    if (!servicos.valido) {
+      mostrar(raiz.querySelector('[data-erro-servicos]'), html`<p class="campo__erro">${servicos.erro}</p>`);
+      levarAte(raiz.querySelector('#passo-servico'));
+      return;
+    }
     const r = validarPedidoDoCliente({ ...lerCampos(form), lat: coordenadas?.lat, lng: coordenadas?.lng });
     if (!r.valido) { mostrarErrosNosCampos(form, r.erros); return; }
     const base = enderecoBaseDoApp(window.location.href);
-    const linkApp = linkDoPedidoNoApp(base, { data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia });
-    const mensagem = mensagemDoPedido({ empresa: link.empresa, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servico: link.servico, linkApp });
-    desenharQuaseLa({ nome: r.dados.nome, whatsappCliente: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, mensagem });
+    const linkApp = linkDoPedidoNoApp(base, { data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servicos: servicos.dados });
+    const mensagem = mensagemDoPedido({ empresa: link.empresa, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servico: link.servico, servicos: servicos.dados, linkApp });
+    desenharQuaseLa({ nome: r.dados.nome, whatsappCliente: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servicos: servicos.dados, mensagem });
   }
 
-  function desenharQuaseLa({ nome: nomeCliente, whatsappCliente, endereco, referencia, mensagem }) {
+  function desenharQuaseLa({ nome: nomeCliente, whatsappCliente, endereco, referencia, servicos = [], mensagem }) {
     mostrar(raiz, html`
       <div class="pagina-cliente">
         ${marca(link.empresa)}
@@ -205,6 +237,7 @@ export default async function montar(ctx) {
           <div class="resumo-pedido__linha">${icone('agenda', 20)}<span>${formatarDiaExtenso(dia)} às ${hora}</span></div>
           <div class="resumo-pedido__linha">${icone('clientes', 20)}<span>${nomeCliente}</span></div>
           ${whatsappCliente && html`<div class="resumo-pedido__linha">${icone('whatsapp', 20)}<span>${formatarTelefone(whatsappCliente)}</span></div>`}
+          ${servicos.length > 0 && html`<div class="resumo-pedido__linha">${icone('ferramenta', 20)}<span>${servicos.join(', ')}</span></div>`}
           ${endereco && html`<div class="resumo-pedido__linha">${icone('local', 20)}<span>${linhaDoEndereco(endereco)}${referencia ? ` · Ref.: ${referencia}` : ''}</span></div>`}
         </section>
         ${aviso({ titulo: 'Falta só um toque', texto: 'Toque no botão abaixo e, no WhatsApp, aperte Enviar. É assim que o técnico recebe o seu pedido e confirma o horário com você.' })}
@@ -214,6 +247,16 @@ export default async function montar(ctx) {
     window.scrollTo(0, 0);
   }
 
+  desenharServicos();
+  raiz.querySelector('#area-servicos')?.addEventListener('change', (e) => {
+    if (e.target.name !== 'servicos') return;
+    const nomeMarcado = e.target.value;
+    const jaTem = servicosMarcados.filter((n) => n !== nomeMarcado);
+    if (!e.target.checked) servicosMarcados = jaTem;
+    else if (nomeMarcado === SERVICO_NAO_SEI) servicosMarcados = [SERVICO_NAO_SEI]; // "Não sei ainda" vale sozinho
+    else servicosMarcados = [...jaTem.filter((n) => n !== SERVICO_NAO_SEI), nomeMarcado];
+    desenharServicos();
+  });
   desenharCalendario();
 
   const desligar = aoClicar(raiz, {

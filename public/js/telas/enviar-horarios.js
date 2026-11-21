@@ -11,7 +11,7 @@
 // =============================================================================
 
 import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, copiarTexto, toast, avancarEntreCampos } from '../nucleo/ui.js';
-import { cabecalho, campoTexto, campoPilulas, aviso, botao, esqueletos } from '../nucleo/componentes.js';
+import { cabecalho, campoTexto, aviso, botao, esqueletos } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos, recarregarSessao, empresaId } from '../nucleo/sessao.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { tecnicosParaAtribuir, salvarDadosDoAdministrador } from '../servicos/equipe.js';
@@ -32,7 +32,6 @@ export default async function montar(ctx) {
   const usuario = contextoDoUsuario();
   const topo = cabecalho({ titulo: 'Enviar horários ao cliente', voltarPara: '#/ferramentas' });
   let desligar = () => {};
-  let escutaMudanca = null;
 
   mostrar(raiz, html`${topo}${esqueletos(3)}`);
   let tecnicos;
@@ -54,7 +53,6 @@ export default async function montar(ctx) {
   const tipos = tiposAtivos();
   const whatsappDoAdmin = normalizarWhatsappBR(sessao.vinculo?.telefone || '') || '';
   const nomeDaEmpresa = sessao.empresa?.nome || 'nossa empresa';
-  let tipoEscolhido = ''; // '' = não sei ainda
 
   // ---- Sem WhatsApp do administrador: pede aqui mesmo (o pedido do cliente chega nele) ----
   if (!whatsappDoAdmin) {
@@ -91,28 +89,21 @@ export default async function montar(ctx) {
   mostrar(raiz, html`
     ${topo}
     <div class="pilha">
-      <form id="form-servico" class="cartao pilha" novalidate>
-        ${campoPilulas({
-    nome: 'servico', rotulo: 'Serviço (opcional)', valor: '',
-    opcoes: [{ valor: '', rotulo: `Não sei ainda · ${textoDaDuracao(DURACAO_SEM_SERVICO_MIN)}` }, ...tipos.map((t) => ({ valor: t.id, rotulo: `${t.nome} · ${textoDaDuracao(Number(t.duracaoMin) || DURACAO_SEM_SERVICO_MIN)}` }))],
-  })}
-        <p class="campo__ajuda">Serve só para reservar o tempo certo na agenda. O cliente não precisa saber o serviço agora: vocês combinam na conversa.</p>
-      </form>
       <div id="area-previa" class="pilha"></div>
     </div>`);
 
   function calcular() {
-    const tipo = tipos.find((t) => t.id === tipoEscolhido) || null;
-    const duracaoMin = tipo ? Number(tipo.duracaoMin) || DURACAO_SEM_SERVICO_MIN : DURACAO_SEM_SERVICO_MIN;
+    // Pacote 24: o administrador não escolhe mais o serviço. Os horários são de 1h e o cliente marca o que precisa na página dele.
+    const duracaoMin = DURACAO_SEM_SERVICO_MIN;
     const agora = new Date();
     const dias = horariosLivresParaOLink({
       expediente: expedienteDaEmpresa(sessao.empresa), tecnicos, agendados, duracaoMin, regras: regrasDaEmpresa(sessao.empresa), agora,
     });
     const link = dias.length === 0 ? '' : montarLinkDeHorarios({
-      base: enderecoBaseDoApp(window.location.href), empresa: nomeDaEmpresa, whatsapp: whatsappDoAdmin, servico: tipo?.nome || '', dias, geradoEm: hojeISO(agora),
+      base: enderecoBaseDoApp(window.location.href), empresa: nomeDaEmpresa, whatsapp: whatsappDoAdmin, servicos: tipos.map((t) => t.nome), dias, geradoEm: hojeISO(agora),
     });
     const mensagem = link ? mensagemDoLinkDeHorarios({ empresa: nomeDaEmpresa, link }) : '';
-    return { dias, link, mensagem, tipo };
+    return { dias, link, mensagem };
   }
 
   let atual = calcular();
@@ -122,7 +113,7 @@ export default async function montar(ctx) {
     const area = raiz.querySelector('#area-previa');
     const totalHorarios = atual.dias.reduce((n, d) => n + d.horas.length, 0);
     if (atual.dias.length === 0) {
-      mostrar(area, aviso({ tom: 'amarelo', titulo: 'Nenhum horário livre', texto: `Não há horário livre nos próximos ${DIAS_A_FRENTE} dias para ${atual.tipo ? `este serviço (${textoDaDuracao(Number(atual.tipo.duracaoMin) || DURACAO_SEM_SERVICO_MIN)})` : 'esse tempo'}. Confira o horário de funcionamento e a equipe.` }));
+      mostrar(area, aviso({ tom: 'amarelo', titulo: 'Nenhum horário livre', texto: `Não há horário livre nos próximos ${DIAS_A_FRENTE} dias para ${textoDaDuracao(DURACAO_SEM_SERVICO_MIN)} de atendimento. Confira o horário de funcionamento e a equipe.` }));
       return;
     }
     mostrar(area, html`
@@ -135,14 +126,6 @@ export default async function montar(ctx) {
       ${botao({ texto: 'Copiar mensagem', variante: 'secundario', iconeNome: 'copiar', bloco: true, acao: 'copiar-mensagem' })}`);
   }
 
-  const form = raiz.querySelector('#form-servico');
-  if (form) avancarEntreCampos(form); // Enter vai ao próximo campo
-  escutaMudanca = (e) => {
-    if (e.target.name !== 'servico') return;
-    tipoEscolhido = e.target.value;
-    desenharPrevia();
-  };
-  form.addEventListener('change', escutaMudanca);
   desenharPrevia();
 
   desligar = aoClicar(raiz, {
@@ -152,5 +135,5 @@ export default async function montar(ctx) {
     },
   });
 
-  return () => { desligar(); form.removeEventListener('change', escutaMudanca); };
+  return () => { desligar(); };
 }
