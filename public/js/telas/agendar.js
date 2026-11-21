@@ -416,7 +416,7 @@ export default async function montar(ctx) {
     if (!pedidoDoCliente) { mostrar(area, ''); return; }
     const p = pedidoDoCliente;
     mostrar(area, html`
-      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}${p.endereco ? html` Endereço: ${linhaDoEndereco(p.endereco)}.` : ''}${p.referencia ? html` Referência: ${p.referencia}.` : ''}` })}
+      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}${p.servicos?.length ? html` Serviços pedidos: ${p.servicos.join(', ')}.` : ''}${p.endereco ? html` Endereço: ${linhaDoEndereco(p.endereco)}.` : ''}${p.referencia ? html` Referência: ${p.referencia}.` : ''}` })}
       ${pedidoSemVaga && aviso({ tom: 'amarelo', texto: `O horário pedido (${p.hora}) já não está livre. Escolha outro em "Quando" e avise o cliente.` })}`);
   }
 

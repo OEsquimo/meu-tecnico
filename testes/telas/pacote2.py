@@ -88,7 +88,7 @@ with sync_playwright() as p:
     ok(all(w >= 100 for w in larg), "cartão de reagendamento com título legível")
 
     # ---- Serviço pendente: concluir um, o outro fica pendente ----
-    ir("/agenda"); pag.locator("#conteudo a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
+    ir("/agenda"); pag.locator("#conteudo a[href^='#/servico/']:not(:has-text('Cancelado')):not(:has-text('Concluído'))").first.click(); pag.wait_for_timeout(900)
     pag.click("[data-acao=adicionar-servico]"); pag.wait_for_timeout(500)
     pag.locator("dialog .janela__opcao").first.click(); pag.wait_for_timeout(500)
     pag.locator("dialog .janela__opcao").first.click(); pag.wait_for_timeout(1200)

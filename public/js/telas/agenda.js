@@ -96,8 +96,8 @@ export default async function montar(ctx) {
   // Desenhar
   // ---------------------------------------------------------------------------
   function desenhar() {
-    // Dias que já passaram também mostram o que foi concluído ou cancelado (é o que os pontos verde e amarelo indicam).
-    const doHistorico = fechadosDoMes.filter((s) => s.dataAgendada instanceof Date && paraISO(s.dataAgendada) < hoje && (!filtroTecnico || servicoTemTecnico(s, filtroTecnico)));
+    // Dias que já passaram, e o dia de HOJE (pacote 24), também mostram o que foi concluído ou cancelado (é o que os pontos verde e amarelo indicam).
+    const doHistorico = fechadosDoMes.filter((s) => s.dataAgendada instanceof Date && paraISO(s.dataAgendada) <= hoje && (!filtroTecnico || servicoTemTecnico(s, filtroTecnico)));
     const grupos = agruparPorDia([...visiveis(), ...doHistorico]);
     const doDia = grupos[diaEscolhido] || [];
 
