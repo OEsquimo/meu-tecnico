@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  limparServicos, validarServicosDoPedido, SERVICO_NAO_SEI,
   horariosLivresParaOLink, compactarDias, abrirDias, montarLinkDeHorarios, lerLinkDeHorarios, periodoDoHorario,
   validarPedidoDoCliente, mensagemDoLinkDeHorarios, linkDoPedidoNoApp, mensagemDoPedido, lerPedidoDaConsulta,
   enderecoBaseDoApp, DIAS_A_FRENTE,
@@ -135,18 +136,18 @@ test('mensagens: link do administrador e pedido do cliente com "Técnico: abrir 
   assert.match(msg, /Maria Souza/);
   assert.match(msg, /\(81\) 98325-9341/);
   assert.match(msg, /Limpeza/);
-  assert.match(msg, /Técnico: abrir no app\nhttps:\/\/x\//);
+  assert.match(msg, /Técnico: abrir no app\n\nhttps:\/\/x\//, 'o link do app vem separado, depois de uma linha em branco');
   assert.ok(!mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'M', linkApp }).includes('📱'), 'sem WhatsApp, sem a linha');
 });
 
 test('ler o pedido no Agendar: só vale com pedido=1, data e hora certas', () => {
   const linkApp = linkDoPedidoNoApp('https://x/', { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341' });
   const consulta = new URLSearchParams(linkApp.split('?')[1]);
-  assert.deepEqual(lerPedidoDaConsulta(consulta), { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341', endereco: null, referencia: '' });
+  assert.deepEqual(lerPedidoDaConsulta(consulta), { data: SEG, hora: '09:00', nome: 'Maria Souza', whatsapp: '5581983259341', endereco: null, referencia: '', servicos: [] });
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('data=2031-04-14&hora=09:00')), null, 'sem pedido=1 é o fluxo normal');
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-02-31&hora=09:00')), null);
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=25:00')), null);
-  assert.deepEqual(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&whatsapp=1')), { data: SEG, hora: '09:00', nome: '', whatsapp: '', endereco: null, referencia: '' }, 'WhatsApp estragado é ignorado');
+  assert.deepEqual(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&whatsapp=1')), { data: SEG, hora: '09:00', nome: '', whatsapp: '', endereco: null, referencia: '', servicos: [] }, 'WhatsApp estragado é ignorado');
   assert.equal(lerPedidoDaConsulta(null), null);
 });
 
@@ -179,4 +180,35 @@ test('pedido com endereço: vai no link do app, volta igual e entra na mensagem 
   const msg2 = mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'Maria', endereco: semGps, linkApp });
   assert.ok(!msg2.includes('🗺️') && !msg2.includes('📌'), 'sem GPS não há link de mapa; sem referência não há linha');
   assert.equal(lerPedidoDaConsulta(new URLSearchParams('pedido=1&data=2031-04-14&hora=09:00&lat=999&lng=1&rua=R')).endereco.lat, null, 'ponto inválido é ignorado');
+});
+
+test('pacote 24: o link leva a lista de serviços e a página a lê de volta (links antigos não têm lista)', () => {
+  const dias = [{ iso: SEG, horas: ['09:00', '10:00'] }];
+  const hoje = '2031-04-10';
+  const link = montarLinkDeHorarios({ base: 'https://x/', empresa: 'Frio', whatsapp: '5581983259341', servicos: ['Limpeza', 'Carga de gás', 'Limpeza', ' '], dias, geradoEm: hoje });
+  const lido = lerLinkDeHorarios(new URLSearchParams(link.split('?')[1]), em(hoje, '08:00'));
+  assert.deepEqual(lido.servicos, ['Limpeza', 'Carga de gás'], 'sem repetidos nem vazios');
+  const antigo = montarLinkDeHorarios({ base: 'https://x/', empresa: 'Frio', whatsapp: '5581983259341', servico: 'Limpeza', dias, geradoEm: hoje });
+  assert.deepEqual(lerLinkDeHorarios(new URLSearchParams(antigo.split('?')[1]), em(hoje, '08:00')).servicos, []);
+});
+
+test('pacote 24: o cliente precisa marcar serviço; "Não sei ainda" vale sozinho; só vale o que o link oferece', () => {
+  const oferecidos = ['Limpeza', 'Carga de gás'];
+  assert.equal(validarServicosDoPedido([], oferecidos).valido, false);
+  assert.match(validarServicosDoPedido([], oferecidos).erro, /Marque o serviço/);
+  assert.deepEqual(validarServicosDoPedido(['Limpeza', 'Carga de gás'], oferecidos).dados, ['Limpeza', 'Carga de gás']);
+  assert.deepEqual(validarServicosDoPedido([SERVICO_NAO_SEI, 'Limpeza'], oferecidos).dados, ['Limpeza']);
+  assert.deepEqual(validarServicosDoPedido([SERVICO_NAO_SEI], oferecidos).dados, [SERVICO_NAO_SEI]);
+  assert.equal(validarServicosDoPedido(['Serviço inventado'], oferecidos).valido, false);
+  assert.equal(validarServicosDoPedido([], []).valido, true, 'link antigo, sem lista: nada a marcar');
+  assert.deepEqual(limparServicos(['  A  b ', 'A b', '']), ['A b']);
+});
+
+test('pacote 24: a mensagem leva 🔧 serviços; o aviso do Agendar recebe os mesmos serviços', () => {
+  const linkApp = linkDoPedidoNoApp('https://x/', { data: SEG, hora: '09:00', nome: 'Maria', whatsapp: '5581983259341', servicos: ['Limpeza', 'Carga de gás'] });
+  assert.deepEqual(lerPedidoDaConsulta(new URLSearchParams(linkApp.split('?')[1])).servicos, ['Limpeza', 'Carga de gás']);
+  const msg = mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'Maria', whatsapp: '5581983259341', servicos: ['Limpeza', 'Carga de gás'], linkApp });
+  assert.match(msg, /📱 \(81\) 98325-9341\n🔧 Limpeza, Carga de gás\n/);
+  const semServico = mensagemDoPedido({ empresa: 'F', data: SEG, hora: '09:00', nome: 'Maria', linkApp });
+  assert.ok(!semServico.includes('🔧'));
 });

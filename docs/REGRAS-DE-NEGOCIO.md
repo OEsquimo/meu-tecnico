@@ -218,3 +218,11 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Página do cliente (link de horários), passo 3:** Nome, **WhatsApp** e **endereço** obrigatórios (rua, número e cidade); bairro, complemento, estado e **ponto de referência** opcionais. Botão "Usar minha localização": antes de pedir a permissão do aparelho, pergunta "Você está no local do atendimento?". Sim = GPS + Nominatim preenchem rua, bairro, cidade e estado (o número o cliente digita). Não = o botão some e o endereço é à mão. Falha do GPS ou da internet = mensagem e preenchimento à mão (o botão continua).
 - **Ponto no mapa:** só vai na mensagem (link do Google Maps) se o endereço veio do GPS e o cliente NÃO mudou a rua nem a cidade depois.
 - **Mensagem do pedido** ganha 📍 endereço, 📌 referência e 🗺️ mapa. O botão "Técnico: abrir no app" leva tudo no endereço do link; o Agendar mostra endereço e referência no aviso "Pedido do cliente", e "Cadastrar cliente novo" já vem com o endereço preenchido (a referência vai para as observações). Nada é guardado no banco pela página pública. Regras do Firestore não mudam.
+
+## Pacote 24 — o cliente escolhe o serviço; Agenda mostra concluídos/cancelados de hoje
+
+- **Enviar horários (administrador):** não escolhe mais o serviço. O link leva os nomes dos tipos de serviço cadastrados (`ts`), e o cliente escolhe na página.
+- **Página do cliente:** primeiro "Qual serviço você precisa?" (um ou vários, só o nome; "Não sei ainda" vale sozinho e é exclusivo), depois dia, horário e dados. Sem escolher, não envia. Serviços são só informativos: não preenchem o agendamento (sem valores, total ou tempo nesta etapa).
+- **Mensagem do pedido:** linha 🔧 com os serviços logo após o WhatsApp; o link "Técnico: abrir no app" fica no fim, separado por uma linha em branco. O Agendar mostra "Serviços pedidos: …" no aviso "Pedido do cliente".
+- **Agenda:** concluídos e cancelados aparecem também no dia de hoje, no dia em que estavam agendados.
+- Regras do Firestore não mudam.

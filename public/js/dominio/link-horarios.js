@@ -141,23 +141,52 @@ export function enderecoBaseDoApp(href) {
   return `${base.endsWith('/') ? base : `${base}/`}${demonstracao ? '?demo=1' : ''}`;
 }
 
+/** Nome do "não sei" na lista de serviços do cliente. */
+export const SERVICO_NAO_SEI = 'Não sei ainda';
+const MAXIMO_SERVICOS = 20;
+
+/** Lista de nomes de serviço limpa: sem vazios, sem repetidos, nomes até 60 letras, no máximo 20. */
+export function limparServicos(lista) {
+  const nomes = [];
+  for (const n of Array.isArray(lista) ? lista : []) {
+    const nome = String(n ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    if (nome && !nomes.includes(nome)) nomes.push(nome);
+  }
+  return nomes.slice(0, MAXIMO_SERVICOS);
+}
+
+/**
+ * O cliente precisa marcar pelo menos um serviço (ou "Não sei ainda"). "Não sei ainda" vale sozinho: se vier junto
+ * com outros, ele sai. Só vale o que está na lista do link. Link sem lista (antigo): nada a validar.
+ */
+export function validarServicosDoPedido(escolhidos, oferecidos) {
+  if (!oferecidos || oferecidos.length === 0) return { valido: true, erro: '', dados: [] };
+  const aceitos = limparServicos([...oferecidos, SERVICO_NAO_SEI]);
+  let marcados = limparServicos(escolhidos).filter((n) => aceitos.includes(n));
+  if (marcados.length > 1) marcados = marcados.filter((n) => n !== SERVICO_NAO_SEI);
+  if (marcados.length === 0) return { valido: false, erro: 'Marque o serviço que você precisa. Se não souber, marque "Não sei ainda".', dados: [] };
+  return { valido: true, erro: '', dados: marcados };
+}
+
 /**
  * Monta o link que o cliente recebe.
  * @param {object} p
  * @param {string} p.base         endereço do app (enderecoBaseDoApp)
  * @param {string} p.empresa      nome da empresa (aparece no alto da página)
  * @param {string} p.whatsapp     WhatsApp do administrador (para onde o pedido vai), só números com 55
- * @param {string} [p.servico]    nome do serviço escolhido ('' = não sei ainda)
+ * @param {string} [p.servico]    (links antigos) nome do serviço escolhido ('' = não sei ainda)
+ * @param {string[]} [p.servicos] nomes dos serviços que o cliente poderá marcar na página (pacote 24)
  * @param {Array<{iso:string,horas:string[]}>} p.dias
  * @param {string} p.geradoEm     "AAAA-MM-DD"
  */
-export function montarLinkDeHorarios({ base, empresa, whatsapp, servico = '', dias, geradoEm }) {
+export function montarLinkDeHorarios({ base, empresa, whatsapp, servico = '', servicos = [], dias, geradoEm }) {
   const consulta = new URLSearchParams();
   consulta.set('e', empresa);
   consulta.set('w', whatsapp);
   consulta.set('g', geradoEm);
   consulta.set('p', compactarDias(dias, geradoEm));
   if (servico) consulta.set('s', servico);
+  for (const nome of limparServicos(servicos)) consulta.append('ts', nome); // os serviços que o cliente poderá marcar
   return `${base}#/horarios?${consulta.toString()}`;
 }
 
@@ -172,7 +201,8 @@ export function lerLinkDeHorarios(consulta, agora = new Date()) {
   const whatsapp = String(consulta.get('w') ?? '').replace(/\D/g, '');
   const geradoEm = consulta.get('g') ?? '';
   const servico = String(consulta.get('s') ?? '').trim().slice(0, 60);
-  const base = { valido: false, motivo: 'incompleto', empresa, whatsapp: normalizarWhatsappBR(whatsapp) || '', servico, geradoEm, dias: [] };
+  const servicos = limparServicos(consulta.getAll('ts'));
+  const base = { valido: false, motivo: 'incompleto', empresa, whatsapp: normalizarWhatsappBR(whatsapp) || '', servico, servicos, geradoEm, dias: [] };
   if (!empresa || !ehISOValido(geradoEm)) return base;
   const compactados = consulta.get('p');
   if (!compactados) return base; // sem horários no endereço: link cortado
@@ -240,7 +270,7 @@ export function mensagemDoLinkDeHorarios({ empresa, link }) {
 
 /** Coloca no endereço (URL) o que o cliente informou: nome, WhatsApp, endereço e referência. Campos vazios ficam de fora. */
 export function pedidoNaConsulta(consulta, pedido) {
-  const { nome, whatsapp, endereco: e, referencia } = pedido;
+  const { nome, whatsapp, endereco: e, referencia, servicos } = pedido;
   if (nome) consulta.set('nome', nome);
   if (whatsapp) consulta.set('whatsapp', whatsapp);
   if (e) {
@@ -249,12 +279,13 @@ export function pedidoNaConsulta(consulta, pedido) {
     if (Number.isFinite(e.lat) && Number.isFinite(e.lng)) { consulta.set('lat', String(e.lat)); consulta.set('lng', String(e.lng)); }
   }
   if (referencia) consulta.set('ref', referencia);
+  for (const n of limparServicos(servicos)) consulta.append('serv', n);
   return consulta;
 }
 
 /** Endereço que abre o Agendar já preenchido com o pedido do cliente (só o administrador consegue usar). */
-export function linkDoPedidoNoApp(base, { data, hora, nome, whatsapp, endereco = null, referencia = '' }) {
-  const consulta = pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia });
+export function linkDoPedidoNoApp(base, { data, hora, nome, whatsapp, endereco = null, referencia = '', servicos = [] }) {
+  const consulta = pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia, servicos });
   return `${base}#/agendar?${consulta.toString()}`;
 }
 
@@ -265,7 +296,7 @@ export function linkDoMapaDoPonto(endereco) {
 }
 
 /** Mensagem que o cliente manda ao administrador. */
-export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', endereco = null, referencia = '', servico = '', linkApp }) {
+export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', endereco = null, referencia = '', servico = '', servicos = [], linkApp }) {
   const linhas = [
     `Olá! Quero marcar um horário com a ${empresa}.`,
     '',
@@ -273,11 +304,13 @@ export function mensagemDoPedido({ empresa, data, hora, nome, whatsapp = '', end
     `👤 ${nome}`,
   ];
   if (whatsapp) linhas.push(`📱 ${formatarTelefone(whatsapp)}`);
+  const pedidos = limparServicos(servicos);
+  if (pedidos.length > 0) linhas.push(`🔧 ${pedidos.join(', ')}`);
   if (endereco && linhaDoEndereco(endereco)) linhas.push(`📍 ${linhaDoEndereco(endereco)}`);
   if (referencia) linhas.push(`📌 Referência: ${referencia}`);
   if (linkDoMapaDoPonto(endereco)) linhas.push(`🗺️ ${linkDoMapaDoPonto(endereco)}`);
-  if (servico) linhas.push(`🔧 ${servico}`);
-  linhas.push('', 'Aguardo a confirmação. Obrigado!', '', '— Técnico: abrir no app', linkApp);
+  if (servico && pedidos.length === 0) linhas.push(`🔧 ${servico}`);
+  linhas.push('', 'Aguardo a confirmação. Obrigado!', '', '— Técnico: abrir no app', '', linkApp);
   return linhas.join('\n');
 }
 
@@ -301,5 +334,5 @@ export function lerPedidoDaConsulta(consulta) {
     uf: q('uf', 2).toUpperCase(), lat: temPonto ? lat : null, lng: temPonto ? lng : null,
   };
   const temEndereco = Boolean(endereco.rua || endereco.numero || endereco.cidade);
-  return { data, hora, nome, whatsapp, endereco: temEndereco ? endereco : null, referencia: q('ref', 120) };
+  return { data, hora, nome, whatsapp, endereco: temEndereco ? endereco : null, referencia: q('ref', 120), servicos: limparServicos(consulta.getAll('serv')) };
 }

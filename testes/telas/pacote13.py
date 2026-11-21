@@ -67,12 +67,11 @@ with sync_playwright() as p:
     href = pag.get_attribute("#enviar-whatsapp", "href")
     ok(href.startswith("https://wa.me/?text="), "'Enviar pelo WhatsApp' abre a lista de contatos (sem número)")
     ok(pag.locator("[data-acao=copiar-mensagem]").count() == 1, "botão 'Copiar mensagem'")
-    resumo1 = pag.inner_text("#resumo-previa")
-    pag.locator("label.chip", has_text="Instalação").click(); pag.wait_for_timeout(500)
-    ok(pag.inner_text("#resumo-previa") != resumo1, "trocar o serviço recalcula os horários")
+    # Pacote 24: o administrador não escolhe mais o serviço; o link leva a lista para o cliente marcar.
+    ok(pag.locator("label.chip").count() == 0 and "Serviço (opcional)" not in pag.inner_text("#conteudo"), "pacote 24: a ferramenta não pede mais o serviço")
     ok("Atendimento" not in pag.inner_text("#mensagem-previa"), "serviço não aparece escrito na mensagem do administrador")
     link = re.search(r"https?://\S+#/horarios\?\S+", pag.inner_text("#mensagem-previa")).group(0)
-    ok("s=Instala" in urllib.parse.unquote_plus(link), "o serviço escolhido vai no link")
+    ok("ts=Instala" in urllib.parse.unquote_plus(link), "o link leva a lista de serviços para o cliente")
     ok("?demo=1#/horarios" in link, "o link mantém o ?demo=1 (senão abriria 'aplicativo não configurado')")
 
     # ---------------- O cliente abre o link (sem login) ----------------
@@ -80,9 +79,9 @@ with sync_playwright() as p:
     cli.goto(link); cli.wait_for_selector(".pagina-cliente", timeout=8000); cli.wait_for_timeout(500)
     ok("não está configurado" not in cli.inner_text("body"), "o link abre a página do cliente (não a tela de 'não configurado')")
     t = texto(cli)
-    ok("Escolha o melhor dia e horário" in t and "Atendimento: Instalação" in t, "página do cliente com título e serviço")
+    ok("Escolha o melhor dia e horário" in t and "Qual serviço você precisa?" in t, "página do cliente com título e a pergunta do serviço")
     ok(cli.locator(".menu-topo__item").count() == 0 or not cli.locator("#menu-topo").is_visible(), "página pública sem menu")
-    ok(cli.locator("#passo-horario").is_hidden() and cli.locator("#passo-dados").is_hidden(), "só o passo 1 aparece no começo")
+    ok(cli.locator("#passo-horario").is_hidden() and cli.locator("#passo-dados").is_hidden(), "no começo só aparecem o serviço e o dia")
     dia = cli.locator("[data-acao=dia]:not([disabled])").first
     iso = dia.get_attribute("data-iso")
     dia.click(); cli.wait_for_timeout(400)
@@ -91,6 +90,9 @@ with sync_playwright() as p:
     cli.locator("[data-acao=hora]").first.click(); cli.wait_for_timeout(400)
     hora = cli.locator("[data-acao=hora].horario-botao--escolhido").inner_text()
     ok(cli.locator("#passo-dados").is_visible(), "ao escolher o horário aparecem os dados")
+    cli.click("#form-pedido [type=submit]"); cli.wait_for_timeout(400)
+    ok("Marque o serviço que você precisa" in cli.inner_text("body"), "pacote 24: sem marcar serviço não envia")
+    cli.locator("#area-servicos label.chip", has_text="Instalação").click(); cli.wait_for_timeout(300)
     cli.click("#form-pedido [type=submit]"); cli.wait_for_timeout(400)
     ok("Digite o seu nome" in cli.inner_text("body"), "nome vazio mostra erro")
     cli.fill("input[name=nome]", "Cláudia Nogueira"); cli.fill("input[name=whatsapp]", "123")
