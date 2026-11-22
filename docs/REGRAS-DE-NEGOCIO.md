@@ -238,3 +238,12 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Aviso "Pedido do cliente" (Agendar):** tocar nele (ou no botão "Preencher o agendamento com o pedido") coloca os serviços pedidos no agendamento SEM aparelho. Sem cliente escolhido, pede para escolher/cadastrar. "Não sei ainda" não coloca nada ("Serviço a definir").
 - **"Informar o aparelho":** linha com serviço e sem aparelho mostra esse botão (administrador e técnico). Pergunta só o aparelho; o mesmo serviço não entra duas vezes no mesmo aparelho; aparelho com outro agendamento aberto é recusado. Sem aparelho não conclui (regra que já existia).
 - Regras do Firestore mudam (nova coleção `linksCurtos`): publicar as regras depois do merge.
+
+## Pacote 26 — retorno, WhatsApp da equipe, Concluídos do técnico, backup
+
+- **Selo de retorno do serviço concluído:** mostra o prazo realmente usado na conclusão (ex.: "Retorno em 12 meses"). Agendado e cancelado continuam mostrando o prazo padrão do tipo.
+- **Mensagem de retorno (WhatsApp):** variáveis novas `{tempo}` (há quanto tempo foi o último serviço: "12 dias", "6 meses", "1 ano e 2 meses"; sem data: "algum tempo") e `{data}` (dia do último serviço). Texto padrão novo: "Já faz {tempo} da última {servico} do seu ar-condicionado ({aparelho}). Está na hora de fazer de novo…". Empresa que ainda tem guardado o texto padrão ANTIGO (nunca editou) passa a usar o novo; quem editou mantém o texto exatamente como escreveu.
+- **Equipe:** a lista mostra o WhatsApp de cada funcionário ("sem WhatsApp" quando não há número válido); a tela do convite mostra o WhatsApp do convidado.
+- **Concluídos (técnico):** a lista se atualiza sozinha (a cada minuto e ao voltar para o app), sem mexer nos filtros.
+- **Backup:** passa a levar os campos que faltavam dos serviços (atraso avisado pelo técnico, troca de técnico) e as configurações da empresa (avisos ao cliente, expediente, almoço, limite de horas, administrador atende, técnico cadastra cliente). Essas configurações vão no arquivo, mas a restauração continua devolvendo só os dados (clientes, aparelhos, serviços, valores, preços), como antes. Um teste confere que os campos do backup são os mesmos que as regras do Firestore aceitam.
+- Regras do Firestore não mudam neste pacote.
