@@ -13,10 +13,10 @@ import { html, mostrar, aoClicar, escolher, confirmar, toast, mostrarErro } from
 import { cabecalho, botao, selo, abas, estadoVazio, esqueletos } from '../nucleo/componentes.js';
 import { sessao } from '../nucleo/sessao.js';
 import { listarRetornos, registrarAviso, adiarRetornoDoServico, recusarRetorno } from '../servicos/servicos.js';
-import { OPCOES_ADIAR_DIAS } from '../dominio/retornos.js';
+import { OPCOES_ADIAR_DIAS, tempoDesde, modeloDaMensagemDeRetorno } from '../dominio/retornos.js';
 import { montarMensagem, linkWhatsappDoCliente } from '../dominio/whatsapp.js';
-import { formatarDataBR } from '../dominio/datas.js';
-import { MENSAGEM_WHATSAPP_PADRAO, DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
+import { formatarDataBR, paraISO } from '../dominio/datas.js';
+import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, hojeIso, primeiroNome } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -85,8 +85,10 @@ export default async function montar(ctx) {
     avisar: async (el) => {
       const s = achar(el.dataset.id);
       if (!s) return;
-      const texto = montarMensagem(sessao.empresa?.mensagemWhatsapp || MENSAGEM_WHATSAPP_PADRAO, {
+      const dia = s.dataConclusao instanceof Date ? paraISO(s.dataConclusao) : '';
+      const texto = montarMensagem(modeloDaMensagemDeRetorno(sessao.empresa), {
         nome: primeiroNome(s.clienteNome), empresa: sessao.empresa?.nome || '', servico: s.tipoServicoNome, aparelho: s.aparelhoResumo || 'seu aparelho',
+        tempo: tempoDesde(dia, hojeIso()), data: dia ? formatarDataBR(dia) : '',
       });
       const link = linkWhatsappDoCliente(s.clienteWhatsapp, texto);
       if (!link) { toast('O telefone deste cliente é inválido. Corrija no cadastro.', 'erro'); return; }

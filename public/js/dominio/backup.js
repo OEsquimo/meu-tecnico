@@ -27,6 +27,7 @@ export const CAMPOS_PERMITIDOS = {
     'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm',
     'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem',
     'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin',
+    'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista',
   ],
   valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
   precos: ['valorCentavos', 'atualizadoEm'],
@@ -77,12 +78,20 @@ export function montarBackup(dados, agora = new Date()) {
     versao: VERSAO_BACKUP,
     exportadoEm: agora,
     empresa: dados.empresa
-      ? { nome: dados.empresa.nome, diasAvisoRetorno: dados.empresa.diasAvisoRetorno, mensagemWhatsapp: dados.empresa.mensagemWhatsapp, chavePix: dados.empresa.chavePix ?? '', mensagemCobranca: dados.empresa.mensagemCobranca ?? '', tomCobranca: dados.empresa.tomCobranca ?? 'amigavel' }
+      ? { nome: dados.empresa.nome, diasAvisoRetorno: dados.empresa.diasAvisoRetorno, mensagemWhatsapp: dados.empresa.mensagemWhatsapp, chavePix: dados.empresa.chavePix ?? '', mensagemCobranca: dados.empresa.mensagemCobranca ?? '', tomCobranca: dados.empresa.tomCobranca ?? 'amigavel', ...configuracoesDaEmpresa(dados.empresa) }
       : null,
     // Só informativo: nome/telefone/situação da equipe (não é restaurado, pois depende de logins).
     equipe: (dados.equipe || []).map((m) => ({ nome: m.nome, telefone: m.telefone, status: m.status })),
     colecoes,
   };
+}
+
+/** Configurações da empresa que também entram no backup (pacote 26): avisos ao cliente, horário de funcionamento, almoço etc. Só vão as que existem. */
+const CONFIGURACOES_DA_EMPRESA = ['permiteTecnicoCliente', 'avisoAgendado', 'avisoCancelado', 'avisoReagendado', 'expediente', 'almoco', 'limiteHorasDia', 'adminAtende'];
+function configuracoesDaEmpresa(empresa) {
+  const saida = {};
+  for (const campo of CONFIGURACOES_DA_EMPRESA) if (empresa[campo] !== undefined) saida[campo] = empresa[campo];
+  return saida;
 }
 
 /** Objeto -> texto JSON (com datas preservadas). */
