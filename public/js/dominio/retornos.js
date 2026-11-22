@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { somarDias, somarMeses, diasEntre } from './datas.js';
-import { GARANTIA_DIAS, PRAZOS_RETORNO_MESES, MENSAGEM_WHATSAPP_PADRAO, MENSAGEM_WHATSAPP_ANTIGA } from '../nucleo/constantes.js';
+import { GARANTIA_DIAS, PRAZOS_RETORNO_MESES } from '../nucleo/constantes.js';
 
 /** Dia do retorno = dia da conclusão + N meses. */
 export function calcularDataRetorno(diaConclusaoISO, meses) {
@@ -72,33 +72,3 @@ export function adiarRetorno(dataRetornoISO, hojeISO, dias) {
 
 /** Opções de adiamento mostradas na tela (dias). */
 export const OPCOES_ADIAR_DIAS = [7, 15, 30];
-
-/**
- * Há quanto tempo foi o serviço, em palavras para a mensagem de retorno (pacote 26):
- * "12 dias", "1 mês", "6 meses", "1 ano", "1 ano e 2 meses", "2 anos". Sem data: "algum tempo".
- */
-export function tempoDesde(diaISO, hojeISO) {
-  if (!diaISO || !hojeISO) return 'algum tempo';
-  const [a1, m1, d1] = diaISO.split('-').map(Number);
-  const [a2, m2, d2] = hojeISO.split('-').map(Number);
-  let meses = (a2 - a1) * 12 + (m2 - m1) - (d2 < d1 ? 1 : 0);
-  if (meses < 1) {
-    const dias = Math.max(0, diasEntre(diaISO, hojeISO));
-    return dias === 1 ? '1 dia' : `${dias} dias`;
-  }
-  const anos = Math.floor(meses / 12);
-  meses -= anos * 12;
-  const doAno = anos === 0 ? '' : anos === 1 ? '1 ano' : `${anos} anos`;
-  const doMes = meses === 0 ? '' : meses === 1 ? '1 mês' : `${meses} meses`;
-  return [doAno, doMes].filter(Boolean).join(' e ');
-}
-
-/**
- * Modelo da mensagem de retorno da empresa. Vazio, ou ainda o texto padrão antigo (nunca editado): usa o padrão novo.
- * Quem editou a mensagem mantém exatamente o que escreveu.
- */
-export function modeloDaMensagemDeRetorno(empresa) {
-  const guardado = String(empresa?.mensagemWhatsapp ?? '').trim();
-  if (!guardado || guardado === MENSAGEM_WHATSAPP_ANTIGA.trim()) return MENSAGEM_WHATSAPP_PADRAO;
-  return empresa.mensagemWhatsapp;
-}

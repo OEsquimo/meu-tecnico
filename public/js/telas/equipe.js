@@ -6,11 +6,7 @@ import { html, mostrar } from '../nucleo/ui.js';
 import { cabecalho, botao, itemLista, avatar, esqueletos, aviso } from '../nucleo/componentes.js';
 import { listarEquipe } from '../servicos/equipe.js';
 import { empresaId } from '../nucleo/sessao.js';
-import { formatarTelefone, normalizarWhatsappBR } from '../dominio/telefone.js';
 import { mostrarFalha, seloStatusEquipe, seta } from './_auxiliar-admin.js';
-
-/** WhatsApp do funcionário para a lista (pacote 26): formatado; sem número válido, avisa. */
-const whatsappDoMembro = (m) => (normalizarWhatsappBR(m.telefone) ? formatarTelefone(m.telefone) : 'sem WhatsApp');
 
 export default async function montar(ctx) {
   const { raiz, sessao } = ctx;
@@ -32,7 +28,7 @@ export default async function montar(ctx) {
             href: m.status === 'convite' ? `#/equipe/convite/${m.id}` : `#/equipe/${m.id}`,
             avatarNome: m.nome,
             titulo: m.nome,
-            sub: `${m.status === 'convite' ? 'Ainda não entrou no app' : m.status === 'bloqueado' ? 'Sem acesso ao app' : 'Técnico'} · ${whatsappDoMembro(m)}`,
+            sub: m.status === 'convite' ? 'Ainda não entrou no app' : m.status === 'bloqueado' ? 'Sem acesso ao app' : 'Técnico',
             inativo: m.status === 'bloqueado',
             direita: html`${seloStatusEquipe(m.status)}${seta}`,
           }))}

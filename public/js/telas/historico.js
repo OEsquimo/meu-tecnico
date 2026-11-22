@@ -168,14 +168,6 @@ export default async function montar(ctx) {
   raiz.addEventListener('change', aoAlterar);
 
   await carregar();
-  // Pacote 26: para o técnico, a lista se atualiza sozinha (o que ele ou o administrador concluiu aparece sem sair da tela).
-  // Só a lista é refeita: filtros e o que está digitado ficam como estão (o roteador não atualiza com campo em uso).
-  if (!usuario.admin) {
-    ctx.aoAtualizar?.(async () => {
-      await ler(lido.modo, lido.limite);
-      if (ctx.ativo()) desenharLista();
-    });
-  }
   return () => {
     raiz.removeEventListener('input', aoDigitar);
     raiz.removeEventListener('change', aoAlterar);
