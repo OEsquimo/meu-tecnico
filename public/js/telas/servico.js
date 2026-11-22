@@ -104,6 +104,16 @@ export default async function montar(ctx) {
     return botao({ texto: 'Informar aparelho e serviço', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true });
   }
 
+  /**
+   * Pacote 26: o selo de retorno de um serviço JÁ CONCLUÍDO mostra o prazo que foi realmente usado na conclusão
+   * (ex.: "Retorno em 12 meses"), e não o prazo padrão do tipo. Agendado/cancelado: o padrão do tipo, como antes.
+   */
+  function tipoParaOSelo(l) {
+    const tipo = sessao.tipos.find((t) => t.id === l.tipoServicoId) || { geraRetorno: l.geraRetorno, retornoPadraoMeses: l.retornoMeses };
+    if (l.status === STATUS.CONCLUIDO && l.geraRetorno === true && l.retornoMeses) return { ...tipo, geraRetorno: true, retornoPadraoMeses: l.retornoMeses };
+    return tipo;
+  }
+
   /** `repetidos`: o que o cabeçalho e o cartão de cima já dizem (título do serviço, técnicos, situação) e não precisa se repetir na linha. */
   function cartaoDaLinha(l, valores, cobraveis, repetidos = {}) {
     const sit = seloDoServico(l);
@@ -118,7 +128,7 @@ export default async function montar(ctx) {
             ${!repetidos.titulo && html`<div class="item-lista__titulo">${l.tipoServicoNome}</div>`}
             ${!repetidos.tecnicos && html`<div class="item-lista__sub">${textoDosTecnicos(l) ? `${nomesDosTecnicos(l).length > 1 ? 'Técnicos' : 'Técnico'}: ${textoDosTecnicos(l)}` : 'Sem técnico'}</div>`}
           </div>
-          ${!ehLinhaSemServico(l) && selo(textoDoRetorno(sessao.tipos.find((t) => t.id === l.tipoServicoId) || { geraRetorno: l.geraRetorno, retornoPadraoMeses: l.retornoMeses }), l.geraRetorno ? 'azul' : '')}
+          ${!ehLinhaSemServico(l) && selo(textoDoRetorno(tipoParaOSelo(l)), l.geraRetorno ? 'azul' : '')}
           ${!repetidos.situacao && selo(sit.texto, sit.tom)}
           ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
         </div>

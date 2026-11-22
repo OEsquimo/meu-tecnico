@@ -74,8 +74,17 @@ export const TIPOS_SERVICO_PADRAO = [
   { nome: 'Carga de gás', geraRetorno: false, retornoPadraoMeses: 0, duracaoMin: 60, ativo: true, ordem: 5 },
 ];
 
-/** Texto padrão do lembrete de retorno enviado pelo WhatsApp. Variáveis entre chaves. */
+/**
+ * Texto padrão do lembrete de retorno enviado pelo WhatsApp. Variáveis entre chaves:
+ * {nome} {empresa} {servico} {aparelho} {tempo} (há quanto tempo foi o último serviço) {data} (dia do último serviço).
+ */
 export const MENSAGEM_WHATSAPP_PADRAO =
+  'Olá, {nome}! Tudo bem? Aqui é da {empresa}. ' +
+  'Já faz {tempo} da última {servico} do seu ar-condicionado ({aparelho}). ' +
+  'Está na hora de fazer de novo. Quer agendar um horário?';
+
+/** O texto padrão ANTES do pacote 26. Empresas que nunca o editaram ainda o têm guardado: passam a usar o novo. */
+export const MENSAGEM_WHATSAPP_ANTIGA =
   'Olá, {nome}! Tudo bem? Aqui é da {empresa}. ' +
   'Já está na hora da {servico} do seu ar-condicionado ({aparelho}). ' +
   'Quer agendar um horário?';

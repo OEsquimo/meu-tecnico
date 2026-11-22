@@ -6,6 +6,7 @@
 
 import { html, mostrar, aoClicar, copiarTexto, toast, confirmar, comCarregando, mostrarErro } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, esqueletos } from '../nucleo/componentes.js';
+import { formatarTelefone, normalizarWhatsappBR } from '../dominio/telefone.js';
 import { buscarMembro, linkDoConvite, mensagemDoConvite, linkWhatsappDoConvite, removerFuncionario } from '../servicos/equipe.js';
 import { empresaId } from '../nucleo/sessao.js';
 import { mostrarFalha } from './_auxiliar-admin.js';
@@ -28,6 +29,7 @@ export default async function montar(ctx) {
       ${cabecalho({ titulo: 'Convite criado', subtitulo: membro.nome, voltarPara: '#/equipe' })}
       <div class="pilha">
         ${aviso({ tom: 'verde', texto: 'Envie o link para o funcionário. Ele cria a própria senha e já entra na sua equipe.' })}
+        <div class="item-lista__sub" data-resumo="whatsapp-convidado">WhatsApp: ${normalizarWhatsappBR(membro.telefone) ? formatarTelefone(membro.telefone) : 'não informado (toque em Editar dados para colocar)'}</div>
         <div class="codigo-copiavel">${link}</div>
         ${whats ? botao({ texto: 'Enviar pelo WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', href: whats, externo: true, bloco: true }) : ''}
         ${botao({ texto: 'Copiar link', variante: 'secundario', iconeNome: 'copiar', acao: 'copiar', bloco: true })}
