@@ -3,7 +3,7 @@
 // =============================================================================
 // Uma mensagem por técnico e por visita, só com os dados dele. Linha cujo dado não existe some.
 // O telefone vai escrito simples (o WhatsApp não transforma "tel:" em link); o WhatsApp do cliente vai como link.
-// O endereço vai escrito e com links do Google Maps e do Waze (no WhatsApp cada link abre direto o app).
+// O endereço vai escrito e com UM link do Google Maps (pacote 25: sem Waze, para a mensagem ficar curta).
 // No cancelamento NÃO vai o link do app (o serviço deixou de existir na agenda do técnico).
 // =============================================================================
 
@@ -65,7 +65,6 @@ export function montarAvisoTecnico(tipo, d) {
   add('📍 Endereço: ', d.endereco);
   const mapas = linksDeMapa(d.endereco, d.lat, d.lng);
   add('🗺️ Google Maps: ', mapas.google);
-  add('🚗 Waze: ', mapas.waze);
   add('📱 WhatsApp do cliente: ', whats);
   add('📞 Telefone: ', tel);
   if (d.linkApp) linhas.push('', `👉 Ver os serviços e todos os detalhes no app: ${d.linkApp}`);

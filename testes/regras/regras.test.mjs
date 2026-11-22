@@ -546,3 +546,59 @@ test('pacote 15: só o administrador grava atraso do técnico e a troca de técn
   await assertFails(updateDoc(doc(como(TEC), `empresas/${E}/servicos/s-tec`), { atrasoPorTecnico: true }));
   await assertFails(updateDoc(doc(como(OUTRO), `empresas/${E}/servicos/s-tec`), { reatribuicaoVista: true }));
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// PACOTE 25: links curtos (coleção linksCurtos)
+// ---------------------------------------------------------------------------------------------------------------
+const linkHorarios = (extra = {}) => ({ tipo: 'horarios', empresaId: E, consulta: 'e=Frio&w=5511912345678&g=2026-11-21&p=0_bo_3fff', criadoEm: serverTimestamp(), expiraEm: dia(8), ...extra });
+const linkPedido = (extra = {}) => ({ tipo: 'pedido', empresaId: E, origem: 'abcdefghij', consulta: 'data=2026-11-25&hora=09:00&pedido=1&nome=Ana', criadoEm: serverTimestamp(), expiraEm: dia(30), ...extra });
+async function semearLinkDeHorarios(extra = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'linksCurtos/abcdefghij'), { tipo: 'horarios', empresaId: E, consulta: 'e=Frio', criadoEm: dia(0), expiraEm: dia(8), ...extra });
+  });
+}
+
+test('pacote 25: só o administrador cria o link de horários, da própria empresa, com validade limitada', async () => {
+  await assertSucceeds(setDoc(doc(como(ADMIN), 'linksCurtos/k1k1k1k1k1'), linkHorarios()));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/k2k2k2k2k2'), linkHorarios()));
+  await assertFails(setDoc(doc(como(TEC), 'linksCurtos/k3k3k3k3k3'), linkHorarios()));
+  await assertFails(setDoc(doc(como(OUTRO), 'linksCurtos/k4k4k4k4k4'), linkHorarios())); // de outra empresa
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/k5k5k5k5k5'), linkHorarios({ expiraEm: dia(40) })));
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/k6k6k6k6k6'), linkHorarios({ consulta: 'x'.repeat(3001) })));
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/k7k7k7k7k7'), linkHorarios({ campoExtra: 1 })));
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/k8k8k8k8k8'), linkHorarios({ criadoEm: dia(-3) })));
+});
+
+test('pacote 25: o link de horários é lido por qualquer pessoa com o código, até vencer; ninguém lista nem altera', async () => {
+  await semearLinkDeHorarios();
+  await assertSucceeds(getDoc(doc(anonimo(), 'linksCurtos/abcdefghij')));
+  await assertFails(getDocs(collection(anonimo(), 'linksCurtos')));
+  await assertFails(getDocs(collection(como(ADMIN), 'linksCurtos')));
+  await assertFails(updateDoc(doc(como(ADMIN), 'linksCurtos/abcdefghij'), { consulta: 'outro' }));
+  await assertFails(deleteDoc(doc(anonimo(), 'linksCurtos/abcdefghij')));
+  await assertSucceeds(deleteDoc(doc(como(ADMIN), 'linksCurtos/abcdefghij')));
+  await semearLinkDeHorarios({ expiraEm: dia(-1) });
+  await assertFails(getDoc(doc(anonimo(), 'linksCurtos/abcdefghij'))); // venceu
+});
+
+test('pacote 25: a página do cliente cria o pedido só citando um link de horários da mesma empresa', async () => {
+  await semearLinkDeHorarios();
+  await assertSucceeds(setDoc(doc(anonimo(), 'linksCurtos/pedido0001'), linkPedido()));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0002'), linkPedido({ origem: 'naoexiste1' })));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0003'), linkPedido({ empresaId: 'emp2' }))); // empresa diferente da do link
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0004'), linkPedido({ consulta: 'x'.repeat(1501) })));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0005'), linkPedido({ expiraEm: dia(60) })));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0006'), linkPedido({ extra: 'x' })));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/pedido0007'), linkPedido({ origem: 'pedido0001' }))); // origem precisa ser link de horários
+});
+
+test('pacote 25: o pedido só é lido (e apagado) pelo administrador da empresa', async () => {
+  await semearLinkDeHorarios();
+  await setDoc(doc(anonimo(), 'linksCurtos/pedido0001'), linkPedido());
+  await assertFails(getDoc(doc(anonimo(), 'linksCurtos/pedido0001')));
+  await assertFails(getDoc(doc(como(TEC), 'linksCurtos/pedido0001')));
+  await assertFails(getDoc(doc(como(OUTRO), 'linksCurtos/pedido0001')));
+  await assertSucceeds(getDoc(doc(como(ADMIN), 'linksCurtos/pedido0001')));
+  await assertFails(updateDoc(doc(como(ADMIN), 'linksCurtos/pedido0001'), { consulta: 'x' }));
+  await assertSucceeds(deleteDoc(doc(como(ADMIN), 'linksCurtos/pedido0001')));
+});

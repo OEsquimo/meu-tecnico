@@ -45,7 +45,7 @@ import { linhaCurtaDoEndereco } from '../dominio/endereco.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { ehISOValido, formatarDataHoraBR, formatarDataBR, hojeISO, paraISO, formatarHora, formatarDiaExtenso, formatarMesAno } from '../dominio/datas.js';
 import { linhaDoEndereco } from '../dominio/endereco.js';
-import { lerPedidoDaConsulta, pedidoNaConsulta } from '../dominio/link-horarios.js';
+import { lerPedidoDaConsulta, pedidoNaConsulta, SERVICO_NAO_SEI } from '../dominio/link-horarios.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { STATUS, chaveDoAgendamento, tecnicosDoServico, nomesDosTecnicos, linhasEditaveis } from '../dominio/servicos.js';
 import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, oferecerAviso } from './servicos-comum.js';
@@ -415,9 +415,46 @@ export default async function montar(ctx) {
     if (!area) return;
     if (!pedidoDoCliente) { mostrar(area, ''); return; }
     const p = pedidoDoCliente;
+    // Pacote 25: tocar no aviso preenche o agendamento (cliente, serviços pedidos sem aparelho). Dia, hora e endereço já vêm.
     mostrar(area, html`
-      ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}${p.servicos?.length ? html` Serviços pedidos: ${p.servicos.join(', ')}.` : ''}${p.endereco ? html` Endereço: ${linhaDoEndereco(p.endereco)}.` : ''}${p.referencia ? html` Referência: ${p.referencia}.` : ''}` })}
+      <div class="pilha pilha--pequena" data-acao="usar-pedido" role="button" tabindex="0" aria-label="Preencher o agendamento com o pedido do cliente">
+        ${aviso({ tom: 'verde', titulo: 'Pedido do cliente', texto: html`${p.nome || 'Cliente'} pediu ${formatarDiaExtenso(p.data)} às ${p.hora}.${p.whatsapp ? html` WhatsApp: ${formatarTelefone(p.whatsapp)}.` : ''}${p.servicos?.length ? html` Serviços pedidos: ${p.servicos.join(', ')}.` : ''}${p.endereco ? html` Endereço: ${linhaDoEndereco(p.endereco)}.` : ''}${p.referencia ? html` Referência: ${p.referencia}.` : ''}` })}
+        ${botao({ texto: 'Preencher o agendamento com o pedido', iconeNome: 'check', bloco: true, acao: 'usar-pedido' })}
+      </div>
       ${pedidoSemVaga && aviso({ tom: 'amarelo', texto: `O horário pedido (${p.hora}) já não está livre. Escolha outro em "Quando" e avise o cliente.` })}`);
+  }
+
+  /**
+   * Toque no aviso "Pedido do cliente": sem cliente escolhido, abre o cadastro novo já preenchido; com cliente, coloca
+   * os serviços pedidos no agendamento SEM aparelho (o aparelho se informa depois, na página do agendamento; sem ele
+   * não conclui). "Não sei ainda" não coloca nada: fica o "Serviço a definir".
+   */
+  function usarPedidoDoCliente() {
+    const p = pedidoDoCliente;
+    if (!p) return;
+    if (!estado.cliente) {
+      toast('Primeiro escolha o cliente, ou cadastre um novo.', 'info');
+      levarAte(raiz.querySelector('#area-cliente'));
+      return;
+    }
+    const nomes = (p.servicos || []).filter((n) => n !== SERVICO_NAO_SEI);
+    const tipos = nomes.map((n) => tiposAtivos().find((t) => t.nome === n)).filter(Boolean);
+    if (tipos.length === 0) {
+      toast(nomes.length > 0 ? 'Os serviços do pedido não existem mais nos seus tipos de serviço.' : 'O cliente não soube dizer o serviço: fica "Serviço a definir".', 'info');
+      return;
+    }
+    let grupo = estado.grupos.find((g) => g.aparelhoId === '');
+    if (!grupo) { grupo = novoGrupo(''); estado.grupos.push(grupo); }
+    let novos = 0;
+    for (const tipo of tipos) {
+      if (grupo.servicos.some((x) => x.tipoId === tipo.id)) continue;
+      const s = novoServico({ tipoId: tipo.id });
+      grupo.servicos.push(s);
+      s.tecnicoUids = tecnicosSugeridos({ ...contexto(), servico: s });
+      novos += 1;
+    }
+    redesenharTudo();
+    toast(novos > 0 ? `${novos === 1 ? 'Serviço colocado' : 'Serviços colocados'}. Informe o aparelho depois de salvar.` : 'Os serviços do pedido já estão no agendamento.', 'sucesso');
   }
 
   // ---- Cliente ----
@@ -516,7 +553,7 @@ export default async function montar(ctx) {
         <header class="agenda-aparelho__topo">
           <div class="expande">
             <div class="item-lista__titulo">${semCadastro ? 'Sem aparelho cadastrado' : tituloDoAparelho(aparelho)}</div>
-            <div class="item-lista__sub">${semCadastro ? 'Escolha ou cadastre o aparelho na conclusão do serviço.' : descricaoTecnica(aparelho)}</div>
+            <div class="item-lista__sub">${semCadastro ? 'Informe o aparelho na página do agendamento, antes de concluir.' : descricaoTecnica(aparelho)}</div>
           </div>
           <div class="agenda-acoes">
             ${!semCadastro && botao({ texto: 'Editar', variante: 'secundario', pequeno: true, acao: 'editar-aparelho', dados: { grupo: g.chave } })}
@@ -773,6 +810,7 @@ export default async function montar(ctx) {
       'quando-mes': (el) => mudarMesDoCalendario(Number(el.dataset.passo)),
       'escolher-cliente': (el) => escolherCliente(el.dataset.id),
       'trocar-cliente': trocarCliente,
+      'usar-pedido': usarPedidoDoCliente,
       'buscar-cliente-pedido': () => {
         buscandoPedido = true;
         desenharCliente();

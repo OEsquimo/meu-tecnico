@@ -12,6 +12,7 @@ rules_version = '2';
 //   config/regras                       -> regras globais editáveis pelo dono (dias de teste...)
 //   planos/{planoId}                    -> planos (preço, limite de clientes...) editáveis pelo dono
 //   usuarios/{uid}                      -> a quem cada login pertence (empresa + papel)
+//   linksCurtos/{codigo}                -> links curtos de horários e de pedidos do cliente (pacote 25)
 //   empresas/{empresaId}                -> uma empresa/técnico autônomo (o "inquilino")
 //     equipe/{id}                       -> funcionários (técnicos) e convites
 //     tiposServico/{id}                 -> tipos de serviço (limpeza, instalação...)
@@ -656,6 +657,48 @@ service cloud.firestore {
 
     function tecnicoApagaServicoAdicionado(emp) {
       return servicoAcrescentadoPeloTecnico(emp);
+    }
+
+    // -------------------------------------------------------------------------
+    // LINKS CURTOS (pacote 25): "#/h/<código>" (horários) e "#/p/<código>" (pedido do cliente)
+    // -------------------------------------------------------------------------
+    // O link guarda só um texto curto (a "consulta" do endereço antigo). Ninguém consegue LISTAR a coleção:
+    // só dá para ler (get) quem conhece o código de 10 letras/números.
+    //   horarios: criado pelo administrador; qualquer pessoa com o código lê, até vencer (expiraEm).
+    //   pedido:   criado por QUALQUER pessoa (a página do cliente não tem login), mas só citando o código de um
+    //             link de horários da MESMA empresa; só o administrador da empresa lê. Ninguém altera.
+    match /linksCurtos/{codigo} {
+      allow get: if (resource.data.tipo == 'horarios' && resource.data.expiraEm > request.time)
+        || (resource.data.tipo == 'pedido' && ehAdmin(resource.data.empresaId));
+
+      allow create: if request.resource.data.criadoEm == request.time
+        && request.resource.data.expiraEm is timestamp
+        && request.resource.data.expiraEm > request.time
+        && request.resource.data.empresaId is string
+        && request.resource.data.consulta is string
+        && request.resource.data.consulta.size() > 0
+        && request.resource.data.consulta.size() <= 3000
+        && ((
+          // administrador cria o link de horários (vale no máximo 15 dias)
+          request.resource.data.keys().hasOnly(['tipo', 'empresaId', 'consulta', 'criadoEm', 'expiraEm'])
+          && request.resource.data.tipo == 'horarios'
+          && ehAdmin(request.resource.data.empresaId)
+          && request.resource.data.expiraEm <= request.time + duration.value(15, 'd')
+        ) || (
+          // a página do cliente cria o pedido (vale no máximo 31 dias; consulta menor)
+          request.resource.data.keys().hasOnly(['tipo', 'empresaId', 'consulta', 'origem', 'criadoEm', 'expiraEm'])
+          && request.resource.data.tipo == 'pedido'
+          && request.resource.data.consulta.size() <= 1500
+          && request.resource.data.expiraEm <= request.time + duration.value(31, 'd')
+          && request.resource.data.origem is string
+          && request.resource.data.origem.size() == 10
+          && get(/databases/$(database)/documents/linksCurtos/$(request.resource.data.origem)).data.tipo == 'horarios'
+          && get(/databases/$(database)/documents/linksCurtos/$(request.resource.data.origem)).data.empresaId == request.resource.data.empresaId
+        ));
+
+      allow update: if false;
+      // O administrador da empresa pode apagar os seus links.
+      allow delete: if ehAdmin(resource.data.empresaId);
     }
 
     // Tudo que não foi liberado acima é negado automaticamente pelo Firestore.

@@ -59,20 +59,20 @@ test('mapas: com coordenadas os links vão ao ponto exato; sem endereço não h�
   assert.deepEqual(linksDeMapa(''), { google: '', waze: '' });
 });
 
-test('mensagem do técnico: endereço com Google Maps e Waze; sem endereço sem links; cancelamento sem mapas', () => {
+test('mensagem do técnico: endereço com Google Maps (sem Waze, pacote 25); sem endereço sem links; cancelamento sem mapas', () => {
   const base = { tecnico: 'João', cliente: 'Maria', dataHora: new Date(2026, 10, 25, 9, 0), whatsappCliente: '5511912345678' };
   const com = montarAvisoTecnico('agendado', { ...base, endereco: 'Rua A, 1' });
   assert.match(com, /📍 Endereço: Rua A, 1\n🗺️ Google Maps: https:\/\/www\.google\.com\/maps\/dir/);
-  assert.match(com, /\n🚗 Waze: https:\/\/waze\.com\/ul/);
+  assert.doesNotMatch(com, /Waze/); // pacote 25: só o Google Maps
   const sem = montarAvisoTecnico('agendado', { ...base, endereco: '' });
   assert.doesNotMatch(sem, /Maps|Waze|Endereço/);
   assert.doesNotMatch(montarAvisoTecnico('cancelado', { ...base, endereco: 'Rua A, 1' }), /Maps|Waze/);
 });
 
-test('destinatários: o técnico recebe os links de mapa e, havendo coordenadas, o ponto exato', () => {
+test('destinatários: o técnico recebe o link do Google Maps e, havendo coordenadas, o ponto exato', () => {
   const l = { id: 'a', clienteNome: 'Maria', clienteWhatsapp: '5511912345678', local: 'Rua A, 1', localLat: -8.05, localLng: -34.9, dataAgendada: new Date(2026, 10, 25, 9, 0), tipoServicoId: 't', tipoServicoNome: 'Limpeza', tecnicoUids: ['t1'], tecnicosNomes: ['João'] };
   const d = montarDestinatarios({ tipo: 'agendado', empresa: { nome: 'E' }, linhas: [l], equipe: [{ uid: 't1', nome: 'João', telefone: '(11) 98888-7777' }], adminUid: 'adm' });
-  assert.match(d[1].texto, /ll=-8\.05,-34\.9/);
+  assert.match(d[1].texto, /destination=-8\.05%2C-34\.9/); // pacote 25: só o Google Maps (o Waze saiu da mensagem)
 });
 
 test('menu do técnico tem "Conta" (onde ele sai); administrador não ganha item novo', () => {

@@ -23,17 +23,41 @@ import { mascararTelefoneDigitando, formatarTelefone } from '../dominio/telefone
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import { linhaDoEndereco } from '../dominio/endereco.js';
 import {
-  lerLinkDeHorarios, periodoDoHorario, validarPedidoDoCliente, validarServicosDoPedido, SERVICO_NAO_SEI, mensagemDoPedido, linkDoPedidoNoApp, enderecoBaseDoApp,
+  lerLinkDeHorarios, periodoDoHorario, validarPedidoDoCliente, validarServicosDoPedido, SERVICO_NAO_SEI, mensagemDoPedido, enderecoBaseDoApp,
 } from '../dominio/link-horarios.js';
 import { obterLocalizacao, buscarPorCoordenadas } from '../servicos/cep.js';
-import { carregarEstilos } from './servicos-comum.js';
+import { carregarEstilos, mostrarErroComTentar } from './servicos-comum.js';
+import { lerLinkCurto, linkDoPedidoParaEnviar } from '../servicos/links-curtos.js';
 
 const ROTULOS_PERIODO = { manha: 'Manhã', tarde: 'Tarde' };
 
 export default async function montar(ctx) {
-  const { raiz, consulta } = ctx;
+  const { raiz, params } = ctx;
+  let { consulta } = ctx;
   await carregarEstilos();
-  const link = lerLinkDeHorarios(consulta);
+  // Pacote 25: link curto "#/h/<código>": os horários estão guardados no banco; o resto da página é igual.
+  const codigoCurto = params?.codigo || '';
+  let empresaDoLink = '';
+  let linkVencido = false;
+  if (codigoCurto) {
+    mostrar(raiz, html`<div class="pagina-cliente">${marca('')}<p class="texto-suave" role="status">Abrindo os horários…</p></div>`);
+    let achado = null;
+    try {
+      achado = await lerLinkCurto(codigoCurto);
+    } catch (erro) {
+      if (ctx.ativo()) mostrarErroComTentar(raiz, erro, () => ctx.recarregar(), html`<div class="pagina-cliente">${marca('')}</div>`);
+      return undefined;
+    }
+    if (!ctx.ativo()) return undefined;
+    if (achado && achado.tipo === 'horarios' && !achado.vencido) {
+      consulta = new URLSearchParams(achado.consulta);
+      empresaDoLink = achado.empresaId;
+    } else {
+      consulta = new URLSearchParams();
+      linkVencido = true;
+    }
+  }
+  const link = linkVencido ? { valido: false, motivo: 'vencido', empresa: '', whatsapp: '', servicos: [], dias: [] } : lerLinkDeHorarios(consulta);
   const hoje = hojeISO();
 
   // ---- Link com problema: explica e dá uma saída (nunca fica sem resposta) ----
@@ -212,7 +236,7 @@ export default async function montar(ctx) {
     });
   }
 
-  function enviar(form) {
+  async function enviar(form) {
     limparErrosGerais(form);
     const servicos = validarServicosDoPedido(servicosMarcados, opcoesDeServico);
     if (!servicos.valido) {
@@ -223,7 +247,12 @@ export default async function montar(ctx) {
     const r = validarPedidoDoCliente({ ...lerCampos(form), lat: coordenadas?.lat, lng: coordenadas?.lng });
     if (!r.valido) { mostrarErrosNosCampos(form, r.erros); return; }
     const base = enderecoBaseDoApp(window.location.href);
-    const linkApp = linkDoPedidoNoApp(base, { data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servicos: servicos.dados });
+    const botaoEnviar = form.querySelector('[type="submit"]');
+    let linkApp = '';
+    await comCarregando(botaoEnviar, async () => {
+      // Link curto do pedido (guardado no banco, só o administrador lê); se não der, vai o comprido.
+      linkApp = await linkDoPedidoParaEnviar(base, { origem: codigoCurto, empresaId: empresaDoLink, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servicos: servicos.dados });
+    });
     const mensagem = mensagemDoPedido({ empresa: link.empresa, data: dia, hora, nome: r.dados.nome, whatsapp: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servico: link.servico, servicos: servicos.dados, linkApp });
     desenharQuaseLa({ nome: r.dados.nome, whatsappCliente: r.dados.whatsapp, endereco: r.dados.endereco, referencia: r.dados.referencia, servicos: servicos.dados, mensagem });
   }

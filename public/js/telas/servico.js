@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -56,7 +56,7 @@ export default async function montar(ctx) {
       desenhar(servico, linhas, valores);
       if (ctx.consulta?.get('informar') === '1' && linhas.some((l) => l.status === STATUS.AGENDADO)) {
         history.replaceState(null, '', `#/servico/${encodeURIComponent(servico.id)}`); // tira o "?informar=1" para não reabrir ao voltar
-        setTimeout(() => raiz.querySelector('[data-acao="informar-servico"], [data-acao="adicionar-servico"]')?.click(), 0);
+        setTimeout(() => raiz.querySelector('[data-acao="informar-servico"], [data-acao="informar-aparelho"], [data-acao="adicionar-servico"]')?.click(), 0);
       }
       // O administrador abriu: o aviso de "incluído em campo" some do Início (sem atrapalhar a tela se falhar).
       if (usuario.admin) marcarIncluidosComoVistos(usuario.empresaId, linhas).catch(() => {});
@@ -86,11 +86,16 @@ export default async function montar(ctx) {
   /**
    * O botão principal de uma linha ainda aberta (pacote 23):
    *   - sem aparelho: "Informar aparelho e serviço" (pergunta os dois);
+   *   - com serviço e sem aparelho (pacote 25): "Informar o aparelho" (pergunta só o aparelho);
    *   - com aparelho e sem serviço: "Informar o serviço" (não pergunta o aparelho; só oferece o que ainda falta);
    *   - tudo informado: "Concluir serviço".
    */
   function botaoDaLinha(l) {
     if (!precisaInformarAparelhoEServico(l)) return botao({ texto: 'Concluir serviço', iconeNome: 'check', href: `#/concluir/${l.id}`, bloco: true });
+    if (!l.aparelhoId && l.tipoServicoId) {
+      // Pacote 25: o serviço já está (veio do pedido do cliente); falta só o aparelho.
+      return botao({ texto: 'Informar o aparelho', iconeNome: 'mais', acao: 'informar-aparelho', dados: { id: l.id }, bloco: true });
+    }
     if (l.aparelhoId && !l.tipoServicoId) {
       return servicosQueFaltam(l.aparelhoId).length > 0
         ? botao({ texto: 'Informar o serviço', iconeNome: 'mais', acao: 'informar-servico', dados: { id: l.id }, bloco: true })
@@ -321,6 +326,7 @@ export default async function montar(ctx) {
         registrarCobranca(usuario.empresaId, ids).then(() => ctx.recarregar()).catch(mostrarErro);
       },
       'adicionar-servico': (el) => adicionarServico(el, s, abertas),
+      'informar-aparelho': (el) => informarAparelhoDaLinha(el, linhas.find((l) => l.id === el.dataset.id), abertas),
       'informar-servico': (el) => informarServicoDoAparelho(el, linhas.find((l) => l.id === el.dataset.id), abertas),
       cancelar: async (el) => {
         if (!await confirmar({ titulo: 'Cancelar este agendamento?', mensagem: 'Ele fica "aguardando reagendamento" para você marcar outra data. O cliente não será avisado automaticamente.', confirmar: 'Cancelar agendamento', cancelar: 'Voltar', perigo: true })) return;
@@ -343,6 +349,39 @@ export default async function montar(ctx) {
           } catch (e) { mostrarErro(e); }
         });
       },
+    });
+  }
+
+  /** O serviço já está na linha (veio do pedido do cliente): só falta o aparelho. Escolhe um aparelho do cliente ou cadastra um novo. */
+  async function informarAparelhoDaLinha(el, linha, abertas) {
+    if (!linha) return;
+    await comCarregando(el, async () => {
+      try {
+        const aparelhos = await listarAparelhosDoCliente(usuario.empresaId, linha.clienteId).catch(() => []);
+        // Só os aparelhos que ainda não têm este serviço nesta visita.
+        const livres = aparelhos.filter((a) => !abertas.some((l) => l.id !== linha.id && l.aparelhoId === a.id && l.tipoServicoId === linha.tipoServicoId));
+        const escolhaAparelho = await escolher({
+          titulo: `Em qual aparelho? (${linha.tipoServicoNome})`,
+          opcoes: [
+            ...livres.map((a) => ({ id: a.id, rotulo: resumoDoAparelho(a) })),
+            { id: '__novo', rotulo: '+ Cadastrar aparelho novo' },
+          ],
+        });
+        if (!escolhaAparelho) return;
+        if (escolhaAparelho === '__novo') {
+          ir(`/cliente/${encodeURIComponent(linha.clienteId)}/aparelho/novo?voltar=1&endereco=${encodeURIComponent(linha.enderecoId || '')}`);
+          return;
+        }
+        await informarAparelhoNaLinha({
+          empresaId: usuario.empresaId,
+          linhasDaVisita: abertas,
+          linha,
+          aparelho: livres.find((a) => a.id === escolhaAparelho),
+          tecnico: usuario.admin ? null : { uid: usuario.uid, nome: usuario.nome },
+        });
+        toast('Aparelho informado.', 'sucesso');
+        ctx.recarregar();
+      } catch (e) { mostrarErro(e); }
     });
   }
 

@@ -7,16 +7,17 @@
 // =============================================================================
 
 import { html, criarJanela } from '../nucleo/ui.js';
-import { sessao, empresaId as empresaIdAtual } from '../nucleo/sessao.js';
+import { sessao, tiposAtivos, empresaId as empresaIdAtual } from '../nucleo/sessao.js';
 import { ehAdmin } from '../nucleo/permissoes.js';
 import { TITULOS_DE_AVISO } from '../dominio/aviso-cliente.js';
 import { montarDestinatarios } from '../dominio/destinatarios-aviso.js';
 import { listarEquipe, tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { listarAgendados } from '../servicos/servicos.js';
+import { linkDeHorariosParaEnviar } from '../servicos/links-curtos.js';
 import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import { hojeISO, somarDias, deISO } from '../dominio/datas.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
-import { horariosLivresParaOLink, montarLinkDeHorarios, enderecoBaseDoApp, DIAS_A_FRENTE, DURACAO_SEM_SERVICO_MIN } from '../dominio/link-horarios.js';
+import { horariosLivresParaOLink, enderecoBaseDoApp, DIAS_A_FRENTE, DURACAO_SEM_SERVICO_MIN } from '../dominio/link-horarios.js';
 
 let aberto = false;
 
@@ -35,7 +36,7 @@ async function linkParaRemarcar() {
       expediente: expedienteDaEmpresa(sessao.empresa), tecnicos, agendados, duracaoMin: DURACAO_SEM_SERVICO_MIN, regras: regrasDaEmpresa(sessao.empresa), agora,
     });
     if (dias.length === 0) return '';
-    return montarLinkDeHorarios({ base: enderecoBaseDoApp(window.location.href), empresa: sessao.empresa?.nome || 'nossa empresa', whatsapp, servico: '', dias, geradoEm: hojeISO(agora) });
+    return await linkDeHorariosParaEnviar({ base: enderecoBaseDoApp(window.location.href), empresaId, empresa: sessao.empresa?.nome || 'nossa empresa', whatsapp, servicos: tiposAtivos().map((t) => t.nome), dias, geradoEm: hojeISO(agora) });
   } catch {
     return '';
   }

@@ -226,3 +226,15 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Mensagem do pedido:** linha 🔧 com os serviços logo após o WhatsApp; o link "Técnico: abrir no app" fica no fim, separado por uma linha em branco. O Agendar mostra "Serviços pedidos: …" no aviso "Pedido do cliente".
 - **Agenda:** concluídos e cancelados aparecem também no dia de hoje, no dia em que estavam agendados.
 - Regras do Firestore não mudam.
+
+## Pacote 25 — links curtos, aviso que preenche o agendamento, "Informar o aparelho"
+
+- **Links curtos:** o link de horários (e o do aviso de cancelamento ao cliente) vira `#/h/<código>`, e o "Técnico: abrir no app" do pedido vira `#/p/<código>` (10 letras/números). O texto longo fica guardado em `linksCurtos/{código}` no Firestore.
+  - `horarios`: criado pelo administrador; qualquer pessoa com o código lê (não dá para listar); vale 8 dias.
+  - `pedido`: criado pela página do cliente (sem login), só citando o código de um link de horários da MESMA empresa; só o administrador da empresa lê; vale 30 dias. Ninguém altera.
+  - Se não der para gravar (sem internet, regras ainda não publicadas), o app usa o link comprido de antes. Links compridos antigos continuam funcionando. Na demonstração os links continuam compridos (teste com `?demo=1&curtos=1`).
+  - Opcional: no console do Firebase, uma política de TTL em `linksCurtos` pelo campo `expiraEm` apaga os registros vencidos sozinha.
+- **Mensagem do técnico:** só o link do Google Maps (sem Waze).
+- **Aviso "Pedido do cliente" (Agendar):** tocar nele (ou no botão "Preencher o agendamento com o pedido") coloca os serviços pedidos no agendamento SEM aparelho. Sem cliente escolhido, pede para escolher/cadastrar. "Não sei ainda" não coloca nada ("Serviço a definir").
+- **"Informar o aparelho":** linha com serviço e sem aparelho mostra esse botão (administrador e técnico). Pergunta só o aparelho; o mesmo serviço não entra duas vezes no mesmo aparelho; aparelho com outro agendamento aberto é recusado. Sem aparelho não conclui (regra que já existia).
+- Regras do Firestore mudam (nova coleção `linksCurtos`): publicar as regras depois do merge.
