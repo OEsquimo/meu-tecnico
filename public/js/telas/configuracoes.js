@@ -15,7 +15,6 @@ import { validarConfiguracoes } from '../dominio/validacoes.js';
 import { montarMensagem } from '../dominio/whatsapp.js';
 import { montarCobranca, modeloDaEmpresa, MODELOS_COBRANCA, TONS_COBRANCA, TOM_COBRANCA_PADRAO, COBRANCA_MAX_LETRAS, PIX_MAX_LETRAS } from '../dominio/cobranca.js';
 import { MENSAGEM_WHATSAPP_PADRAO } from '../nucleo/constantes.js';
-import { modeloDaMensagemDeRetorno } from '../dominio/retornos.js';
 import { MODELOS_DE_AVISO, CAMPO_DO_AVISO, modeloDoAviso, montarAviso, AVISO_MAX_LETRAS } from '../dominio/aviso-cliente.js';
 
 const ROTULOS_DO_AVISO = { agendado: 'Aviso de agendamento', cancelado: 'Aviso de cancelamento', reagendado: 'Aviso de reagendamento' };
@@ -33,9 +32,9 @@ export default async function montar({ raiz, sessao, ir }) {
         valor: e.diasAvisoRetorno ?? 15, minimo: 0, ajuda: 'Use de 0 a 90 dias. O padrão é 15.',
       })}
       ${campoTextoLongo({
-        nome: 'mensagemWhatsapp', rotulo: 'Mensagem do lembrete (WhatsApp)', valor: modeloDaMensagemDeRetorno(e),
+        nome: 'mensagemWhatsapp', rotulo: 'Mensagem do lembrete (WhatsApp)', valor: e.mensagemWhatsapp ?? MENSAGEM_WHATSAPP_PADRAO,
         linhas: 5, maximo: 600,
-        ajuda: 'Variáveis: {nome} {empresa} {servico} {aparelho} {tempo} (há quanto tempo foi o último serviço) {data} (dia do último serviço). Elas são trocadas pelos dados de cada cliente.',
+        ajuda: 'Variáveis: {nome} {empresa} {servico} {aparelho}. Elas são trocadas pelos dados de cada cliente.',
       })}
       <div class="pilha pilha--pequena">
         <span class="campo__rotulo">Prévia</span>
@@ -87,8 +86,6 @@ export default async function montar({ raiz, sessao, ir }) {
       empresa: form.elements.nome.value.trim() || e.nome,
       servico: 'Limpeza',
       aparelho: 'Sala · Split 12.000 BTUs',
-      tempo: '6 meses',
-      data: '15/05/2026',
     });
   };
   form.elements.mensagemWhatsapp.addEventListener('input', atualizarPrevia);

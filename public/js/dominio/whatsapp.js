@@ -18,8 +18,6 @@ export function montarMensagem(modelo, dados) {
     empresa: dados.empresa ?? '',
     servico: String(dados.servico ?? '').toLowerCase(),
     aparelho: dados.aparelho ?? '',
-    tempo: dados.tempo ?? '',
-    data: dados.data ?? '',
   };
   return String(modelo ?? '').replace(/\{(\w+)\}/g, (inteiro, chave) =>
     Object.prototype.hasOwnProperty.call(valores, chave) ? valores[chave] : inteiro,
