@@ -19,6 +19,7 @@ import { opcoesDeNavegacao } from '../dominio/endereco.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
 import { abrirAvisos } from './avisos-whatsapp.js';
 import { STATUS, ehLinhaSemServico } from '../dominio/servicos.js';
+import { blocoDeTempo } from './tempo-comum.js';
 
 // -----------------------------------------------------------------------------
 // CSS PRÓPRIO DAS TELAS DE SERVIÇO
@@ -116,7 +117,7 @@ function blocosPorAparelho(linhas) {
  * opcoes.acoes: nas listas do dia (Início e Agenda), o TÉCNICO vê "Ir até o cliente" e "Concluir" no próprio cartão.
  *   Com mais de um serviço aberto, "Concluir" abre a página do agendamento para ele escolher qual.
  */
-export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, editar = false } = {}) {
+export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, editar = false, tempo = null } = {}) {
   const linhas = visita.linhas;
   const primeira = linhas[0];
   const atrasada = linhas.find((l) => estaAtrasado(l));
@@ -132,13 +133,15 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
   const passou = abertas.find((l) => l.reatribuidoDeNome);
   const avisouAtraso = abertas.find((l) => l.atrasoPorTecnico === true);
   const href = `#/servico/${encodeURIComponent(principal.id)}`;
+  // Pacote 27: só o técnico, nas listas do dia. Iniciar, "Em serviço" e os avisos de início/conclusão.
+  const andamento = doTecnico && tempo && abertas.length > 0 ? blocoDeTempo(linhas, tempo) : null;
 
   const corpo = html`
     <a class="visita-cartao__corpo" href="${href}" data-visita-link>
       <div class="visita-cartao__linha">
         <div class="item-lista__titulo visita-cartao__nome">${visita.clienteNome}</div>
         <div class="visita-cartao__lado">
-          ${selo(situacao.texto, situacao.tom)}
+          ${andamento?.selo || selo(situacao.texto, situacao.tom)}
           <div class="servico-cartao__hora">
             ${concluido ? formatarDataBR(diaConcluido) : formatarHora(primeira.dataAgendada)}
             ${!concluido && mostrarData && html`<span class="servico-cartao__data">${formatarDataBR(primeira.dataAgendada)}</span>`}
@@ -156,6 +159,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
   const extra = doTecnico && abertas.length > 0 && html`
     <div class="acoes-cartao">
       ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', dados: { id: primeira.id }, pequeno: true })}
+      ${andamento?.botaoIniciar || ''}
       ${unica
     ? (precisaInformarAparelhoEServico(unica)
       ? botao({ texto: unica.aparelhoId ? 'Informar o serviço' : (unica.tipoServicoId ? 'Informar o aparelho' : 'Informar aparelho e serviço'), iconeNome: 'editar', href: `#/servico/${unica.id}?informar=1`, pequeno: true })
@@ -163,7 +167,7 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
     : botao({ texto: 'Concluir', iconeNome: 'check', href, pequeno: true })}
     </div>`;
 
-  return html`<div class="cartao servico-cartao ${atrasada ? 'servico-cartao--atrasado' : ''}">${corpo}${extra}</div>`;
+  return html`<div class="cartao servico-cartao ${atrasada ? 'servico-cartao--atrasado' : ''}">${corpo}${andamento?.corpo || ''}${extra}</div>`;
 }
 
 // -----------------------------------------------------------------------------

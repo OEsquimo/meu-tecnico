@@ -29,6 +29,7 @@ import { formatarMesAno, formatarDiaExtenso, hojeISO, paraISO } from '../dominio
 import { agruparAgendamentos, servicoTemTecnico, chaveDoAgendamento } from '../dominio/servicos.js';
 import { abrirSeletorDeHorario } from './seletor-horario.js';
 import { DURACAO_PADRAO_MIN } from '../nucleo/constantes.js';
+import { acoesDeTempo, visitaQuePrecisaDeResposta } from './tempo-comum.js';
 import { diaDeVolta, carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -95,6 +96,18 @@ export default async function montar(ctx) {
   // ---------------------------------------------------------------------------
   // Desenhar
   // ---------------------------------------------------------------------------
+  /** Cartões do dia. Só o TÉCNICO, e só em hoje, vê Iniciar, "Em serviço" e os avisos de início/conclusão (Pacote 27). */
+  function cartoesDoDia(doDia) {
+    const visitas = agruparAgendamentos(doDia);
+    const agora = new Date();
+    const comTempo = !usuario.admin && diaEscolhido === hoje;
+    const chaveAviso = comTempo ? visitaQuePrecisaDeResposta(visitas, usuario.uid, agora) : null;
+    return visitas.map((v) => cartaoDaVisita(v, {
+      mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin,
+      tempo: comTempo ? { uid: usuario.uid, agora, chaveAviso } : null,
+    }));
+  }
+
   function desenhar() {
     // Dias que já passaram, e o dia de HOJE (pacote 24), também mostram o que foi concluído ou cancelado (é o que os pontos verde e amarelo indicam).
     const doHistorico = fechadosDoMes.filter((s) => s.dataAgendada instanceof Date && paraISO(s.dataAgendada) <= hoje && (!filtroTecnico || servicoTemTecnico(s, filtroTecnico)));
@@ -133,7 +146,7 @@ export default async function montar(ctx) {
       titulo: 'Nenhum serviço neste dia.',
       texto: usuario.admin ? '' : 'Você não tem serviços neste dia.',
     })}</div>`
-    : agruparAgendamentos(doDia).map((v) => cartaoDaVisita(v, { mostrarTecnico: usuario.admin, acoes: true, editar: usuario.admin }))}
+    : cartoesDoDia(doDia)}
         </section>
       </div>`);
 
@@ -199,6 +212,10 @@ export default async function montar(ctx) {
   }
 
   const desligar = aoClicar(raiz, {
+    ...acoesDeTempo({
+      usuario, ir: ctx.ir, recarregar: () => { carregarMes({ silencioso: true }).catch(() => {}); },
+      achar: (chave) => servicosDoMes.filter((s) => chaveDoAgendamento(s) === chave),
+    }),
     dia: (el) => {
       diaEscolhido = el.dataset.dia;
       desenhar();

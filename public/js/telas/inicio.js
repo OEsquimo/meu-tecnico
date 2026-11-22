@@ -23,6 +23,7 @@ import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReage
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
 import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento, nomesDosTecnicos } from '../dominio/servicos.js';
+import { acoesDeTempo, visitaQuePrecisaDeResposta } from './tempo-comum.js';
 import { carregarEstilos, contextoDoUsuario, primeiroNome, mostrarErroComTentar, cartaoDaVisita, abrirNavegacao, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 /** Quantos dias antes do fim do teste/plano o aviso aparece. */
@@ -36,6 +37,10 @@ export default async function montar(ctx) {
 
   // Os cliques são ligados UMA vez; os dados são redesenhados a cada carga.
   const desligar = aoClicar(raiz, {
+    ...acoesDeTempo({
+      usuario, ir: ctx.ir, recarregar: () => { carregar({ silencioso: true }).catch(() => {}); },
+      achar: (chave) => servicosNaTela.filter((s) => chaveDoAgendamento(s) === chave),
+    }),
     navegar: (el) => {
       const servico = servicosNaTela.find((s) => s.id === el.dataset.id);
       if (servico) abrirNavegacao(servico);
@@ -232,6 +237,10 @@ export default async function montar(ctx) {
     const inicioHoje = inicioDoDia(agora).getTime();
     const antigos = lista.filter((s) => s.dataAgendada.getTime() < inicioHoje);
     const hoje = lista.filter((s) => s.dataAgendada.getTime() >= inicioHoje);
+    // Pacote 27: só uma visita por vez mostra aviso de início/conclusão (a mais antiga que precisa de resposta).
+    const visitasAbertas = agruparAgendamentos(lista);
+    const chaveAviso = visitaQuePrecisaDeResposta(visitasAbertas, usuario.uid, agora);
+    const tempo = { uid: usuario.uid, agora, chaveAviso };
 
     mostrar(raiz, html`
       ${topo}
@@ -239,13 +248,13 @@ export default async function montar(ctx) {
         ${antigos.length > 0 && html`
           <section class="pilha pilha--pequena" aria-label="Serviços atrasados">
             ${tituloSecao('Atrasados')}
-            ${agruparAgendamentos(antigos).map((v) => cartaoDaVisita(v, { mostrarData: true, acoes: true }))}
+            ${agruparAgendamentos(antigos).map((v) => cartaoDaVisita(v, { mostrarData: true, acoes: true, tempo }))}
           </section>`}
         <section class="pilha pilha--pequena" aria-label="Serviços de hoje">
           ${tituloSecao('Hoje')}
           ${hoje.length === 0
     ? html`<div class="cartao">${estadoVazio({ icone: 'agenda', titulo: 'Nada para hoje', texto: 'Você não tem serviços agendados para hoje. Veja a agenda para os próximos dias.', acao: botao({ texto: 'Abrir agenda', variante: 'secundario', href: '#/agenda' }) })}</div>`
-    : agruparAgendamentos(hoje).map((v) => cartaoDaVisita(v, { acoes: true }))}
+    : agruparAgendamentos(hoje).map((v) => cartaoDaVisita(v, { acoes: true, tempo }))}
         </section>
         <div class="atalhos">
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Meus próximos serviços')}

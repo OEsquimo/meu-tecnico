@@ -602,3 +602,52 @@ test('pacote 25: o pedido só é lido (e apagado) pelo administrador da empresa'
   await assertFails(updateDoc(doc(como(ADMIN), 'linksCurtos/pedido0001'), { consulta: 'x' }));
   await assertSucceeds(deleteDoc(doc(como(ADMIN), 'linksCurtos/pedido0001')));
 });
+
+// ---- Pacote 27: iniciar serviço, atraso com motivo e horários na conclusão ----
+test('pacote 27: o técnico INICIA só o próprio serviço agendado, gravando apenas a hora de início', async () => {
+  const db = como(TEC);
+  const inicio = { iniciadoEm: Timestamp.fromMillis(Date.now() - 600000), atualizadoEm: serverTimestamp() };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-outro`), inicio)); // serviço de outro técnico
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, status: 'concluido' })); // nada além do início
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, pago: true }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { iniciadoEm: inicio.iniciadoEm })); // sem a hora do servidor
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, atualizadoEm: new Date(2020, 0, 1) })); // hora inventada
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, iniciadoEm: Timestamp.fromMillis(Date.now() + 3 * 3600000) })); // início no futuro
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, iniciadoEm: 'agora' })); // tipo errado
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), inicio));
+});
+
+test('pacote 27: "Ainda estou no serviço" grava só o motivo do atraso e quanto tempo falta', async () => {
+  const db = como(TEC);
+  const atraso = { atrasoMotivo: 'Falta de peça', atrasoDetalhe: 'Capacitor', atrasoFalta: '30', atrasoInformadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-outro`), atraso)); // serviço de outro técnico
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, status: 'concluido' }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, valorDefinido: true }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoMotivo: '' })); // motivo é obrigatório
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoMotivo: 'x'.repeat(61) }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoDetalhe: 'x'.repeat(301) }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoFalta: '7' }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...atraso, atrasoInformadoEm: new Date(2020, 0, 1) })); // hora inventada
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), atraso));
+});
+
+test('pacote 27: o técnico conclui informando o início e o motivo do atraso (início nunca depois da conclusão)', async () => {
+  const db = como(TEC);
+  const fim = Timestamp.fromMillis(Date.now() - 60000);
+  const base = { ...conclusao(), dataConclusao: fim };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, iniciadoEm: Timestamp.fromMillis(Date.now() + 600000) })); // início depois da conclusão
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, iniciadoEm: 'x' }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, atrasoMotivo: 'x'.repeat(61) }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, atrasoFalta: '30' })); // só o motivo e o detalhe vão na conclusão
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, iniciadoEm: Timestamp.fromMillis(Date.now() - 3600000), atrasoMotivo: 'Trânsito', atrasoDetalhe: 'Chuva forte' }));
+});
+
+test('pacote 27: o administrador corrige início, conclusão e motivo (tipos certos)', async () => {
+  const adm = como(ADMIN);
+  const ref = doc(adm, `empresas/${E}/servicos/s-tec`);
+  await assertSucceeds(updateDoc(ref, { iniciadoEm: Timestamp.fromMillis(Date.now() - 7200000), atrasoMotivo: 'Falta de peça', atrasoFalta: 'mais', atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { iniciadoEm: 'ontem', atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { atrasoFalta: '7', atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { atrasoMotivo: 'x'.repeat(61), atualizadoEm: serverTimestamp() }));
+  await assertFails(updateDoc(ref, { campoInventado: 1, atualizadoEm: serverTimestamp() }));
+});
