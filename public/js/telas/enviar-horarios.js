@@ -21,9 +21,10 @@ import { hojeISO, somarDias, deISO } from '../dominio/datas.js';
 import { normalizarWhatsappBR, mascararTelefoneDigitando, formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsapp } from '../dominio/whatsapp.js';
 import {
-  horariosLivresParaOLink, montarLinkDeHorarios, mensagemDoLinkDeHorarios, enderecoBaseDoApp,
+  horariosLivresParaOLink, mensagemDoLinkDeHorarios, enderecoBaseDoApp,
   DIAS_A_FRENTE, VALIDADE_DIAS, DURACAO_SEM_SERVICO_MIN,
 } from '../dominio/link-horarios.js';
+import { linkDeHorariosParaEnviar } from '../servicos/links-curtos.js';
 import { contextoDoUsuario, mostrarErroComTentar, carregarEstilos } from './servicos-comum.js';
 import { textoDaDuracao } from './agendamento-comum.js';
 
@@ -92,24 +93,26 @@ export default async function montar(ctx) {
       <div id="area-previa" class="pilha"></div>
     </div>`);
 
-  function calcular() {
+  async function calcular() {
     // Pacote 24: o administrador não escolhe mais o serviço. Os horários são de 1h e o cliente marca o que precisa na página dele.
     const duracaoMin = DURACAO_SEM_SERVICO_MIN;
     const agora = new Date();
     const dias = horariosLivresParaOLink({
       expediente: expedienteDaEmpresa(sessao.empresa), tecnicos, agendados, duracaoMin, regras: regrasDaEmpresa(sessao.empresa), agora,
     });
-    const link = dias.length === 0 ? '' : montarLinkDeHorarios({
-      base: enderecoBaseDoApp(window.location.href), empresa: nomeDaEmpresa, whatsapp: whatsappDoAdmin, servicos: tipos.map((t) => t.nome), dias, geradoEm: hojeISO(agora),
+    // Pacote 25: o link é curto (guardado no banco); se não der para gravar, vai o comprido.
+    const link = dias.length === 0 ? '' : await linkDeHorariosParaEnviar({
+      base: enderecoBaseDoApp(window.location.href), empresaId: usuario.empresaId, empresa: nomeDaEmpresa, whatsapp: whatsappDoAdmin, servicos: tipos.map((t) => t.nome), dias, geradoEm: hojeISO(agora),
     });
     const mensagem = link ? mensagemDoLinkDeHorarios({ empresa: nomeDaEmpresa, link }) : '';
     return { dias, link, mensagem };
   }
 
-  let atual = calcular();
+  let atual = { dias: [], link: '', mensagem: '' };
 
-  function desenharPrevia() {
-    atual = calcular();
+  async function desenharPrevia() {
+    atual = await calcular();
+    if (!ctx.ativo()) return;
     const area = raiz.querySelector('#area-previa');
     const totalHorarios = atual.dias.reduce((n, d) => n + d.horas.length, 0);
     if (atual.dias.length === 0) {
@@ -126,7 +129,9 @@ export default async function montar(ctx) {
       ${botao({ texto: 'Copiar mensagem', variante: 'secundario', iconeNome: 'copiar', bloco: true, acao: 'copiar-mensagem' })}`);
   }
 
-  desenharPrevia();
+  mostrar(raiz.querySelector('#area-previa'), esqueletos(2));
+  await desenharPrevia();
+  if (!ctx.ativo()) return undefined;
 
   desligar = aoClicar(raiz, {
     'copiar-mensagem': async () => {

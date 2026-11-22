@@ -27,6 +27,7 @@ export const ROTAS = [
   { padrao: '/convite/:empresaId/:equipeId', carregar: () => import('../telas/convite.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Convite' },
   { padrao: '/termos', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Termos de uso', extras: { documento: 'termos' } },
   { padrao: '/horarios', carregar: () => import('../telas/horarios-cliente.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Escolher dia e horário' },
+  { padrao: '/h/:codigo', carregar: () => import('../telas/horarios-cliente.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Escolher dia e horário' },
   { padrao: '/privacidade', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Privacidade', extras: { documento: 'privacidade' } },
 
   // ---- Logado, mas sem empresa / bloqueado ----
@@ -60,6 +61,7 @@ export const ROTAS = [
   { padrao: '/reagendamentos', carregar: () => import('../telas/reagendamentos.js'), acesso: 'admin', menu: null, titulo: 'Aguardando reagendamento' },
   { padrao: '/retornos', carregar: () => import('../telas/retornos.js'), acesso: 'admin', menu: null, titulo: 'Retornos' },
   { padrao: '/financeiro', carregar: () => import('../telas/financeiro.js'), acesso: 'admin', menu: 'financeiro', titulo: 'Financeiro' },
+  { padrao: '/p/:codigo', carregar: () => import('../telas/pedido-curto.js'), acesso: 'admin', menu: null, titulo: 'Pedido do cliente' },
   { padrao: '/ferramentas/horarios', carregar: () => import('../telas/enviar-horarios.js'), acesso: 'admin', menu: null, titulo: 'Enviar horários ao cliente' },
   { padrao: '/administrativa', carregar: () => import('../telas/administrativa.js'), acesso: 'admin', menu: null, titulo: 'Administrativa' },
   { padrao: '/tipos-servico', carregar: () => import('../telas/tipos-servico.js'), acesso: 'admin', menu: null, titulo: 'Tipos de serviço' },

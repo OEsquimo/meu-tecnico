@@ -180,6 +180,11 @@ export function validarServicosDoPedido(escolhidos, oferecidos) {
  * @param {string} p.geradoEm     "AAAA-MM-DD"
  */
 export function montarLinkDeHorarios({ base, empresa, whatsapp, servico = '', servicos = [], dias, geradoEm }) {
+  return `${base}#/horarios?${consultaDoLinkDeHorarios({ empresa, whatsapp, servico, servicos, dias, geradoEm })}`;
+}
+
+/** Só a parte "e=...&w=...&g=...&p=..." do link de horários (é o que o link curto guarda no banco, pacote 25). */
+export function consultaDoLinkDeHorarios({ empresa, whatsapp, servico = '', servicos = [], dias, geradoEm }) {
   const consulta = new URLSearchParams();
   consulta.set('e', empresa);
   consulta.set('w', whatsapp);
@@ -187,7 +192,31 @@ export function montarLinkDeHorarios({ base, empresa, whatsapp, servico = '', se
   consulta.set('p', compactarDias(dias, geradoEm));
   if (servico) consulta.set('s', servico);
   for (const nome of limparServicos(servicos)) consulta.append('ts', nome); // os serviços que o cliente poderá marcar
-  return `${base}#/horarios?${consulta.toString()}`;
+  return consulta.toString();
+}
+
+// -----------------------------------------------------------------------------
+// Links curtos (pacote 25): "#/h/<código>" (horários) e "#/p/<código>" (pedido do cliente no app)
+// -----------------------------------------------------------------------------
+
+/** Código do link curto: 10 letras minúsculas e números. */
+export function codigoDeLinkCurtoValido(codigo) {
+  return /^[a-z0-9]{10}$/.test(String(codigo ?? ''));
+}
+
+/** Link curto dos horários que o cliente abre. */
+export function linkCurtoDeHorarios(base, codigo) {
+  return `${base}#/h/${codigo}`;
+}
+
+/** Link curto do pedido do cliente (abre o Agendar já preenchido, só para o administrador). */
+export function linkCurtoDoPedido(base, codigo) {
+  return `${base}#/p/${codigo}`;
+}
+
+/** Só a parte do pedido que vai depois de "#/agendar?" (é o que o link curto do pedido guarda no banco). */
+export function consultaDoPedido({ data, hora, nome, whatsapp, endereco = null, referencia = '', servicos = [] }) {
+  return pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia, servicos }).toString();
 }
 
 /**
@@ -284,9 +313,8 @@ export function pedidoNaConsulta(consulta, pedido) {
 }
 
 /** Endereço que abre o Agendar já preenchido com o pedido do cliente (só o administrador consegue usar). */
-export function linkDoPedidoNoApp(base, { data, hora, nome, whatsapp, endereco = null, referencia = '', servicos = [] }) {
-  const consulta = pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia, servicos });
-  return `${base}#/agendar?${consulta.toString()}`;
+export function linkDoPedidoNoApp(base, dados) {
+  return `${base}#/agendar?${consultaDoPedido(dados)}`;
 }
 
 /** Link do mapa com o ponto exato (só quando o endereço veio da localização). */

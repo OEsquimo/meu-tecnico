@@ -9,7 +9,7 @@ Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote24.py
 import re
 import urllib.parse
 from playwright.sync_api import sync_playwright
-from _quando import _abrir_dia, SELETOR
+from _quando import _abrir_dia, _abrir_no_mes, CALENDARIO, SELETOR
 
 BASE = "http://localhost:5173/?demo=1"
 falhas = []
@@ -76,12 +76,14 @@ with sync_playwright() as p:
     pag.locator("[data-acao=escolher-cliente]", has_text="Ana Lima").click(); pag.wait_for_timeout(600)
     from datetime import date
     hoje = date.today().isoformat()
-    _abrir_dia(pag, hoje)
-    horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]:not([disabled])")
-    if horas.count() == 0:
-        print("  (sem horário livre hoje: parte D ignorada)")
-        pag.keyboard.press("Escape")
+    _abrir_no_mes(pag, hoje)
+    botao_hoje = pag.locator(f"{CALENDARIO} [data-acao=quando-dia][data-iso='{hoje}']")
+    if not botao_hoje.is_enabled():
+        # Fora do expediente (ex.: madrugada) hoje não tem horário livre: não dá para agendar hoje nem cancelar hoje.
+        print("  (hoje sem horário livre: parte D ignorada)")
     else:
+        _abrir_dia(pag, hoje)
+        horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]:not([disabled])")
         horas.last.click(); pag.click(f"{SELETOR} [data-acao=seletor-confirmar]"); pag.wait_for_timeout(300)
         pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
         pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)

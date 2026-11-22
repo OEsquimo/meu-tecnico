@@ -501,6 +501,29 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   return alvo.id;
 }
 
+/**
+ * "Informar o aparelho" (pacote 25): a linha já tem o serviço (veio do pedido do cliente) e falta só o aparelho.
+ * Não mexe em duração, técnicos nem horário. Se o técnico informa, a linha fica "incluída pelo técnico".
+ * O mesmo serviço não pode já existir nesse aparelho na visita.
+ */
+export async function informarAparelhoNaLinha({ empresaId, linhasDaVisita, linha, aparelho, tecnico = null }) {
+  if (!aparelho) throw new ErroApp('Escolha ou cadastre o aparelho.', 'sem-aparelho');
+  const abertas = linhasDaVisita.filter((l) => l.status === STATUS.AGENDADO);
+  if (linha?.status !== STATUS.AGENDADO || !abertas.some((l) => l.id === linha.id)) throw new ErroApp('Este agendamento já foi fechado.', 'servico-fechado');
+  if (abertas.some((l) => l.id !== linha.id && l.aparelhoId === aparelho.id && l.tipoServicoId === linha.tipoServicoId)) {
+    throw new ErroApp('Este serviço já está neste aparelho, nesta visita.', 'servico-repetido');
+  }
+  if (!tecnico) await conferirAparelhoAoInformar({ empresaId, abertas, aparelho });
+  await gravar([op.atualizar(`${caminho(empresaId)}/${linha.id}`, {
+    aparelhoId: aparelho.id,
+    aparelhoResumo: resumoDoAparelho(aparelho),
+    ...(tecnico ? { adicionadoPeloTecnico: true, vistoPeloAdmin: false } : {}),
+    atualizadoEm: AGORA,
+  })]);
+  invalidarCache(`${empresaId}:servicos`);
+  return linha.id;
+}
+
 /** Ao informar o aparelho depois: ele não pode já ter outro agendamento aberto. */
 async function conferirAparelhoAoInformar({ empresaId, abertas, aparelho }) {
   const ref = abertas[0];
