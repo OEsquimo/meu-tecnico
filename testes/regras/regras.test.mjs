@@ -608,7 +608,8 @@ test('pacote 27: o técnico INICIA só o próprio serviço agendado, gravando ap
   const db = como(TEC);
   const inicio = { iniciadoEm: Timestamp.fromMillis(Date.now() - 600000), atualizadoEm: serverTimestamp() };
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-outro`), inicio)); // serviço de outro técnico
-  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, status: 'concluido' })); // nada além do início
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, status: 'cancelado' })); // nada além do início
+  // (status 'concluido' junto com iniciadoEm é a CONCLUSÃO do técnico, que já era permitida e agora aceita a hora de início)
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, pago: true }));
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { iniciadoEm: inicio.iniciadoEm })); // sem a hora do servidor
   await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...inicio, atualizadoEm: new Date(2020, 0, 1) })); // hora inventada
