@@ -15,7 +15,7 @@
 
 import { combinarDataHora, paraISO, hojeISO } from './datas.js';
 import { fimDoServico } from './agenda.js';
-import { STATUS, tecnicosDoServico } from './servicos.js';
+import { STATUS, tecnicosDoServico, fimPrevistoDesdeOInicio, seloDoServico } from './servicos.js';
 
 const MIN = 60000;
 
@@ -56,9 +56,12 @@ export function inicioDaVisita(linhas) {
   return inicios.length ? new Date(Math.min(...inicios)) : null;
 }
 
-/** Fim previsto da visita (o mais tarde entre as linhas). */
+/**
+ * Fim previsto da visita (o mais tarde entre as linhas). Linha já iniciada conta do início REAL (Pacote 30);
+ * sem início, do horário marcado.
+ */
 export function fimPrevistoDaVisita(linhas, uid = null) {
-  const fins = linhas.filter((l) => l.dataAgendada instanceof Date).map((l) => fimDoServico(l, uid).getTime());
+  const fins = linhas.filter((l) => l.dataAgendada instanceof Date).map((l) => (fimPrevistoDesdeOInicio(l, uid) || fimDoServico(l, uid)).getTime());
   return fins.length ? new Date(Math.max(...fins)) : null;
 }
 
@@ -70,6 +73,20 @@ export function atrasoInformadoValendo(linhas, agora) {
     const minutos = FALTAS_ATRASO.find((f) => f.valor === l.atrasoFalta)?.minutos ?? 30;
     return agora.getTime() < em + minutos * MIN;
   });
+}
+
+/**
+ * Selo de uma linha (Pacote 30): serviço INICIADO e ainda aberto mostra "Em andamento" (verde) ou, passado o tempo previsto
+ * (soma dos serviços, contado do início real, + tolerância), "Tempo excedido" (laranja). Quem respondeu "Ainda estou no serviço"
+ * volta para "Em andamento" até o prazo que deu acabar. Sem início, vale o selo de sempre (Agendado / Atrasado...).
+ */
+export function seloDaLinha(servico, agora = new Date(), opcoes = undefined) {
+  if (servico.status === STATUS.AGENDADO && servico.iniciadoEm instanceof Date) {
+    const fim = fimPrevistoDesdeOInicio(servico);
+    const noPrazo = agora.getTime() <= fim.getTime() + TOLERANCIA_ESPERANDO_MIN * MIN || atrasoInformadoValendo([servico], agora);
+    return noPrazo ? { texto: 'Em andamento', tom: 'verde' } : { texto: 'Tempo excedido', tom: 'laranja' };
+  }
+  return seloDoServico(servico, agora, opcoes);
 }
 
 /**

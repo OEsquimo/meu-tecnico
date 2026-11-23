@@ -10,7 +10,8 @@
 // Este arquivo só monta a consulta e decide selos/ordem; quem lê o banco é servicos/servicos.js.
 // =============================================================================
 
-import { STATUS, estaAtrasado, seloDoServico } from './servicos.js';
+import { STATUS, estaAtrasado } from './servicos.js';
+import { seloDaLinha } from './tempo-servico.js';
 
 export const STATUS_DA_LISTA = [
   { valor: 'agendado', rotulo: 'Agendados' },
@@ -73,7 +74,7 @@ export function ordenarAgendados(lista, agora = new Date()) {
 /** Selo do cartão: o do serviço, mas um cancelado com a marca de pendente aparece como "Pendente". */
 export function seloDaLista(servico, agora = new Date()) {
   if (servico.status === STATUS.CANCELADO && servico.pendente === true) return { texto: 'Pendente', tom: 'amarelo' };
-  return seloDoServico(servico, agora);
+  return seloDaLinha(servico, agora);
 }
 
 /** Pode haver mais? Se veio menos do que o pedido, acabou. */

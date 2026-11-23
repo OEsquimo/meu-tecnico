@@ -64,11 +64,10 @@ test('aviso ao técnico (agendamento): sem lista de serviços, com contatos e li
   assert.doesNotMatch(t, /Limpeza/);
 });
 
-test('aviso ao técnico: sem telefone comum a linha some; reagendamento mostra antes e depois', () => {
+test('aviso ao técnico: sem telefone comum a linha some; reagendamento mostra só a nova data e o novo horário (Pacote 30)', () => {
   const t = montarAvisoTecnico('reagendado', { tecnico: 'João', cliente: 'Maria', dataHora: quando, anterior: antes, endereco: '', whatsappCliente: '5511912345678', linkApp: 'https://app/#/servico/abc' });
   assert.match(t, /foi reagendado/);
-  assert.match(t, /Data anterior: Sábado, 14 de novembro/);
-  assert.match(t, /Horário anterior: 15:30/);
+  assert.doesNotMatch(t, /anterior/i);
   assert.match(t, /Nova data: Segunda-feira, 16 de novembro/);
   assert.match(t, /Novo horário: 07:00/);
   assert.doesNotMatch(t, /Telefone:|Endereço:/);
@@ -135,7 +134,8 @@ test('destinatários: mais de 3 serviços na visita deixa o aviso genérico', ()
   assert.doesNotMatch(d[0].texto, /Serviços:/);
 });
 
-test('destinatários: reagendamento leva a data anterior ao técnico', () => {
+test('destinatários: reagendamento NÃO leva a data anterior ao técnico (Pacote 30)', () => {
   const d = montarDestinatarios({ tipo: 'reagendado', empresa, linhas: [linha('a')], equipe, adminUid: 'adm', anterior: antes, baseApp: 'https://app/' });
-  assert.match(d[1].texto, /Data anterior/);
+  assert.doesNotMatch(d[1].texto, /anterior/i);
+  assert.match(d[1].texto, /Nova data/);
 });

@@ -15,11 +15,13 @@ import { ehErroDePermissao } from '../nucleo/erros.js';
 import { ler, gravar, operacao, AGORA, nomeDoAdaptador } from '../nucleo/banco.js';
 import {
   codigoDeLinkCurtoValido, consultaDoLinkDeHorarios, consultaDoPedido, linkCurtoDeHorarios, linkCurtoDoPedido,
-  montarLinkDeHorarios, linkDoPedidoNoApp,
+  montarLinkDeHorarios, linkDoPedidoNoApp, linkCurtoDoMapa,
 } from '../dominio/link-horarios.js';
+import { consultaParaMapa, hrefGoogleMaps } from '../dominio/endereco.js';
 
 export const VIDA_LINK_HORARIOS_DIAS = 8;
 export const VIDA_LINK_PEDIDO_DIAS = 30;
+export const VIDA_LINK_MAPA_DIAS = 30;
 const COLECAO = 'linksCurtos';
 const ALFABETO = '0123456789abcdefghijklmnopqrstuvwxyz';
 
@@ -73,6 +75,24 @@ export async function linkDoPedidoParaEnviar(base, { origem, empresaId, ...dados
     } catch { /* usa o link comprido */ }
   }
   return linkDoPedidoNoApp(base, dados);
+}
+
+/**
+ * Link do Google Maps para a mensagem do técnico (Pacote 30): curto (`#/m/<código>`, vale 30 dias) se conseguir gravar,
+ * senão o link comprido do Google Maps de sempre. Sem endereço nem coordenadas devolve ''.
+ */
+export async function linkDoMapaParaEnviar(base, { empresaId, endereco = '', lat = null, lng = null }) {
+  const texto = String(endereco ?? '').trim();
+  const temPonto = Number.isFinite(lat) && Number.isFinite(lng);
+  if (!texto && !temPonto) return '';
+  const consulta = consultaParaMapa({ rua: texto, lat: temPonto ? lat : undefined, lng: temPonto ? lng : undefined });
+  if (usaLinkCurto() && empresaId) {
+    try {
+      const codigo = await criar({ tipo: 'mapa', empresaId, consulta, vidaDias: VIDA_LINK_MAPA_DIAS });
+      return linkCurtoDoMapa(base, codigo);
+    } catch { /* usa o link comprido */ }
+  }
+  return hrefGoogleMaps(consulta);
 }
 
 /**

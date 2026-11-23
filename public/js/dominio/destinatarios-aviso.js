@@ -24,8 +24,9 @@ const primeiroNome = (nome) => String(nome ?? '').trim().split(/\s+/)[0] || '';
  * @param {Date} [p.anterior]      dia e hora de antes (reagendamento)
  * @param {string} [p.linkRemarcar] link para o cliente escolher outro horário (cancelamento)
  * @param {string} [p.baseApp]     endereço do app (para o link do técnico)
+ * @param {string} [p.linkMapa]    link (curto) do Google Maps para o endereço, já pronto
  */
-export function montarDestinatarios({ tipo, empresa, linhas, equipe = [], adminUid = '', anterior = null, linkRemarcar = '', baseApp = '' }) {
+export function montarDestinatarios({ tipo, empresa, linhas, equipe = [], adminUid = '', anterior = null, linkRemarcar = '', baseApp = '', linkMapa = '' }) {
   if (!linhas || linhas.length === 0) return [];
   const primeira = linhas[0];
   const dataHora = primeira.dataAgendada;
@@ -69,6 +70,7 @@ export function montarDestinatarios({ tipo, empresa, linhas, equipe = [], adminU
       endereco: primeira.local || '',
       lat: primeira.localLat ?? null,
       lng: primeira.localLng ?? null,
+      linkMapa,
       whatsappCliente: primeira.clienteWhatsapp,
       telefoneCliente: primeira.clienteWhatsapp || '',
       servicos: nomeDosServicos(dados.linhas),

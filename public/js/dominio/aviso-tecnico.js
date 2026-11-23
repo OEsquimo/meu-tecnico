@@ -32,7 +32,7 @@ const hora = (d) => (d ? formatarHora(d) : '');
 
 /**
  * @param {'agendado'|'cancelado'|'reagendado'} tipo
- * @param {object} d  { tecnico, cliente, dataHora, anterior, endereco, whatsappCliente, telefoneCliente, linkApp, servicos }
+ * @param {object} d  { tecnico, cliente, dataHora, endereco, lat, lng, linkMapa, whatsappCliente, telefoneCliente, linkApp, servicos }
  */
 export function montarAvisoTecnico(tipo, d) {
   const primeiro = String(d.tecnico ?? '').trim().split(/\s+/)[0] || '';
@@ -54,8 +54,7 @@ export function montarAvisoTecnico(tipo, d) {
   linhas.push(tipo === 'reagendado' ? 'Um serviço seu foi reagendado.' : 'Você tem um novo serviço agendado.', '');
   add('👤 Cliente: ', d.cliente);
   if (tipo === 'reagendado') {
-    add('📅 Data anterior: ', dia(d.anterior));
-    add('🕒 Horário anterior: ', hora(d.anterior));
+    // Pacote 30: só a nova data e o novo horário (a data anterior não vai na mensagem).
     add('📅 Nova data: ', dia(d.dataHora));
     add('🕒 Novo horário: ', hora(d.dataHora));
   } else {
@@ -63,8 +62,8 @@ export function montarAvisoTecnico(tipo, d) {
     add('🕒 Horário: ', hora(d.dataHora));
   }
   add('📍 Endereço: ', d.endereco);
-  const mapas = linksDeMapa(d.endereco, d.lat, d.lng);
-  add('🗺️ Google Maps: ', mapas.google);
+  // `linkMapa`: o link curto do Maps (Pacote 30); sem ele, o link comprido do Google Maps.
+  add('🗺️ Google Maps: ', d.linkMapa || linksDeMapa(d.endereco, d.lat, d.lng).google);
   add('📱 WhatsApp do cliente: ', whats);
   add('📞 Telefone: ', tel);
   if (d.linkApp) linhas.push('', `👉 Ver os serviços e todos os detalhes no app: ${d.linkApp}`);

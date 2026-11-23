@@ -28,6 +28,7 @@ export const ROTAS = [
   { padrao: '/termos', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Termos de uso', extras: { documento: 'termos' } },
   { padrao: '/horarios', carregar: () => import('../telas/horarios-cliente.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Escolher dia e horário' },
   { padrao: '/h/:codigo', carregar: () => import('../telas/horarios-cliente.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Escolher dia e horário' },
+  { padrao: '/m/:codigo', carregar: () => import('../telas/mapa-curto.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Abrir o mapa' },
   { padrao: '/privacidade', carregar: () => import('../telas/documento-legal.js'), acesso: 'publico', permiteLogado: true, menu: null, titulo: 'Privacidade', extras: { documento: 'privacidade' } },
 
   // ---- Logado, mas sem empresa / bloqueado ----

@@ -25,6 +25,8 @@
   --cor-sucesso-fundo: #e5f5ec;
   --cor-aviso: #8a5a00;
   --cor-aviso-fundo: #fff3d6;
+  --cor-excedido: #9a4a00; /* selo laranja: serviço iniciado que passou do tempo previsto */
+  --cor-excedido-fundo: #ffe4c7;
   --cor-erro: #a32d2d;
   --cor-erro-fundo: #fce9e9;
   --cor-alerta-forte: #c93b3b; /* bolinha vermelha de retornos */

@@ -214,6 +214,11 @@ export function linkCurtoDoPedido(base, codigo) {
   return `${base}#/p/${codigo}`;
 }
 
+/** Link curto do mapa (abre o Google Maps no endereço; vale 30 dias). Pacote 30. */
+export function linkCurtoDoMapa(base, codigo) {
+  return `${base}#/m/${codigo}`;
+}
+
 /** Só a parte do pedido que vai depois de "#/agendar?" (é o que o link curto do pedido guarda no banco). */
 export function consultaDoPedido({ data, hora, nome, whatsapp, endereco = null, referencia = '', servicos = [] }) {
   return pedidoNaConsulta(new URLSearchParams({ data, hora, pedido: '1' }), { nome, whatsapp, endereco, referencia, servicos }).toString();
