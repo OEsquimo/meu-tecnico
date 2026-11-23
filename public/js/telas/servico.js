@@ -15,17 +15,19 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
-import { formatarDataHoraBR, formatarDataBR } from '../dominio/datas.js';
+import { formatarDataHoraBR, formatarDataBR, paraISO, hojeISO } from '../dominio/datas.js';
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
 import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
 import { textoDoRetorno } from './agendamento-comum.js';
+import { pedirCorrecaoDeHorarios } from './tempo-comum.js';
+import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita } from '../dominio/tempo-servico.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -135,6 +137,9 @@ export default async function montar(ctx) {
         ${nota && html`<div class="visita-obs">${nota}</div>`}
         ${concluida && listaDeDados([
           ['Concluído em', formatarDataHoraBR(l.dataConclusao)],
+          ...(l.iniciadoEm instanceof Date ? [['Início', horaDeCampo(l.iniciadoEm)]] : []),
+          ...(tempoNoCliente(l) !== null ? [['Tempo no cliente', textoDeMinutos(tempoNoCliente(l))]] : []),
+          ...(l.atrasoMotivo ? [['Motivo do atraso', l.atrasoDetalhe ? `${l.atrasoMotivo} — ${l.atrasoDetalhe}` : l.atrasoMotivo]] : []),
           ['Por', l.concluidoPorNome],
           ['O que foi feito', l.descricao],
           ['Cliente pagou?', l.pago ? 'Sim' : 'Não'],
@@ -146,6 +151,7 @@ export default async function montar(ctx) {
           <div class="acoes-cartao">
             ${botao({ texto: l.pago ? 'Marcar como a receber' : 'Marcar como pago', variante: 'secundario', acao: 'alternar-pago', dados: { id: l.id }, pequeno: true })}
             ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-concluido', dados: { id: l.id }, pequeno: true })}
+            ${botao({ texto: 'Corrigir horários', variante: 'secundario', iconeNome: 'relogio', acao: 'corrigir-horarios', dados: { id: l.id }, pequeno: true })}
             ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-concluido', dados: { id: l.id }, pequeno: true })}
           </div>`}
         ${l.status === STATUS.CANCELADO && l.pendente === true && l.motivoPendencia && html`<div class="visita-obs">Motivo: ${l.motivoPendencia}</div>`}
@@ -210,12 +216,14 @@ export default async function montar(ctx) {
             ['Telefone', s.clienteWhatsapp ? formatarTelefone(s.clienteWhatsapp) : ''],
             ['Local', s.local],
             ['Técnicos', tecnicos],
+            ...(usuario.admin && abertas.length > 0 && inicioDaVisita(abertas) ? [['Em andamento', `desde ${horaDeCampo(inicioDaVisita(abertas))}`]] : []),
             ...(abertas[0]?.reatribuidoDeNome ? [['Passou de', `${abertas[0].reatribuidoDeNome} (atraso)`]] : []),
             ['Observação', observacao],
             ...(pendentes.length > 0 && temConcluida ? [['Situação da visita', resumo]] : []),
             ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),
           ])}
           ${botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', bloco: true })}
+          ${usuario.admin && abertas.length > 0 && !inicioDaVisita(abertas) && paraISO(s.dataAgendada) === hojeISO() ? botao({ texto: 'Iniciar serviço', variante: 'secundario', iconeNome: 'relogio', acao: 'iniciar-visita', bloco: true }) : ''}
           <div class="acoes-cartao">
             ${ligar ? botao({ texto: 'Ligar', variante: 'secundario', iconeNome: 'telefone', href: ligar, pequeno: true }) : ''}
             ${whats && !temCobranca ? botao({ texto: 'WhatsApp', variante: 'whatsapp', iconeNome: 'whatsapp', href: whats, externo: true, pequeno: true }) : ''}
@@ -297,6 +305,26 @@ export default async function montar(ctx) {
           seguirDepoisDeExcluir([linha.id]);
         } catch (e) { mostrarErro(e); }
       }),
+      'iniciar-visita': (el) => comCarregando(el, async () => {
+        try {
+          await iniciarVisita({ empresaId: usuario.empresaId, linhas: abertas, inicio: new Date() });
+          toast('Serviço iniciado.', 'sucesso');
+          ctx.recarregar();
+        } catch (e) { mostrarErro(e); }
+      }),
+      'corrigir-horarios': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        if (!linha) return;
+        const r = await pedirCorrecaoDeHorarios({ servico: linha });
+        if (!r) return;
+        await comCarregando(el, async () => {
+          try {
+            await corrigirHorariosDoServico({ empresaId: usuario.empresaId, servico: linha, inicio: r.inicio, conclusao: r.conclusao, atraso: r.atraso });
+            toast('Horários corrigidos.', 'sucesso');
+            ctx.recarregar();
+          } catch (e) { mostrarErro(e); }
+        });
+      },
       'editar-concluido': async (el) => {
         const linha = linhas.find((l) => l.id === el.dataset.id);
         const texto = await pedirTexto({ titulo: 'O que foi feito?', rotulo: 'Descreva o serviço', valor: linha.descricao || '', multilinha: true, maximo: 2000, confirmar: 'Salvar' });

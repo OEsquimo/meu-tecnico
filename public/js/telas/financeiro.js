@@ -14,7 +14,7 @@ import { html, mostrar, aoClicar } from '../nucleo/ui.js';
 import { cabecalho, botao, abas, estadoVazio, esqueletos, aviso, itemLista } from '../nucleo/componentes.js';
 import { resumoDoPlano } from '../nucleo/sessao.js';
 import { carregarFinanceiro } from '../servicos/valores.js';
-import { listarSemValor } from '../servicos/servicos.js';
+import { listarSemValor, listarEsperandoConclusao } from '../servicos/servicos.js';
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarDataBR } from '../dominio/datas.js';
 import { mostrarFalha } from './_auxiliar-admin.js';
@@ -31,16 +31,19 @@ export default async function montar(ctx) {
   const topo = cabecalho({ titulo: 'Financeiro', voltarPara: '#/' });
   let periodo = 'hoje';
   let semValor = [];
+  let esperando = 0; // visitas que passaram do horário e ainda não foram concluídas (não entram nos totais)
 
   async function carregar() {
     mostrar(raiz, html`${topo}${esqueletos(3)}`);
     try {
-      const [dados, pendentes] = await Promise.all([
+      const [dados, pendentes, aguardando] = await Promise.all([
         carregarFinanceiro(empresaId, periodo),
         listarSemValor(empresaId).catch(() => []),
+        listarEsperandoConclusao({ empresaId }).catch(() => []),
       ]);
       if (!ctx.ativo()) return;
       semValor = pendentes;
+      esperando = aguardando.length;
       desenhar(dados);
     } catch (erro) {
       if (ctx.ativo()) mostrarFalha(raiz, erro, carregar);
@@ -56,6 +59,7 @@ export default async function montar(ctx) {
       ${topo}
       <div class="pilha">
         ${completo ? abas(ABAS, periodo) : ''}
+        ${esperando > 0 ? html`<div data-aviso="esperando-conclusao">${aviso({ tom: 'amarelo', titulo: `${esperando} ${esperando === 1 ? 'serviço esperando conclusão' : 'serviços esperando conclusão'}`, texto: html`Não entram nos totais abaixo. ${botao({ texto: 'Ver serviços', href: '#/esperando-conclusao', variante: 'secundario', pequeno: true })}` })}</div>` : ''}
         <div class="cartao painel-numeros">
           <div class="financeiro-numero"><span class="financeiro-numero__rotulo">Recebido</span><span class="numero-grande valor-recebido">${formatarReais(r.recebidoCentavos)}</span></div>
           <div class="financeiro-numero"><span class="financeiro-numero__rotulo">A receber</span><span class="numero-medio valor-a-receber">${formatarReais(r.aReceberCentavos)}</span></div>

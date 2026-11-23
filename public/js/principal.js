@@ -127,6 +127,7 @@ async function abrir() {
     elAbertura.hidden = true;
     elApp.hidden = false;
     await iniciarRoteador({ raiz: document.getElementById('conteudo'), menu: document.getElementById('menu-topo') });
+    import('./telas/barra-servico.js').then((m) => m.iniciarBarraDeServico(document.getElementById('barra-servico'))).catch(() => {});
   } catch (erro) {
     console.error(erro);
     const demorou = erro && erro.message === 'tempo-esgotado';
@@ -148,6 +149,7 @@ elTentar.addEventListener('click', async () => {
       elAbertura.hidden = true;
       elApp.hidden = false;
       await iniciarRoteador({ raiz: document.getElementById('conteudo'), menu: document.getElementById('menu-topo') });
+    import('./telas/barra-servico.js').then((m) => m.iniciarBarraDeServico(document.getElementById('barra-servico'))).catch(() => {});
     } catch {
       textoAbertura('Ainda sem resposta. Confira a internet e tente de novo.', { falha: true });
     }

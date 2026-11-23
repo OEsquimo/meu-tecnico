@@ -9,6 +9,8 @@ import { itensDoMenu } from '../../public/js/nucleo/rotas.js';
 const ANA = { uid: 'ana', nome: 'Ana' };
 const BRUNO = { uid: 'bruno', nome: 'Bruno' };
 const agora = new Date(2031, 3, 14, 11, 0);
+// Pacote 27: o técnico só conta como atrasado se confirmou que está no serviço (tocou em "Iniciar serviço").
+const INICIOU = { iniciadoEm: new Date(2031, 3, 14, 9, 5) };
 let n = 0;
 const linha = (tec, hora, minutos, extra = {}) => {
   const [h, m] = hora.split(':').map(Number);
@@ -21,27 +23,27 @@ const linha = (tec, hora, minutos, extra = {}) => {
 };
 
 test('atraso: técnico que abre o app só MARCA o próximo agendamento (nunca troca de técnico)', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60);
   const acoes = planejarAjustesDeAtraso({ agendados: [atual, proximo], tecnicos: [ANA], agora, soMarcar: true });
   assert.deepEqual(acoes.map((a) => [a.tipo, a.linhaIds[0]]), [['atrasar', proximo.id]]);
 });
 
 test('atraso: quem já está marcado não é marcado de novo pelo técnico', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60, { atrasoPorTecnico: true });
   assert.equal(planejarAjustesDeAtraso({ agendados: [atual, proximo], tecnicos: [ANA], agora, soMarcar: true }).length, 0);
 });
 
 test('atraso: o administrador troca o técnico de um agendamento que o técnico já marcou, se há alguém livre', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60, { atrasoPorTecnico: true });
   const acoes = planejarAjustesDeAtraso({ agendados: [atual, proximo], tecnicos: [ANA, BRUNO], agora });
   assert.deepEqual(acoes.map((a) => [a.tipo, a.para?.uid]), [['reatribuir', 'bruno']]);
 });
 
 test('atraso: administrador sem ninguém livre não repete a marcação', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60, { atrasoPorTecnico: true });
   assert.equal(planejarAjustesDeAtraso({ agendados: [atual, proximo], tecnicos: [ANA], agora }).length, 0);
 });

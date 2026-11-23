@@ -15,10 +15,11 @@
 // 3/4/6/12 meses (já vem marcado o prazo padrão do tipo).
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, avancarEntreCampos } from '../nucleo/ui.js';
+import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, confirmar, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos, estadoVazio } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
-import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente } from '../servicos/servicos.js';
+import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente, listarConcluidosECancelados } from '../servicos/servicos.js';
+import { situacaoDaVisita, sugerirInicio, sugerirConclusao, validarHorarios, horaDeCampo, MOTIVOS_ATRASO } from '../dominio/tempo-servico.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { validarConclusao } from '../dominio/validacoes.js';
 import { validarValores } from '../dominio/valores.js';
@@ -28,7 +29,7 @@ import { podeVerValores, podeAlterarValores } from '../nucleo/permissoes.js';
 import { editorDeValores, valorSoParaLer, ligarEditorDeValores } from './valores-editor.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { STATUS, ehLinhaSemServico, MOTIVOS_PENDENCIA } from '../dominio/servicos.js';
-import { hojeISO } from '../dominio/datas.js';
+import { hojeISO, paraISO, inicioDoDia, inicioDoDiaSeguinte } from '../dominio/datas.js';
 import { PRAZOS_RETORNO_MESES, GARANTIA_DIAS } from '../nucleo/constantes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado } from './servicos-comum.js';
@@ -97,13 +98,25 @@ export default async function montar(ctx) {
       if (!ctx.ativo()) return;
       const precos = podeVerValores(sessao) ? await listarPrecos(usuario.empresaId).catch(() => ({})) : {};
       if (!ctx.ativo()) return;
-      desenhar(servico, aparelhos, precos);
+      // Pacote 27: quando o serviço anterior do mesmo técnico terminou (ajuda a sugerir o início e a avisar de sobreposição).
+      const fimAnterior = await fimDoServicoAnterior(servico);
+      if (!ctx.ativo()) return;
+      desenhar(servico, aparelhos, precos, fimAnterior);
     } catch (erro) {
       if (ctx.ativo()) mostrarErroComTentar(raiz, erro, carregar, cabecalho({ titulo: 'Concluir serviço', voltarPara }));
     }
   }
 
-  function desenhar(s, aparelhos, precos) {
+  async function fimDoServicoAnterior(s) {
+    try {
+      const dia = s.dataAgendada instanceof Date ? s.dataAgendada : new Date();
+      const feitos = await listarConcluidosECancelados({ empresaId: usuario.empresaId, de: inicioDoDia(dia), ate: inicioDoDiaSeguinte(dia), tecnicoUid: s.tecnicoUid || usuario.uid });
+      const fins = feitos.filter((f) => f.status === STATUS.CONCLUIDO && f.agendamentoId !== s.agendamentoId && f.dataConclusao instanceof Date && f.dataConclusao.getTime() <= Date.now()).map((f) => f.dataConclusao.getTime());
+      return fins.length > 0 ? new Date(Math.max(...fins)) : null;
+    } catch { return null; }
+  }
+
+  function desenhar(s, aparelhos, precos, fimAnterior = null) {
     const editaValores = podeAlterarValores(sessao);
     const veValores = podeVerValores(sessao);
     const precoDe = (t) => (Number.isInteger(precos[t?.id]) ? precos[t.id] : null);
@@ -122,6 +135,16 @@ export default async function montar(ctx) {
   })}`);
       return;
     }
+    // Horários sugeridos (Pacote 27): só são gravados os que a pessoa confirmar ao concluir.
+    const agoraSug = new Date();
+    const situacaoSug = situacaoDaVisita([s], agoraSug, usuario.admin ? null : usuario.uid);
+    const duracao = s.ocupacaoPorTecnico?.[usuario.uid] || s.duracaoMin || 60;
+    const marcadoSug = s.dataAgendada instanceof Date ? s.dataAgendada : agoraSug;
+    const concSug = sugerirConclusao({ inicio: s.iniciadoEm instanceof Date ? s.iniciadoEm : marcadoSug, duracaoMin: duracao, agora: agoraSug, passouDoPrazo: situacaoSug === 'esperando-concluir' });
+    const iniSug = s.iniciadoEm instanceof Date ? { data: s.iniciadoEm, ajustada: false } : sugerirInicio({ marcado: marcadoSug, fimAnterior, conclusao: concSug, duracaoMin: duracao });
+    const diaSug = paraISO(concSug);
+    // Serviço marcado para um dia que ainda não chegou (concluído adiantado): o piso do dia é hoje.
+    const diaMarcado = paraISO(marcadoSug) < hojeISO() ? paraISO(marcadoSug) : hojeISO();
     const salvo = rascunho && rascunho.id === s.id ? rascunho : null;
     const idsAntes = new Set(salvo?.aparelhosAntes || []);
     const novoAparelho = salvo ? aparelhos.find((a) => !idsAntes.has(a.id)) : null;
@@ -164,6 +187,22 @@ export default async function montar(ctx) {
             opcoes: PRAZOS_RETORNO_MESES.map((m) => ({ valor: String(m), rotulo: `${m} meses` })), valor: String(mesesPadrao),
           })}
         </div>
+        <section class="cartao pilha pilha--pequena" data-bloco="horarios" aria-label="Horários do serviço">
+          <h2 class="titulo-secao">Horários do serviço</h2>
+          <p class="texto-suave texto-pequeno">${s.iniciadoEm instanceof Date ? 'O início foi registrado quando você iniciou.' : 'Sugerimos estes horários. Confira e corrija se precisar.'}${iniSug.ajustada ? ' O início foi ajustado para caber antes da conclusão.' : ''}</p>
+          ${!usuario.admin && diaSug !== hojeISO() ? campoTexto({ nome: 'dataConclusao', rotulo: 'Dia do serviço', tipo: 'date', valor: diaSug, maximo: 10 }) : ''}
+          <div class="linha">
+            ${campoTexto({ nome: 'horaInicio', rotulo: 'Início', tipo: 'time', valor: horaDeCampo(iniSug.data) })}
+            ${campoTexto({ nome: 'horaConclusao', rotulo: 'Conclusão', tipo: 'time', valor: horaDeCampo(concSug) })}
+          </div>
+          <details class="detalhes" ${s.atrasoMotivo ? html`open` : ''}>
+            <summary>Houve atraso? Informe o motivo (opcional)</summary>
+            <div class="pilha">
+              ${campoPilulas({ nome: 'atrasoMotivo', rotulo: 'Motivo do atraso', opcoes: MOTIVOS_ATRASO.map((m) => ({ valor: m, rotulo: m })), valor: s.atrasoMotivo || '' })}
+              ${campoTexto({ nome: 'atrasoDetalhe', rotulo: 'Detalhe', opcional: true, valor: s.atrasoDetalhe || '', maximo: 300 })}
+            </div>
+          </details>
+        </section>
         <p class="texto-suave texto-pequeno">Garantia de ${GARANTIA_DIAS} dias a partir de hoje.</p>
         ${campoTextoLongo({ nome: 'descricao', rotulo: 'O que foi feito?', opcional: true, linhas: 3, maximo: 2000, valor: salvo?.descricao || '', placeholder: 'Ex.: limpeza completa, troca do dreno' })}
 
@@ -171,7 +210,7 @@ export default async function montar(ctx) {
           <details class="detalhes">
             <summary>Mais opções</summary>
             <div class="pilha">
-              ${campoTexto({ nome: 'dataConclusao', rotulo: 'Data do serviço', tipo: 'date', valor: hojeISO(), maximo: 10 })}
+              ${campoTexto({ nome: 'dataConclusao', rotulo: 'Data do serviço', tipo: 'date', valor: diaSug, maximo: 10 })}
               ${!semAparelho && aparelhos.length > 0 ? campoSelecao({
                 nome: 'aparelhoId', rotulo: 'Aparelho atendido', valor: s.aparelhoId || '', vazio: 'Manter o do agendamento',
                 opcoes: aparelhos.map((a) => ({ valor: a.id, rotulo: resumoDoAparelho(a) })),
@@ -228,9 +267,18 @@ export default async function montar(ctx) {
       const v = editor ? validarValores(editor.ler(), { exigirBase: usuario.admin }) : null;
       if (v) Object.assign(erros, v.erros);
       if (semServico && !tipoEscolhido) erros.tipoServicoId = 'Escolha qual serviço foi feito.';
+      // Horários (Pacote 27): erros bloqueiam; casos estranhos pedem confirmação.
+      const diaInformado = campos.dataConclusao || diaSug;
+      const h = validarHorarios({ diaISO: diaInformado, inicio: campos.horaInicio, conclusao: campos.horaConclusao, agora: new Date(), diaMarcadoISO: diaMarcado, fimAnterior });
+      if (h.erros.dia) erros.dataConclusao = h.erros.dia;
+      if (h.erros.inicio) erros.horaInicio = h.erros.inicio;
+      if (h.erros.conclusao) erros.horaConclusao = h.erros.conclusao;
       if (Object.keys(erros).length > 0) {
         mostrarErrosNosCampos(form, erros);
         return;
+      }
+      for (const c of h.confirmacoes) {
+        if (!await confirmar({ titulo: 'Confira os horários', mensagem: c.texto, confirmar: 'Está certo', cancelar: 'Corrigir' })) return;
       }
       await comCarregando(form.querySelector('[type="submit"]'), async () => {
         try {
@@ -243,7 +291,9 @@ export default async function montar(ctx) {
               aparelho: aparelhos.find((a) => a.id === r.dados.aparelhoId && a.id !== s.aparelhoId) || null,
               tipo: tipoEscolhido,
               exigirAparelho: true,
-              dataConclusaoISO: usuario.admin ? (campos.dataConclusao || null) : null,
+              inicio: h.inicio,
+              conclusao: h.conclusao,
+              atraso: campos.atrasoMotivo ? { motivo: campos.atrasoMotivo, detalhe: campos.atrasoDetalhe || '' } : null,
             },
           });
           const aindaAberto = await perguntarPendentes(s);

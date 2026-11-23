@@ -12,6 +12,8 @@ const BRUNO = { uid: 'bruno', nome: 'Bruno' };
 const CARLA = { uid: 'carla', nome: 'Carla' };
 const TODOS = [ANA, BRUNO, CARLA];
 const agora = new Date(2031, 3, 14, 11, 0);
+// Pacote 27: o técnico só conta como atrasado se confirmou que está no serviço (tocou em "Iniciar serviço").
+const INICIOU = { iniciadoEm: new Date(2031, 3, 14, 9, 5) };
 
 let n = 0;
 const linha = (tec, hora, minutos, extra = {}) => {
@@ -25,7 +27,7 @@ const linha = (tec, hora, minutos, extra = {}) => {
 };
 
 test('técnico passou do tempo e o próximo começa logo: o próximo vai para outro técnico livre', () => {
-  const atual = linha(ANA, '09:00', 60); // devia acabar às 10:00 e às 11:00 ainda não foi concluído
+  const atual = linha(ANA, '09:00', 60, INICIOU); // devia acabar às 10:00 e às 11:00 ainda não foi concluído
   const proximo = linha(ANA, '11:00', 60);
   const acoes = planejarAjustesDeAtraso({ agendados: [atual, proximo], tecnicos: TODOS, agora });
   assert.equal(acoes.length, 1);
@@ -36,7 +38,7 @@ test('técnico passou do tempo e o próximo começa logo: o próximo vai para ou
 });
 
 test('vai para o técnico com menos serviço no dia', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60);
   const cheio = linha(BRUNO, '14:00', 240); // Bruno já tem 4 h hoje; Carla nada
   const acoes = planejarAjustesDeAtraso({ agendados: [atual, proximo, cheio], tecnicos: TODOS, agora });
@@ -44,7 +46,7 @@ test('vai para o técnico com menos serviço no dia', () => {
 });
 
 test('ninguém livre: o próximo fica atrasado (para o administrador avisar o cliente)', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const proximo = linha(ANA, '11:00', 60);
   const acoes = planejarAjustesDeAtraso({
     agendados: [atual, proximo, linha(BRUNO, '10:30', 120), linha(CARLA, '10:30', 120)], tecnicos: TODOS, agora,
@@ -53,9 +55,9 @@ test('ninguém livre: o próximo fica atrasado (para o administrador avisar o cl
 });
 
 test('quem também está atrasado não recebe o serviço', () => {
-  const ana1 = linha(ANA, '09:00', 60);
+  const ana1 = linha(ANA, '09:00', 60, INICIOU);
   const ana2 = linha(ANA, '11:00', 60);
-  const bruno1 = linha(BRUNO, '09:00', 60); // Bruno também passou do tempo
+  const bruno1 = linha(BRUNO, '09:00', 60, INICIOU); // Bruno também passou do tempo
   const acoes = planejarAjustesDeAtraso({ agendados: [ana1, ana2, bruno1], tecnicos: [ANA, BRUNO, CARLA], agora });
   assert.equal(acoes.find((a) => a.chave === ana2.agendamentoId).para.uid, 'carla');
 });
@@ -83,7 +85,7 @@ test('serviço concluído do técnico não conta como atraso; visita com dois t�
 });
 
 test('uma conferência só ajusta o próximo agendamento de cada técnico e não repete o já atrasado', () => {
-  const atual = linha(ANA, '09:00', 60);
+  const atual = linha(ANA, '09:00', 60, INICIOU);
   const jaAtrasado = linha(ANA, '11:00', 60, { atrasoPorTecnico: true });
   assert.equal(planejarAjustesDeAtraso({ agendados: [atual, jaAtrasado, linha(BRUNO, '10:30', 120), linha(CARLA, '10:30', 120)], tecnicos: TODOS, agora }).length, 0);
 });
