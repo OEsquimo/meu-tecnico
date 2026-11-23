@@ -596,11 +596,11 @@ export function buscarServico(empresaId, id) {
  * Serviços agendados entre duas datas (de inclusive, ate exclusive).
  * O técnico passa tecnicoUid: o servidor só devolve os serviços dele.
  */
-export function listarAgendados({ empresaId, de = null, ate = null, tecnicoUid = null }) {
+export function listarAgendados({ empresaId, de = null, ate = null, tecnicoUid = null, limite = 300 }) {
   const onde = [['status', '==', STATUS.AGENDADO]];
   if (de) onde.push(['dataAgendada', '>=', de]);
   if (ate) onde.push(['dataAgendada', '<', ate]);
-  const opcoes = { ordenarPor: [['dataAgendada', 'asc']], limite: 300 };
+  const opcoes = { ordenarPor: [['dataAgendada', 'asc']], limite };
   return tecnicoUid ? listarDoTecnico(empresaId, tecnicoUid, onde, opcoes) : listar(caminho(empresaId), { onde, ...opcoes });
 }
 
