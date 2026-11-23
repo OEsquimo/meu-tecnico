@@ -110,7 +110,16 @@ with sync_playwright() as p:
 
       // ---- Atraso do técnico (só administrador): 05/09/2031, "agora" = 11:00 ----
       const agora = new Date(2031, 8, 5, 11, 0);
+      const { gravar, operacao: bop, AGORA } = await import(o + 'nucleo/banco.js');
+      // Pacote 27: o atraso só vale se o técnico tocou em Iniciar (ou respondeu "Ainda estou no serviço").
+      // As datas do teste são futuras, então o início é gravado direto (a tela não aceita iniciar no futuro).
+      const iniciou = async (dia, inicio) => {
+        const lista = await S.listarAgendados({ empresaId, de: new Date(2031, 8, dia), ate: new Date(2031, 8, dia + 1) });
+        const l = lista.find((x) => x.clienteId === 'c-maria');
+        await gravar([bop.atualizar(`empresas/${empresaId}/servicos/${l.id}`, { iniciadoEm: inicio, atualizadoEm: AGORA })]);
+      };
       await tenta('a1', () => S.salvarAgendamento(base(maria, '2031-09-05', '09:00', [rafael])));   // Rafael: devia acabar às 10:00
+      await iniciou(5, new Date(2031, 8, 5, 9, 0));
       await tenta('b1', () => S.salvarAgendamento(base(ana, '2031-09-05', '11:00', [rafael])));      // próximo do Rafael, às 11:00
       saida.ajustados = await S.conferirAtrasosDoDia({ empresaId, tecnicos: [admin, rafael], agora });
       const dia5 = await S.listarAgendados({ empresaId, de: new Date(2031, 8, 5), ate: new Date(2031, 8, 6) });
@@ -121,6 +130,7 @@ with sync_playwright() as p:
 
       // ---- Sem outro técnico livre: o próximo fica Atrasado (06/09/2031) ----
       await tenta('a2', () => S.salvarAgendamento(base(maria, '2031-09-06', '09:00', [rafael])));
+      await iniciou(6, new Date(2031, 8, 6, 9, 0));
       await tenta('b2', () => S.salvarAgendamento(base(ana, '2031-09-06', '11:00', [rafael])));
       await tenta('m2', () => S.salvarAgendamento(base(clientes.find((c) => c.id === 'c-joao'), '2031-09-06', '10:30', [admin])));
       saida.ajustados2 = await S.conferirAtrasosDoDia({ empresaId, tecnicos: [admin, rafael], agora: new Date(2031, 8, 6, 11, 0) });

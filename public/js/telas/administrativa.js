@@ -18,6 +18,7 @@ export default async function montar({ raiz, sessao }) {
   // Cada linha: título, explicação curta e para onde vai.
   const linhas = [
     { titulo: 'Equipe', sub: 'Funcionários e convites', href: '#/equipe' },
+    { titulo: 'Desempenho', sub: 'Tempo, atrasos e deslocamento da equipe', href: '#/desempenho' },
     { titulo: 'Tipos de serviço', sub: 'Limpeza, instalação, retorno...', href: '#/tipos-servico' },
     { titulo: 'Horário de funcionamento', sub: 'Dias, horários, almoço e limite de horas', href: '#/expediente' },
     { titulo: 'Configurações', sub: 'Empresa, aviso de retorno e mensagem', href: '#/configuracoes' },

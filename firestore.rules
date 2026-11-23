@@ -452,6 +452,8 @@ service cloud.firestore {
           || tecnicoConcluiServico(emp, sid)
           || tecnicoMarcaPendente(emp)
           || tecnicoMarcaAtraso(emp)
+          || tecnicoIniciaServico(emp)
+          || tecnicoInformaAtraso(emp)
           || tecnicoCorrigeServicoAdicionado(emp)
           || tecnicoInformaServico(emp);
         allow delete: if ehAdmin(emp) || tecnicoApagaServicoAdicionado(emp);
@@ -512,7 +514,7 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe', 'atrasoFalta', 'atrasoInformadoEm'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
@@ -524,6 +526,11 @@ service cloud.firestore {
         && (!('atrasoPorTecnico' in d) || d.atrasoPorTecnico is bool)
         && (!('reatribuicaoVista' in d) || d.reatribuicaoVista is bool)
         && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120))
+        && (!('iniciadoEm' in d) || d.iniciadoEm is timestamp)
+        && (!('atrasoInformadoEm' in d) || d.atrasoInformadoEm is timestamp)
+        && (!('atrasoMotivo' in d) || (d.atrasoMotivo is string && d.atrasoMotivo.size() <= 60))
+        && (!('atrasoDetalhe' in d) || (d.atrasoDetalhe is string && d.atrasoDetalhe.size() <= 300))
+        && (!('atrasoFalta' in d) || d.atrasoFalta in ['15', '30', '60', 'mais'])
         && (!('reatribuidoDeNome' in d) || (d.reatribuidoDeNome is string && d.reatribuidoDeNome.size() <= 120))
         && (!('reatribuidoDeUid' in d) || (d.reatribuidoDeUid is string && d.reatribuidoDeUid.size() <= 128))
         && (!('agendamentoId' in d) || (d.agendamentoId is string && d.agendamentoId.size() <= 40))
@@ -559,7 +566,7 @@ service cloud.firestore {
     function tecnicoConcluiServico(emp, sid) {
       let d = request.resource.data;
       let mudou = d.diff(resource.data).affectedKeys();
-      let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm'];
+      let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe'];
       let podeValor = tecnicoAltera(emp) && existsAfter(/databases/$(database)/documents/empresas/$(emp)/valores/$(sid));
       let comValor = podeValor ? basicas.concat(['valorDefinido']) : basicas;
       let comTipo = comValor.concat(['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin']);
@@ -570,6 +577,11 @@ service cloud.firestore {
         // foi feito sem serviço ("Serviço a definir": tipoServicoId vazio).
         && mudou.hasOnly(resource.data.tipoServicoId == '' ? comTipo : comValor)
         && (!('valorDefinido' in mudou) || d.valorDefinido == true)
+        // Pacote 27: horários informados na conclusão (início nunca depois da conclusão; motivo curto).
+        && (!('iniciadoEm' in mudou) || d.iniciadoEm is timestamp)
+        && (!('iniciadoEm' in d) || !('dataConclusao' in d) || d.iniciadoEm <= d.dataConclusao)
+        && (!('atrasoMotivo' in mudou) || (d.atrasoMotivo is string && d.atrasoMotivo.size() <= 60))
+        && (!('atrasoDetalhe' in mudou) || (d.atrasoDetalhe is string && d.atrasoDetalhe.size() <= 300))
         && d.status == 'concluido'
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool);
@@ -603,6 +615,42 @@ service cloud.firestore {
         && d.diff(resource.data).affectedKeys().hasOnly(['atrasoPorTecnico', 'atrasoTecnicoNome', 'atualizadoEm'])
         && d.atualizadoEm == request.time
         && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120));
+    }
+
+    // Pacote 27: "Iniciar serviço". O técnico grava SÓ a hora de início num serviço SEU ainda agendado
+    // (pode ser uma hora que já passou: "Comecei às 10:05"; não pode estar no futuro, com 1 h de folga por relógio de celular).
+    // A primeira condição é barata de propósito (limite de 1000 expressões por regra): só olha gravações que
+    // trazem iniciadoEm sem conclusão.
+    function tecnicoIniciaServico(emp) {
+      let d = request.resource.data;
+      let mudou = d.diff(resource.data).affectedKeys();
+      return 'iniciadoEm' in d && !('dataConclusao' in d)
+        && ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && mudou.hasAll(['iniciadoEm', 'atualizadoEm'])
+        && mudou.hasOnly(['iniciadoEm', 'atualizadoEm'])
+        && d.iniciadoEm is timestamp
+        && d.iniciadoEm <= request.time + duration.value(1, 'h')
+        && d.atualizadoEm == request.time;
+    }
+
+    // Pacote 27: "Ainda estou no serviço". O técnico grava SÓ o motivo do atraso e quanto tempo falta, num serviço SEU agendado.
+    // Primeira condição barata (limite de 1000 expressões): só olha gravações que trazem atrasoInformadoEm.
+    function tecnicoInformaAtraso(emp) {
+      let d = request.resource.data;
+      let mudou = d.diff(resource.data).affectedKeys();
+      return 'atrasoInformadoEm' in d
+        && ehTecnico(emp)
+        && ehDoServico(resource.data)
+        && resource.data.status == 'agendado'
+        && mudou.hasAll(['atrasoMotivo', 'atrasoInformadoEm', 'atualizadoEm'])
+        && mudou.hasOnly(['atrasoMotivo', 'atrasoDetalhe', 'atrasoFalta', 'atrasoInformadoEm', 'atualizadoEm'])
+        && d.atrasoInformadoEm == request.time
+        && d.atualizadoEm == request.time
+        && d.atrasoMotivo is string && d.atrasoMotivo.size() > 0 && d.atrasoMotivo.size() <= 60
+        && (!('atrasoDetalhe' in mudou) || (d.atrasoDetalhe is string && d.atrasoDetalhe.size() <= 300))
+        && (!('atrasoFalta' in mudou) || d.atrasoFalta in ['15', '30', '60', 'mais']);
     }
 
     // O técnico pode acrescentar um serviço NA SUA visita (para ele mesmo, ainda
