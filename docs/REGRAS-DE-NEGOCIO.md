@@ -272,3 +272,10 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Indicador "Horários informados: X de Y serviços":** administrador no Desempenho (lista e detalhe do técnico, com aviso quando há não conferidos); técnico em Concluídos (só os dele). A correção de horários continua só com o administrador.
 - **Limite:** o app registra o que a pessoa fez na tela (tocou Iniciar, marcou "Conferi", mudou um horário); não prova que o horário é real.
 - Campo novo `horariosConferidos` (booleano) em `servicos`: regras do Firestore (técnico na conclusão e administrador) e backup.
+
+## Pacote 30 — Mensagens e status do agendamento
+- **Reagendamento ao técnico:** a mensagem mostra só **Nova data** e **Novo horário** (a data/horário anterior não vai).
+- **Link curto do Google Maps (mensagem ao técnico):** `#/m/<código>`, que abre o Google Maps no endereço. O app guarda o endereço em `linksCurtos` (tipo `mapa`, vale **30 dias**, criado só pelo administrador; lido por quem tem o código). Se não der para gravar, a mensagem usa o link comprido do Google Maps de antes. Link vencido ou inexistente: a tela avisa e orienta usar "Ir até o cliente". Na demonstração só com `?demo=1&curtos=1`. O link "Ver no app" (`#/servico/<id>`) continua como está. Cancelamento não leva mapa.
+- **Selo do agendamento:** *Agendado* (azul) antes do horário; *Atrasado* (vermelho) passou do horário **sem iniciar** (continua assim mesmo depois do tempo previsto); *Em andamento* (verde) depois de **Iniciar**; *Tempo excedido* (laranja) quando o serviço iniciado passa do **tempo previsto** + 10 min de tolerância. O tempo previsto é a soma dos serviços da visita (por técnico) e conta do **início real** (não do horário marcado). "Ainda estou no serviço" com prazo extra volta para *Em andamento* até o prazo acabar. Serviço iniciado não conta como "atrasado" nos avisos e contadores.
+- **Aviso "Serviço esperando concluir" e lista do administrador:** também contam do início real quando o serviço foi iniciado (sem início, do horário marcado). Os horários livres para marcação continuam só horário marcado + duração.
+

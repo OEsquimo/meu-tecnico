@@ -39,9 +39,29 @@ export function linhasEditaveis(linhas) {
   return agendadas.length > 0 ? agendadas : linhas.filter((l) => l.status === STATUS.CANCELADO);
 }
 
-/** O serviço está agendado e o horário já passou sem ser concluído (ou o técnico anterior atrasou e ninguém pôde assumir)? */
+/**
+ * Minutos previstos de uma linha para um técnico: o tempo TOTAL daquele técnico na visita (`ocupacaoPorTecnico[uid]`, a soma
+ * dos serviços dele) quando existe; senão `ocupacaoMin` (serviços antigos); senão a duração do próprio serviço.
+ */
+export function minutosPrevistosDoServico(servico, tecnicoUid = null) {
+  const doTecnico = tecnicoUid && servico.ocupacaoPorTecnico ? Number(servico.ocupacaoPorTecnico[tecnicoUid]) : NaN;
+  const total = Number.isFinite(doTecnico) && doTecnico > 0 ? doTecnico : Number(servico.ocupacaoMin);
+  return Number.isFinite(total) && total > 0 ? Math.max(total, duracaoDoServico(servico)) : duracaoDoServico(servico);
+}
+
+/** Fim previsto contado a partir do INÍCIO REAL (Pacote 30); null se o serviço ainda não foi iniciado. */
+export function fimPrevistoDesdeOInicio(servico, tecnicoUid = null) {
+  if (!(servico.iniciadoEm instanceof Date)) return null;
+  return new Date(servico.iniciadoEm.getTime() + minutosPrevistosDoServico(servico, tecnicoUid) * 60000);
+}
+
+/**
+ * O serviço está agendado e o horário já passou sem ser concluído (ou o técnico anterior atrasou e ninguém pôde assumir)?
+ * Serviço já iniciado (Pacote 30) não é "atrasado": está em andamento (ou com o tempo excedido).
+ */
 export function estaAtrasado(servico, agora = new Date()) {
   if (servico.status !== STATUS.AGENDADO) return false;
+  if (servico.iniciadoEm instanceof Date) return false;
   // O técnico anterior passou do tempo e não havia outro técnico livre: o administrador precisa avisar o cliente.
   if (servico.atrasoPorTecnico === true) return true;
   return servico.dataAgendada instanceof Date && servico.dataAgendada.getTime() < agora.getTime();

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { paraISO, diasNoMes } from './datas.js';
-import { chaveDoAgendamento, duracaoDoServico, tecnicosDoServico, STATUS } from './servicos.js';
+import { chaveDoAgendamento, duracaoDoServico, minutosPrevistosDoServico, tecnicosDoServico, STATUS } from './servicos.js';
 import { horaParaMinutos } from './expediente.js';
 
 /** Cabeçalho do calendário (a semana começa no domingo, como no Brasil). */
@@ -69,9 +69,7 @@ function limitarAoDia(inicio, fim) {
  * (serviços antigos, um técnico só); senão a duração do próprio serviço.
  */
 export function fimDoServico(servico, tecnicoUid = null) {
-  const doTecnico = tecnicoUid && servico.ocupacaoPorTecnico ? Number(servico.ocupacaoPorTecnico[tecnicoUid]) : NaN;
-  const total = Number.isFinite(doTecnico) && doTecnico > 0 ? doTecnico : Number(servico.ocupacaoMin);
-  const minutos = Number.isFinite(total) && total > 0 ? Math.max(total, duracaoDoServico(servico)) : duracaoDoServico(servico);
+  const minutos = minutosPrevistosDoServico(servico, tecnicoUid);
   return limitarAoDia(servico.dataAgendada, new Date(servico.dataAgendada.getTime() + minutos * MINUTO));
 }
 

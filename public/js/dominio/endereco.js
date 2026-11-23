@@ -62,6 +62,11 @@ export function consultaParaMapa(e) {
   return [rua, e.bairro, cidade, 'Brasil'].filter(Boolean).join(', ');
 }
 
+/** Link do Google Maps (rota até o destino) para um texto de busca ou "lat,lng". */
+export function hrefGoogleMaps(consulta) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(String(consulta ?? ''))}&travelmode=driving`;
+}
+
 /**
  * Opções da janela "Ir até o cliente": o técnico escolhe o aplicativo.
  * Retorna [{ id, rotulo, href }]. Todos funcionam no Android.
@@ -71,7 +76,7 @@ export function opcoesDeNavegacao(e) {
   const codificada = encodeURIComponent(consulta);
   const temCoordenadas = Number.isFinite(e?.lat) && Number.isFinite(e?.lng);
   return [
-    { id: 'google', rotulo: 'Google Maps', href: `https://www.google.com/maps/dir/?api=1&destination=${codificada}&travelmode=driving` },
+    { id: 'google', rotulo: 'Google Maps', href: hrefGoogleMaps(consulta) },
     {
       id: 'waze',
       rotulo: 'Waze',

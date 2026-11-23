@@ -41,9 +41,10 @@ export function blocoDeTempo(linhas, tempo) {
   const marcado = linhasAbertas(linhas, uid).map((l) => l.dataAgendada).filter((d) => d instanceof Date).sort((a, b) => a - b)[0];
   const r = { situacao, selo: null, corpo: null, botaoIniciar: null };
   if (situacao === 'em-servico') {
-    r.selo = selo(inicio ? `Em serviço desde ${horaDeCampo(inicio)}` : 'Em serviço', 'verde');
+    r.selo = selo(inicio ? `Em andamento desde ${horaDeCampo(inicio)}` : 'Em andamento', 'verde');
   } else if (situacao === 'esperando-concluir') {
-    r.selo = selo('Esperando concluir', 'amarelo');
+    // Iniciado: "Tempo excedido" (laranja). Nunca iniciado: continua "Atrasado" (vermelho).
+    r.selo = inicio ? selo('Tempo excedido', 'laranja') : selo('Atrasado', 'vermelho');
     if (chaveAviso === chave) {
       r.corpo = html`<div class="aviso-tempo" data-aviso="esperando-concluir">
         ${aviso({ tom: 'amarelo', titulo: 'Serviço esperando concluir', texto: 'O horário previsto já passou. Você já terminou?' })}

@@ -668,3 +668,26 @@ test('pacote 29: o administrador grava horariosConferidos (booleano) ao corrigir
   await assertFails(updateDoc(ref, { horariosConferidos: 'sim', atualizadoEm: serverTimestamp() }));
   await assertSucceeds(updateDoc(ref, { horariosConferidos: true, atualizadoEm: serverTimestamp() }));
 });
+
+// ---- Pacote 30: link curto do mapa ----
+const linkMapa = (extra = {}) => ({ tipo: 'mapa', empresaId: E, consulta: 'Rua A, 1, Brasil', criadoEm: serverTimestamp(), expiraEm: dia(30), ...extra });
+
+test('pacote 30: só o administrador cria o link curto do mapa, da própria empresa, com validade limitada', async () => {
+  await assertSucceeds(setDoc(doc(como(ADMIN), 'linksCurtos/mapa000001'), linkMapa()));
+  await assertFails(setDoc(doc(anonimo(), 'linksCurtos/mapa000002'), linkMapa()));
+  await assertFails(setDoc(doc(como(TEC), 'linksCurtos/mapa000003'), linkMapa()));
+  await assertFails(setDoc(doc(como(OUTRO), 'linksCurtos/mapa000004'), linkMapa())); // de outra empresa
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/mapa000005'), linkMapa({ expiraEm: dia(40) })));
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/mapa000006'), linkMapa({ consulta: 'x'.repeat(601) })));
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/mapa000007'), linkMapa({ origem: 'abcdefghij' }))); // campo que não existe no mapa
+  await assertFails(setDoc(doc(como(ADMIN), 'linksCurtos/mapa000008'), linkMapa({ criadoEm: dia(-3) })));
+});
+
+test('pacote 30: o link curto do mapa é lido por quem tem o código, até vencer; ninguém lista nem altera', async () => {
+  await setDoc(doc(como(ADMIN), 'linksCurtos/mapa000001'), linkMapa());
+  await assertSucceeds(getDoc(doc(anonimo(), 'linksCurtos/mapa000001')));
+  await assertFails(getDocs(collection(anonimo(), 'linksCurtos')));
+  await assertFails(updateDoc(doc(como(ADMIN), 'linksCurtos/mapa000001'), { consulta: 'outro' }));
+  await assertFails(deleteDoc(doc(anonimo(), 'linksCurtos/mapa000001')));
+  await assertSucceeds(deleteDoc(doc(como(ADMIN), 'linksCurtos/mapa000001')));
+});

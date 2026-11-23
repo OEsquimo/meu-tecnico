@@ -27,7 +27,7 @@ import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
 import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
 import { textoDoRetorno } from './agendamento-comum.js';
 import { pedirCorrecaoDeHorarios } from './tempo-comum.js';
-import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita, horarioConferido } from '../dominio/tempo-servico.js';
+import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita, horarioConferido, seloDaLinha } from '../dominio/tempo-servico.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -118,7 +118,7 @@ export default async function montar(ctx) {
 
   /** `repetidos`: o que o cabeçalho e o cartão de cima já dizem (título do serviço, técnicos, situação) e não precisa se repetir na linha. */
   function cartaoDaLinha(l, valores, cobraveis, repetidos = {}) {
-    const sit = seloDoServico(l);
+    const sit = seloDaLinha(l);
     const agendada = l.status === STATUS.AGENDADO;
     const concluida = l.status === STATUS.CONCLUIDO;
     const valor = valores[l.id];
@@ -193,7 +193,7 @@ export default async function montar(ctx) {
     const aguardando = !agendado && canceladas.length > 0;
     const temConcluida = linhas.some((l) => l.status === STATUS.CONCLUIDO);
     const aguardandoSemConcluida = () => aguardando && !temConcluida;
-    const situacao = agendado ? seloDoServico(abertas[0], new Date(), { curto: true }) : (aguardandoSemConcluida() ? seloDoServico(canceladas[0], new Date(), { curto: true }) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0], new Date(), { curto: true }));
+    const situacao = agendado ? seloDaLinha(abertas[0], new Date(), { curto: true }) : (aguardandoSemConcluida() ? seloDoServico(canceladas[0], new Date(), { curto: true }) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0], new Date(), { curto: true }));
     const ligar = linkLigar(s.clienteWhatsapp);
     const whats = linkWhatsappDoCliente(s.clienteWhatsapp, '');
     const tecnicos = [...new Set(linhas.flatMap((l) => nomesDosTecnicos(l)).filter(Boolean))].join(', ');

@@ -13,7 +13,7 @@ import { TITULOS_DE_AVISO } from '../dominio/aviso-cliente.js';
 import { montarDestinatarios } from '../dominio/destinatarios-aviso.js';
 import { listarEquipe, tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { listarAgendados } from '../servicos/servicos.js';
-import { linkDeHorariosParaEnviar } from '../servicos/links-curtos.js';
+import { linkDeHorariosParaEnviar, linkDoMapaParaEnviar } from '../servicos/links-curtos.js';
 import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import { hojeISO, somarDias, deISO } from '../dominio/datas.js';
 import { normalizarWhatsappBR } from '../dominio/telefone.js';
@@ -58,13 +58,16 @@ export async function abrirAvisos(tipo, linhas, { anterior = null } = {}) {
   const empresaId = empresaIdAtual();
   aberto = true;
   try {
-    const [equipe, linkRemarcar] = await Promise.all([
+    const base = enderecoBaseDoApp(window.location.href);
+    const [equipe, linkRemarcar, linkMapa] = await Promise.all([
       listarMembros(empresaId),
       tipo === 'cancelado' ? linkParaRemarcar() : Promise.resolve(''),
+      // Pacote 30: o Maps vai como link curto (só nas mensagens ao técnico de serviço agendado ou reagendado).
+      tipo === 'cancelado' ? Promise.resolve('') : linkDoMapaParaEnviar(base, { empresaId, endereco: linhas[0].local || '', lat: linhas[0].localLat ?? null, lng: linhas[0].localLng ?? null }).catch(() => ''),
     ]);
     const destinos = montarDestinatarios({
-      tipo, empresa: sessao.empresa || {}, linhas, equipe, adminUid: sessao.usuario?.uid || '', anterior, linkRemarcar,
-      baseApp: enderecoBaseDoApp(window.location.href),
+      tipo, empresa: sessao.empresa || {}, linhas, equipe, adminUid: sessao.usuario?.uid || '', anterior, linkRemarcar, linkMapa,
+      baseApp: base,
     }).filter((d) => d.link);
     if (destinos.length === 0) return;
     await new Promise((resolver) => desenhar(tipo, destinos, resolver));

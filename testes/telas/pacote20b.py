@@ -95,7 +95,7 @@ with sync_playwright() as p:
     ok(pag.locator(PAINEL).count() == 1 and "nova data" in pag.inner_text(PAINEL).lower(), "mudou a hora: painel de reagendamento")
     mt = mensagem(tid); mc = mensagem("cliente")
     ok("reagendado" in mc and "11:00" in mc, "cliente: 'Seu serviço foi reagendado' com a hora nova")
-    ok("Horário anterior: 09:00" in mt and "Novo horário: 11:00" in mt, f"técnico recebe antes e depois: {mt[:140]!r}")
+    ok("anterior" not in mt.lower() and "Novo horário: 11:00" in mt, f"técnico recebe só a nova data e o novo horário (Pacote 30): {mt[:140]!r}")
     fechar()
 
     # ---------------- Cancelar ----------------

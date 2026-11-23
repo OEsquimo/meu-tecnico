@@ -57,7 +57,7 @@ with sync_playwright() as p:
     ok(t.locator("[data-aviso]").count() == 0, "antes do horário não há aviso")
     ok(t.locator("#barra-servico:not([hidden])").count() == 0, "sem serviço iniciado não há barra 'Em serviço'")
     t.click("[data-acao=iniciar-agora]"); t.wait_for_timeout(1200)
-    ok("Em serviço desde 13:30" in texto(t), "depois de iniciar, o cartão mostra 'Em serviço desde 13:30'")
+    ok("Em andamento desde 13:30" in texto(t), "depois de iniciar, o cartão mostra 'Em andamento desde 13:30'")
     ok(t.locator("[data-acao=iniciar-agora]").count() == 0, "o botão Iniciar some")
     t.wait_for_selector("#barra-servico:not([hidden])", timeout=5000)
     barra = t.inner_text("#barra-servico")
@@ -78,7 +78,7 @@ with sync_playwright() as p:
     t.locator("dialog[open] label.chip", has_text="Falta de peça").click()
     t.locator("dialog[open] label.chip", has_text="30 min").click()
     t.click("dialog[open] [data-resposta=sim]"); t.wait_for_timeout(1300)
-    ok("Serviço esperando concluir" not in texto(t) and "Em serviço" in texto(t), "depois de avisar, volta para 'Em serviço' (vale o prazo informado)")
+    ok("Serviço esperando concluir" not in texto(t) and "Em andamento" in texto(t), "depois de avisar, volta para 'Em andamento' (vale o prazo informado)")
     t.clock.set_system_time(hoje(16, 5)); recarregar_tela(t)
     ok("Serviço esperando concluir" in texto(t), "passado o prazo informado, o aviso volta")
     t.click("[data-acao=ja-terminei]"); t.wait_for_selector("[data-bloco=horarios]")
@@ -115,7 +115,7 @@ with sync_playwright() as p:
     t.fill("dialog[open] [data-hora]", "23:00"); t.click("dialog[open] [data-resposta=sim]"); t.wait_for_timeout(300)
     ok("ainda não chegou" in t.inner_text("dialog[open]"), "'Comecei às' no futuro não é aceito")
     t.fill("dialog[open] [data-hora]", "14:05"); t.click("dialog[open] [data-resposta=sim]"); t.wait_for_timeout(1300)
-    ok("Em serviço desde 14:05" in texto(t), "'Comecei às 14:05' registra o início informado")
+    ok("Em andamento desde 14:05" in texto(t), "'Comecei às 14:05' registra o início informado")
     t.context.close()
 
     # ---------------- Administrador ----------------
