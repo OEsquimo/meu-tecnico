@@ -3,6 +3,7 @@
 // =============================================================================
 // Se um técnico ainda está num serviço que já devia ter acabado e o PRÓXIMO agendamento dele começa logo:
 //   1) o próximo agendamento passa para outro técnico livre (o de menos serviço no dia);
+//   (Pacote 27: só vale se o técnico tocou em "Iniciar serviço" ou respondeu "Ainda estou no serviço".)
 //   2) se ninguém está livre, o próximo agendamento fica ATRASADO (`atrasoPorTecnico`), para o
 //      administrador avisar o cliente do atraso e decidir se reagenda.
 // Só "olha para a frente" um agendamento por técnico em cada conferência; a conferência roda quando o
@@ -40,8 +41,12 @@ function visitasDoTecnico(uid, agendados) {
 
 /** O técnico está numa visita que já devia ter acabado (passou do fim + tolerância e não foi concluída)? */
 export function visitaEmAtraso(uid, agendados, agora) {
+  // Pacote 27: só conta como atraso quando o técnico CONFIRMOU que está no serviço (tocou em "Iniciar serviço" ou
+  // respondeu "Ainda estou no serviço"). Serviço aberto sem nenhuma resposta pode ser só esquecimento de concluir:
+  // o app não troca nem marca o próximo agendamento sozinho; primeiro pergunta ao técnico.
   return visitasDoTecnico(uid, agendados).find((v) => v.inicio.getTime() <= agora.getTime()
-    && agora.getTime() > v.fim.getTime() + TOLERANCIA_ATRASO_MIN * MIN) || null;
+    && agora.getTime() > v.fim.getTime() + TOLERANCIA_ATRASO_MIN * MIN
+    && v.linhas.some((l) => l.iniciadoEm instanceof Date || l.atrasoInformadoEm instanceof Date)) || null;
 }
 
 /**

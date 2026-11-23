@@ -1122,3 +1122,25 @@ body.modo-demonstracao::before {
 .avisos__botao { display: flex; justify-content: center; text-decoration: none; }
 .avisos__rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .avisos__botao--tocado { background: #d9dde2; border-color: #d9dde2; color: #5b6570; }
+
+/* Barra fixa "Em serviço" (Pacote 27): fica colada no rodapé enquanto o técnico tem uma visita iniciada. */
+.barra-servico {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--espaco) calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--cor-sucesso-fundo);
+  border-top: 1px solid var(--cor-sucesso);
+  color: var(--cor-sucesso);
+}
+.barra-servico[hidden] { display: none; }
+.barra-servico__texto { display: flex; flex-direction: column; min-width: 0; }
+.barra-servico__titulo { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-servico__sub { font-size: 0.85rem; }
+body.com-barra-servico .conteudo { padding-bottom: 88px; }
