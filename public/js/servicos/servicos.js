@@ -22,7 +22,9 @@ import { camposDeConclusao, localDoServico, STATUS, NOME_SERVICO_A_DEFINIR, ehLi
 import { motivoDeIndisponibilidade } from '../dominio/agenda.js';
 import { acharAparelhoComAgendamentoAberto, mensagemAparelhoOcupado } from '../dominio/duplicidade.js';
 import { planejarAjustesDeAtraso, trocarTecnico } from '../dominio/atraso.js';
-import { separarRetornos, limiteConsultaRetornos, adiarRetorno } from '../dominio/retornos.js';
+import { separarRetornos, limiteConsultaRetornos, adiarRetorno, calcularDataRetorno, calcularGarantiaAte } from '../dominio/retornos.js';
+import { linhasAbertas } from '../dominio/tempo-servico.js';
+import { visitasEsperandoConclusao } from '../dominio/desempenho.js';
 import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { montarConsultaDaLista } from '../dominio/lista-servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
@@ -764,9 +766,15 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   // Quem define o valor ao concluir: o administrador, ou o técnico com a permissão "alterar valor e extras".
   const defineValor = ehAdmin || dados.podeAlterarValores === true;
   const agora = new Date();
-  const concluidoEm = ehAdmin && dados.dataConclusaoISO ? combinarDataHora(dados.dataConclusaoISO, `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`) : agora;
+  // Pacote 27: com horários informados (dados.conclusao / dados.inicio), a conclusão é a hora informada.
+  const concluidoEm = dados.conclusao instanceof Date ? dados.conclusao
+    : ehAdmin && dados.dataConclusaoISO ? combinarDataHora(dados.dataConclusaoISO, `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`) : agora;
   if (concluidoEm.getTime() > agora.getTime() + 60000) {
     throw new ErroApp('A data de conclusão não pode ser no futuro.', 'data-futura');
+  }
+  const iniciadoEm = dados.inicio instanceof Date ? dados.inicio : (servico.iniciadoEm instanceof Date ? servico.iniciadoEm : null);
+  if (iniciadoEm && iniciadoEm.getTime() > concluidoEm.getTime()) {
+    throw new ErroApp('A conclusão não pode ser antes do início.', 'horario-invertido');
   }
 
   const campos = {
@@ -781,6 +789,8 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
     aparelhoResumo: dados.aparelho ? resumoDoAparelho(dados.aparelho) : (servico.aparelhoResumo || ''),
     concluidoPorNome: nomeQuemConcluiu || '',
     atualizadoEm: AGORA,
+    ...(iniciadoEm ? { iniciadoEm } : {}),
+    ...(dados.atraso?.motivo ? { atrasoMotivo: String(dados.atraso.motivo).slice(0, 60), atrasoDetalhe: String(dados.atraso.detalhe || '').slice(0, 300) } : {}),
   };
 
   const operacoes = [];
@@ -803,7 +813,78 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   operacoes.unshift(op.atualizar(`${caminho(empresaId)}/${servico.id}`, campos));
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
+  avisarMudancaDeServico();
   return campos;
+}
+
+// -----------------------------------------------------------------------------
+// INICIAR SERVIÇO, ATRASO E HORÁRIOS (Pacote 27)
+// -----------------------------------------------------------------------------
+
+/** Avisa as telas (a barra "Em serviço") que algum serviço mudou de situação. */
+export function avisarMudancaDeServico() {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('servico-mudou'));
+}
+
+/**
+ * Registra o início da visita: grava `iniciadoEm` nas linhas ainda abertas (e sem início) deste técnico.
+ * `inicio` pode ser uma hora passada ("Comecei às 10:05"), nunca no futuro. Devolve quantas linhas mudaram.
+ */
+export async function iniciarVisita({ empresaId, linhas, uid = null, inicio = new Date() }) {
+  if (inicio.getTime() > Date.now() + 60000) throw new ErroApp('Esse horário ainda não chegou.', 'data-futura');
+  const alvo = linhasAbertas(linhas, uid).filter((l) => !(l.iniciadoEm instanceof Date));
+  if (alvo.length === 0) return 0;
+  await gravar(alvo.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, { iniciadoEm: inicio, atualizadoEm: AGORA })));
+  invalidarCache(`${empresaId}:servicos`);
+  avisarMudancaDeServico();
+  return alvo.length;
+}
+
+/** "Ainda estou no serviço": guarda o motivo do atraso e quanto tempo falta. Só liga o aviso; não conclui nada. */
+export async function informarAtraso({ empresaId, linhas, uid = null, motivo, detalhe = '', falta = '30' }) {
+  if (!motivo) throw new ErroApp('Informe o motivo do atraso.', 'sem-motivo');
+  const alvo = linhasAbertas(linhas, uid);
+  if (alvo.length === 0) return 0;
+  await gravar(alvo.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, {
+    atrasoMotivo: String(motivo).slice(0, 60), atrasoDetalhe: String(detalhe || '').slice(0, 300), atrasoFalta: falta,
+    atrasoInformadoEm: AGORA, atualizadoEm: AGORA,
+  })));
+  invalidarCache(`${empresaId}:servicos`);
+  avisarMudancaDeServico();
+  return alvo.length;
+}
+
+/**
+ * O administrador corrige os horários de um serviço JÁ CONCLUÍDO (início, conclusão e motivo do atraso).
+ * A conclusão define o dia no Financeiro (e a garantia e o retorno acompanham o novo dia). O valor, se existir,
+ * também muda de dia.
+ */
+export async function corrigirHorariosDoServico({ empresaId, servico, inicio, conclusao, atraso = null }) {
+  if (servico.status !== STATUS.CONCLUIDO) throw new ErroApp('Só dá para corrigir horários de serviço concluído.', 'servico-aberto');
+  if (conclusao.getTime() > Date.now() + 60000) throw new ErroApp('A data de conclusão não pode ser no futuro.', 'data-futura');
+  if (inicio.getTime() >= conclusao.getTime()) throw new ErroApp('A conclusão não pode ser antes do início.', 'horario-invertido');
+  const campos = {
+    iniciadoEm: inicio, dataConclusao: conclusao, atualizadoEm: AGORA,
+    ...(atraso?.motivo ? { atrasoMotivo: String(atraso.motivo).slice(0, 60), atrasoDetalhe: String(atraso.detalhe || '').slice(0, 300) } : {}),
+  };
+  const dia = paraISO(conclusao);
+  if (paraISO(servico.dataConclusao) !== dia) {
+    campos.garantiaAte = calcularGarantiaAte(dia);
+    if (servico.retornoMeses) campos.dataRetorno = calcularDataRetorno(dia, servico.retornoMeses);
+  }
+  const operacoes = [op.atualizar(`${caminho(empresaId)}/${servico.id}`, campos)];
+  if (servico.valorDefinido === true) {
+    operacoes.push(op.atualizar(`${caminhoValores(empresaId)}/${servico.id}`, { dataConclusao: conclusao, atualizadoEm: AGORA }));
+  }
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return campos;
+}
+
+/** Visitas abertas que já passaram do previsto (administrador): as mais antigas primeiro. */
+export async function listarEsperandoConclusao({ empresaId, agora = new Date() }) {
+  const agendados = await listarAgendados({ empresaId, ate: agora });
+  return visitasEsperandoConclusao(agendados, agora);
 }
 
 /** Lê o valor gravado de um serviço (formato novo ou antigo) ou null. */

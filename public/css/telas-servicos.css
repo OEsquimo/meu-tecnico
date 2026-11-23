@@ -704,3 +704,7 @@
 }
 .visita-cartao__corpo .visita-cartao__local { padding-right: 22px; }
 .servico-cartao > .acoes-cartao { margin-top: var(--espaco-3, 12px); }
+
+/* Avisos "Você já começou?" e "Serviço esperando concluir" dentro do cartão (Pacote 27). */
+.aviso-tempo { margin-top: var(--espaco-3, 12px); }
+.aviso-tempo > .acoes-cartao { margin-top: var(--espaco-3, 12px); }
