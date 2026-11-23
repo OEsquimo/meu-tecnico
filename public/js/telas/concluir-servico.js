@@ -11,8 +11,8 @@
 // REGRAS: não dá para concluir sem aparelho. Se o serviço ainda não tem aparelho,
 // o técnico escolhe um do cliente ou cadastra um novo aqui mesmo. Se o
 // agendamento foi feito sem serviço ("Serviço a definir"), também escolhe o tipo.
-// Se o tipo de serviço gera retorno (limpeza/manutenção), aparecem as opções
-// 3/4/6/12 meses (já vem marcado o prazo padrão do tipo).
+// Se o tipo de serviço gera retorno (limpeza/manutenção), o prazo de retorno é SEMPRE o
+// padrão do tipo (configurado em Tipos de serviço); a tela não pergunta mais (Pacote 28).
 // =============================================================================
 
 import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, confirmar, avancarEntreCampos } from '../nucleo/ui.js';
@@ -155,7 +155,6 @@ export default async function montar(ctx) {
     const tipoInicial = semServico ? sessao.tipos.find((t) => t.id === tipoSalvo) : sessao.tipos.find((t) => t.id === s.tipoServicoId);
     const geraRetornoInicial = semServico ? tipoInicial?.geraRetorno === true : s.geraRetorno === true;
     const mesesDe = (t) => (PRAZOS_RETORNO_MESES.includes(t?.retornoPadraoMeses) ? t.retornoPadraoMeses : 6);
-    const mesesPadrao = mesesDe(tipoInicial);
 
     mostrar(raiz, html`
       ${cabecalho({
@@ -181,12 +180,6 @@ export default async function montar(ctx) {
     ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : 'Valor padrão deste serviço. Pode mudar.',
   }) : (veValores ? valorSoParaLer(precoDe(tipoInicial)) : '')}
         ${interruptor({ nome: 'pago', titulo: 'O cliente já pagou?', descricao: usuario.admin ? '' : 'Só marque se o cliente pagou na hora.' })}
-        <div id="bloco-retorno" ${geraRetornoInicial ? '' : html`hidden`}>
-          ${campoPilulas({
-            nome: 'retornoMeses', rotulo: 'Avisar para voltar daqui a quanto tempo?',
-            opcoes: PRAZOS_RETORNO_MESES.map((m) => ({ valor: String(m), rotulo: `${m} meses` })), valor: String(mesesPadrao),
-          })}
-        </div>
         <section class="cartao pilha pilha--pequena" data-bloco="horarios" aria-label="Horários do serviço">
           <h2 class="titulo-secao">Horários do serviço</h2>
           <p class="texto-suave texto-pequeno">${s.iniciadoEm instanceof Date ? 'O início foi registrado quando você iniciou.' : 'Sugerimos estes horários. Confira e corrija se precisar.'}${iniSug.ajustada ? ' O início foi ajustado para caber antes da conclusão.' : ''}</p>
@@ -223,18 +216,14 @@ export default async function montar(ctx) {
 
     const form = raiz.querySelector('#form-concluir');
     avancarEntreCampos(form); // Enter vai ao próximo campo
-    const blocoRetorno = raiz.querySelector('#bloco-retorno');
     const editor = editaValores ? ligarEditorDeValores(form) : null;
     let valorMexido = false; // se a pessoa já mexeu no valor, trocar o tipo não o sobrescreve
     form.addEventListener('input', (e) => { if (e.target.name === 'valor') valorMexido = true; });
 
-    // Serviço "a definir": ao escolher o tipo, mostra (ou esconde) o prazo de retorno.
+    // Serviço "a definir": ao escolher o tipo, o valor padrão dele entra (se a pessoa ainda não mexeu no valor).
     form.addEventListener('change', (e) => {
       if (e.target.name !== 'tipoServicoId') return;
       const t = tipoAtual();
-      blocoRetorno.hidden = t?.geraRetorno !== true;
-      const marcar = form.querySelector(`input[name="retornoMeses"][value="${mesesDe(t)}"]`);
-      if (marcar) marcar.checked = true;
       if (editor && !valorMexido) {
         form.elements.valor.value = precoDe(t) === null ? '' : centavosParaCampo(precoDe(t));
         form.elements.valor.dispatchEvent(new Event('input', { bubbles: true }));
@@ -261,7 +250,9 @@ export default async function montar(ctx) {
       const tipoEscolhido = semServico ? tipoAtual() : null;
       const geraRetorno = semServico ? tipoEscolhido?.geraRetorno === true : s.geraRetorno === true;
       const aparelhoId = campos.aparelhoId || s.aparelhoId || '';
-      const r = validarConclusao({ ...campos, aparelhoId }, { exigirValor: false, geraRetorno, exigirAparelho: true });
+      // O prazo de retorno é o padrão do tipo de serviço (a tela não pergunta mais).
+      const tipoDoRetorno = semServico ? tipoEscolhido : sessao.tipos.find((t) => t.id === s.tipoServicoId);
+      const r = validarConclusao({ ...campos, retornoMeses: String(mesesDe(tipoDoRetorno)), aparelhoId }, { exigirValor: false, geraRetorno, exigirAparelho: true });
       const erros = { ...r.erros };
       // Valor, extras e desconto (só quem pode alterar). O administrador precisa informar o valor.
       const v = editor ? validarValores(editor.ler(), { exigirBase: usuario.admin }) : null;

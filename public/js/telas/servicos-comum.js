@@ -114,10 +114,11 @@ function blocosPorAparelho(linhas) {
  * (#/servico/<id>) com o cliente, todos os aparelhos e serviços e todos os botões.
  * visita: { linhas, clienteNome, ... } (ver agruparAgendamentos / agruparConcluidos).
  * opcoes.mostrarData: mostra o dia junto da hora.
+ * opcoes.proximo: cartão do "Próximo serviço" (dia futuro): sem Concluir (e, como não tem `tempo`, sem Iniciar).
  * opcoes.acoes: nas listas do dia (Início e Agenda), o TÉCNICO vê "Ir até o cliente" e "Concluir" no próprio cartão.
  *   Com mais de um serviço aberto, "Concluir" abre a página do agendamento para ele escolher qual.
  */
-export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, editar = false, tempo = null } = {}) {
+export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, editar = false, tempo = null, proximo = false } = {}) {
   const linhas = visita.linhas;
   const primeira = linhas[0];
   const atrasada = linhas.find((l) => estaAtrasado(l));
@@ -163,8 +164,8 @@ export function cartaoDaVisita(visita, { mostrarData = false, acoes = false, edi
       ${unica
     ? (precisaInformarAparelhoEServico(unica)
       ? botao({ texto: unica.aparelhoId ? 'Informar o serviço' : (unica.tipoServicoId ? 'Informar o aparelho' : 'Informar aparelho e serviço'), iconeNome: 'editar', href: `#/servico/${unica.id}?informar=1`, pequeno: true })
-      : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${unica.id}`, pequeno: true }))
-    : botao({ texto: 'Concluir', iconeNome: 'check', href, pequeno: true })}
+      : (proximo ? '' : botao({ texto: 'Concluir', iconeNome: 'check', href: `#/concluir/${unica.id}`, pequeno: true })))
+    : (proximo ? '' : botao({ texto: 'Concluir', iconeNome: 'check', href, pequeno: true }))}
     </div>`;
 
   return html`<div class="cartao servico-cartao ${atrasada ? 'servico-cartao--atrasado' : ''}">${corpo}${andamento?.corpo || ''}${extra}</div>`;

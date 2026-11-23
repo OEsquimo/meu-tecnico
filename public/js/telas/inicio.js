@@ -241,6 +241,15 @@ export default async function montar(ctx) {
     const visitasAbertas = agruparAgendamentos(lista);
     const chaveAviso = visitaQuePrecisaDeResposta(visitasAbertas, usuario.uid, agora);
     const tempo = { uid: usuario.uid, agora, chaveAviso };
+    // Pacote 28: sem serviço aberto hoje, mostra o PRÓXIMO serviço dele (qualquer dia futuro), com a data em cima.
+    let proximoServico = null;
+    if (hoje.length === 0) {
+      try {
+        const futuros = await listarAgendados({ empresaId: usuario.empresaId, de: inicioDoDiaSeguinte(agora), tecnicoUid: usuario.uid, limite: 20 });
+        proximoServico = agruparAgendamentos(futuros)[0] || null;
+      } catch { /* sem o próximo desta vez: fica o aviso "Nada para hoje" */ }
+      if (!ctx.ativo()) return;
+    }
 
     mostrar(raiz, html`
       ${topo}
@@ -250,12 +259,18 @@ export default async function montar(ctx) {
             ${tituloSecao('Atrasados')}
             ${agruparAgendamentos(antigos).map((v) => cartaoDaVisita(v, { mostrarData: true, acoes: true, tempo }))}
           </section>`}
-        <section class="pilha pilha--pequena" aria-label="Serviços de hoje">
+        ${hoje.length === 0 && proximoServico
+    ? html`<section class="pilha pilha--pequena" aria-label="Próximo serviço">
+          ${tituloSecao('Próximo serviço')}
+          <p class="texto-suave" data-proximo-data>${formatarDiaExtenso(proximoServico.linhas[0].dataAgendada)}</p>
+          ${cartaoDaVisita(proximoServico, { acoes: true, proximo: true })}
+        </section>`
+    : html`<section class="pilha pilha--pequena" aria-label="Serviços de hoje">
           ${tituloSecao('Hoje')}
           ${hoje.length === 0
     ? html`<div class="cartao">${estadoVazio({ icone: 'agenda', titulo: 'Nada para hoje', texto: 'Você não tem serviços agendados para hoje. Veja a agenda para os próximos dias.', acao: botao({ texto: 'Abrir agenda', variante: 'secundario', href: '#/agenda' }) })}</div>`
     : agruparAgendamentos(hoje).map((v) => cartaoDaVisita(v, { acoes: true, tempo }))}
-        </section>
+        </section>`}
         <div class="atalhos">
           ${atalho('#/agenda', 'agenda', 'Agenda', 'Meus próximos serviços')}
           ${atalho('#/historico', 'relogio', 'Concluídos', 'O que já concluí')}

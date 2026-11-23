@@ -259,3 +259,8 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Corrigir horários (administrador):** na página do serviço concluído: dia, início, conclusão e motivo. Mudar o dia da conclusão recalcula garantia e retorno e move o serviço de período no Financeiro.
 - **Desempenho (Administrativa, só administrador):** por técnico (semana, mês, ano): concluídos, tempo médio, atrasos, retornos (serviços de retorno concluídos, isto é, com `origemRetornoId`) e deslocamento médio; por tipo de serviço com comparação com a equipe (só com 3+ serviços: "X% mais rápido / mais lento / na média"); motivos dos atrasos. Deslocamento = fim de uma visita → início da próxima no mesmo dia, descontando o almoço; o 1º do dia não tem; intervalos acima de 2 h ficam fora. Serviços sem início/conclusão confirmados ou com mais de 12 h ficam fora das médias (mas contam como concluídos). Sem GPS.
 - Campos novos em `servicos`: `iniciadoEm`, `atrasoMotivo`, `atrasoDetalhe`, `atrasoFalta`, `atrasoInformadoEm`. **Regras do Firestore mudam: publicar as regras depois do merge.**
+
+## Pacote 28 — retorno sem pergunta e "Próximo serviço"
+
+- **Concluir não pergunta mais o prazo de retorno.** O serviço grava sempre o prazo configurado no tipo de serviço (3, 4, 6 ou 12 meses; sem prazo configurado vale 6). O selo "Retorno em X meses" e o aviso de retorno seguem esse prazo.
+- **Meus serviços (técnico):** sem serviço aberto hoje, aparece "Próximo serviço": a próxima visita agendada dele, de qualquer dia futuro, com a data em cima. Sem Iniciar e sem Concluir (o Iniciar só existe no próprio dia); tocar no cartão abre o serviço. Sem nenhum serviço futuro, continua "Nada para hoje".
