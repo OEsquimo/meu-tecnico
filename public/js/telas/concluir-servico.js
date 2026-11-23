@@ -183,6 +183,7 @@ export default async function montar(ctx) {
         <section class="cartao pilha pilha--pequena" data-bloco="horarios" aria-label="Horários do serviço">
           <h2 class="titulo-secao">Horários do serviço</h2>
           <p class="texto-suave texto-pequeno">${s.iniciadoEm instanceof Date ? 'O início foi registrado quando você iniciou.' : 'Sugerimos estes horários. Confira e corrija se precisar.'}${iniSug.ajustada ? ' O início foi ajustado para caber antes da conclusão.' : ''}</p>
+          ${s.iniciadoEm instanceof Date ? '' : html`<div data-bloco="conferi">${interruptor({ nome: 'horariosConferidos', titulo: 'Conferi os horários', descricao: 'Sem conferir, o serviço fica marcado como "Horário não conferido" e fora das médias.' })}</div>`}
           ${!usuario.admin && diaSug !== hojeISO() ? campoTexto({ nome: 'dataConclusao', rotulo: 'Dia do serviço', tipo: 'date', valor: diaSug, maximo: 10 }) : ''}
           <div class="linha">
             ${campoTexto({ nome: 'horaInicio', rotulo: 'Início', tipo: 'time', valor: horaDeCampo(iniSug.data) })}
@@ -284,6 +285,10 @@ export default async function montar(ctx) {
               exigirAparelho: true,
               inicio: h.inicio,
               conclusao: h.conclusao,
+              // Pacote 29: conferido = iniciou o serviço, marcou "Conferi os horários" ou mudou algum horário sugerido.
+              horariosConferidos: s.iniciadoEm instanceof Date || campos.horariosConferidos === true
+                || campos.horaInicio !== horaDeCampo(iniSug.data) || campos.horaConclusao !== horaDeCampo(concSug)
+                || (campos.dataConclusao ? campos.dataConclusao !== diaSug : false),
               atraso: campos.atrasoMotivo ? { motivo: campos.atrasoMotivo, detalhe: campos.atrasoDetalhe || '' } : null,
             },
           });

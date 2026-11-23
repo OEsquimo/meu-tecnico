@@ -790,6 +790,7 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
     concluidoPorNome: nomeQuemConcluiu || '',
     atualizadoEm: AGORA,
     ...(iniciadoEm ? { iniciadoEm } : {}),
+    ...(typeof dados.horariosConferidos === 'boolean' ? { horariosConferidos: dados.horariosConferidos } : {}),
     ...(dados.atraso?.motivo ? { atrasoMotivo: String(dados.atraso.motivo).slice(0, 60), atrasoDetalhe: String(dados.atraso.detalhe || '').slice(0, 300) } : {}),
   };
 
@@ -865,6 +866,7 @@ export async function corrigirHorariosDoServico({ empresaId, servico, inicio, co
   if (inicio.getTime() >= conclusao.getTime()) throw new ErroApp('A conclusão não pode ser antes do início.', 'horario-invertido');
   const campos = {
     iniciadoEm: inicio, dataConclusao: conclusao, atualizadoEm: AGORA,
+    horariosConferidos: true, // o administrador conferiu e corrigiu
     ...(atraso?.motivo ? { atrasoMotivo: String(atraso.motivo).slice(0, 60), atrasoDetalhe: String(atraso.detalhe || '').slice(0, 300) } : {}),
   };
   const dia = paraISO(conclusao);

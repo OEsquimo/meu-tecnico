@@ -21,6 +21,7 @@ import { tecnicosParaAtribuir } from '../servicos/equipe.js';
 import { formatarDataBR, combinarDataHora } from '../dominio/datas.js';
 import { PAGINA_HISTORICO, LIMITE_BUSCA_HISTORICO } from '../nucleo/constantes.js';
 import { servicoTemTecnico, agruparConcluidos, chaveDoAgendamento } from '../dominio/servicos.js';
+import { contagemDeHorarios } from '../dominio/desempenho.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, cartaoDaVisita } from './servicos-comum.js';
 
 /** AAAA-MM-DD do dia seguinte (para o "até" ser inclusivo). */
@@ -106,6 +107,14 @@ export default async function montar(ctx) {
     desenharLista();
   }
 
+  /** Pacote 29: o técnico vê em quantos serviços informou os horários (só dele; o administrador usa o Desempenho). */
+  function indicadorDeHorarios() {
+    if (usuario.admin) return '';
+    const c = contagemDeHorarios(dados);
+    if (c.horariosAplicaveis === 0) return '';
+    return html`<p class="texto-suave texto-pequeno" data-horarios-informados>Horários informados nos serviços abaixo: <strong>${c.horariosInformados} de ${c.horariosAplicaveis}</strong>.${c.naoConferidos > 0 ? ' Toque em Iniciar ou marque "Conferi os horários" ao concluir.' : ''}</p>`;
+  }
+
   function desenharLista() {
     const todos = filtrados();
     const modoBusca = lido.modo === 'busca';
@@ -119,7 +128,7 @@ export default async function montar(ctx) {
         titulo: dados.length || comFiltro ? 'Nada encontrado' : 'Nenhum serviço concluído ainda',
         texto: dados.length || comFiltro ? 'Tente outro nome, serviço ou período.' : 'Quando você concluir serviços, eles aparecem aqui.',
       })
-      : html`${aparecem.map((g) => cartaoDaVisita(g, { mostrarData: true }))}`);
+      : html`${indicadorDeHorarios()}${aparecem.map((g) => cartaoDaVisita(g, { mostrarData: true }))}`);
 
     // Mais registros: no modo página, pode haver mais no banco; no modo busca, mais além dos que aparecem.
     const temMais = modoBusca ? todos.length > aparecem.length : dados.length >= lido.limite;

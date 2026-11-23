@@ -652,3 +652,19 @@ test('pacote 27: o administrador corrige início, conclusão e motivo (tipos cer
   await assertFails(updateDoc(ref, { atrasoMotivo: 'x'.repeat(61), atualizadoEm: serverTimestamp() }));
   await assertFails(updateDoc(ref, { campoInventado: 1, atualizadoEm: serverTimestamp() }));
 });
+
+// ---- Pacote 29: horário conferido ----
+test('pacote 29: o técnico conclui informando se conferiu os horários (só booleano)', async () => {
+  const db = como(TEC);
+  const base = { ...conclusao(), dataConclusao: Timestamp.fromMillis(Date.now() - 60000), iniciadoEm: Timestamp.fromMillis(Date.now() - 3600000) };
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, horariosConferidos: 'sim' }));
+  await assertFails(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, horariosConferidos: 1 }));
+  await assertSucceeds(updateDoc(doc(db, `empresas/${E}/servicos/s-tec`), { ...base, horariosConferidos: false }));
+});
+
+test('pacote 29: o administrador grava horariosConferidos (booleano) ao corrigir horários', async () => {
+  const adm = como(ADMIN);
+  const ref = doc(adm, `empresas/${E}/servicos/s-tec`);
+  await assertFails(updateDoc(ref, { horariosConferidos: 'sim', atualizadoEm: serverTimestamp() }));
+  await assertSucceeds(updateDoc(ref, { horariosConferidos: true, atualizadoEm: serverTimestamp() }));
+});

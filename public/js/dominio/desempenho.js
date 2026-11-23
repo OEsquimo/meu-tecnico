@@ -11,7 +11,7 @@ import { STATUS, tecnicosDoServico, chaveDoAgendamento, duracaoDoServico } from 
 import { paraISO, combinarDataHora } from './datas.js';
 import {
   tempoNoCliente, sequenciarLinhasDaVisita, TOLERANCIA_ESPERANDO_MIN, DESLOCAMENTO_MAXIMO_MIN, MINIMO_PARA_COMPARAR,
-  situacaoDaVisita,
+  situacaoDaVisita, horarioConferido,
 } from './tempo-servico.js';
 
 const MIN = 60000;
@@ -32,6 +32,24 @@ export function minutosDeAlmocoEntre(de, ate, almoco) {
   return b > a ? Math.round((b - a) / MIN) : 0;
 }
 
+/**
+ * Horários informados (Pacote 29): de quantos serviços concluídos o técnico informou/conferiu os horários.
+ * Só entram na conta os serviços a que isso se aplica (com horários ou marcados como não conferidos).
+ * @returns {{ horariosInformados: number, horariosAplicaveis: number, naoConferidos: number }}
+ */
+export function contagemDeHorarios(linhas) {
+  let informados = 0;
+  let aplicaveis = 0;
+  for (const l of linhas) {
+    if (l.status !== STATUS.CONCLUIDO) continue;
+    const c = horarioConferido(l);
+    if (c === null) continue;
+    aplicaveis += 1;
+    if (c) informados += 1;
+  }
+  return { horariosInformados: informados, horariosAplicaveis: aplicaveis, naoConferidos: aplicaveis - informados };
+}
+
 /** Este serviço teve atraso? (motivo informado, "ainda estou no serviço" ou passou do previsto + tolerância) */
 export function teveAtraso(servico) {
   if (servico.atrasoMotivo || servico.atrasoInformadoEm) return true;
@@ -50,7 +68,8 @@ function visitasDoTecnico(uid, concluidos) {
   }
   const visitas = [];
   for (const [chave, lista] of mapa) {
-    const linhas = sequenciarLinhasDaVisita(lista);
+    // Linhas com horário só sugerido ("não conferido") não entram no deslocamento.
+    const linhas = sequenciarLinhasDaVisita(lista.filter((l) => horarioConferido(l) !== false));
     const inicios = linhas.map((l) => l.iniciadoEm?.getTime?.()).filter(Number.isFinite);
     const fins = linhas.map((l) => l.dataConclusao?.getTime?.()).filter(Number.isFinite);
     if (inicios.length === 0 || fins.length === 0) continue;
@@ -155,6 +174,7 @@ export function desempenhoDoTecnico({ uid, nome = '', concluidos, almoco = null,
     tempoMedio: media(tempos),
     atrasos: doTecnico.filter(teveAtraso).length,
     retornos: doTecnico.filter((l) => Boolean(l.origemRetornoId)).length,
+    ...contagemDeHorarios(doTecnico),
     deslocamentoMedio: media(deslocamentosDoTecnico(uid, concluidos, almoco)),
     porTipo,
     motivos: [...motivosMapa].map(([motivo, total]) => ({ motivo, total })).sort((a, b) => b.total - a.total || a.motivo.localeCompare(b.motivo, 'pt-BR')),

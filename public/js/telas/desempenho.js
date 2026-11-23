@@ -69,10 +69,10 @@ export default async function montar(ctx) {
     : html`<div class="lista pilha pilha--pequena">
           ${equipe.tecnicos.map((t) => itemLista({
             acao: 'tecnico', dados: { uid: t.uid }, avatarNome: t.nome, titulo: t.nome,
-            sub: `${t.concluidos} concluído(s) · tempo médio ${minutos(t.tempoMedio)} · ${t.atrasos} atraso(s)`,
+            sub: `${t.concluidos} concluído(s) · tempo médio ${minutos(t.tempoMedio)} · ${t.atrasos} atraso(s)${t.horariosAplicaveis > 0 ? ` · horários informados ${t.horariosInformados} de ${t.horariosAplicaveis}` : ''}`,
           }))}
         </div>`}
-        <p class="texto-suave texto-pequeno" data-nota="medias">As médias usam só serviços com início e conclusão informados e de até 12 horas. Os outros contam como concluídos, mas ficam fora das médias.</p>
+        <p class="texto-suave texto-pequeno" data-nota="medias">As médias usam só serviços com início e conclusão informados e conferidos, de até 12 horas. Os outros contam como concluídos (e no Financeiro), mas ficam fora das médias.</p>
       </div>`;
   }
 
@@ -86,6 +86,7 @@ export default async function montar(ctx) {
           <div class="linha linha--entre"><span>Serviços concluídos</span><strong>${t.concluidos}</strong></div>
           <div class="linha linha--entre"><span>Tempo médio no cliente</span><strong>${minutos(t.tempoMedio)}</strong></div>
           <div class="linha linha--entre"><span>Atrasos</span><strong>${t.atrasos}</strong></div>
+          <div class="linha linha--entre" data-linha="horarios-informados"><span>Horários informados</span><strong>${t.horariosAplicaveis > 0 ? `${t.horariosInformados} de ${t.horariosAplicaveis} serviços` : '—'}</strong></div>
           <div class="linha linha--entre"><span>Retornos</span><strong>${t.retornos}</strong></div>
           <div class="linha linha--entre"><span>Deslocamento médio</span><strong>${minutos(t.deslocamentoMedio)}</strong></div>
         </div>
@@ -97,6 +98,7 @@ export default async function montar(ctx) {
               <div class="item-lista__sub">${p.comparacao ? selo(p.comparacao.texto, p.comparacao.tom) : 'Poucos serviços para comparar'}${p.equipeMedio !== null && p.comparacao ? ` · equipe ${minutos(p.equipeMedio)}` : ''}</div>
             </div>`)}
         </div>
+        ${t.naoConferidos > 0 ? aviso({ tom: 'amarelo', texto: `${t.naoConferidos} serviço(s) foram concluídos sem conferir os horários e ficam fora das médias. Vale lembrar o técnico de tocar em Iniciar ou conferir os horários ao concluir.` }) : ''}
         ${t.motivos.length > 0 ? html`
           <div class="cartao pilha pilha--pequena" data-resumo="motivos">
             <h2 class="titulo-secao">Motivos dos atrasos</h2>

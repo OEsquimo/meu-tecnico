@@ -264,3 +264,11 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 
 - **Concluir não pergunta mais o prazo de retorno.** O serviço grava sempre o prazo configurado no tipo de serviço (3, 4, 6 ou 12 meses; sem prazo configurado vale 6). O selo "Retorno em X meses" e o aviso de retorno seguem esse prazo.
 - **Meus serviços (técnico):** sem serviço aberto hoje, aparece "Próximo serviço": a próxima visita agendada dele, de qualquer dia futuro, com a data em cima. Sem Iniciar e sem Concluir (o Iniciar só existe no próprio dia); tocar no cartão abre o serviço. Sem nenhum serviço futuro, continua "Nada para hoje".
+
+## Pacote 29 — Horário não conferido
+- **Conferido ou não:** ao concluir, o horário vale como **conferido** se o técnico tocou em Iniciar, marcou **"Conferi os horários"** ou mudou algum horário sugerido (início, conclusão ou dia). Se concluiu aceitando os horários sugeridos sem conferir, o serviço é gravado com `horariosConferidos = false` e ganha o selo **"Horário não conferido"** (visto pelo administrador e pelo técnico). Corrigir horários (administrador) grava `horariosConferidos = true`.
+- **Serviços antigos** (sem o campo): valem como conferidos se têm início registrado; sem início, a regra não se aplica (ficam fora da contagem).
+- **Efeito:** serviço não conferido continua **concluído** e entra no **Financeiro**, mas fica fora do tempo médio, da comparação com a equipe e do deslocamento.
+- **Indicador "Horários informados: X de Y serviços":** administrador no Desempenho (lista e detalhe do técnico, com aviso quando há não conferidos); técnico em Concluídos (só os dele). A correção de horários continua só com o administrador.
+- **Limite:** o app registra o que a pessoa fez na tela (tocou Iniciar, marcou "Conferi", mudou um horário); não prova que o horário é real.
+- Campo novo `horariosConferidos` (booleano) em `servicos`: regras do Firestore (técnico na conclusão e administrador) e backup.
