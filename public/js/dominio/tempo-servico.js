@@ -194,11 +194,25 @@ export function textoDeMinutos(minutos) {
 // ---------------------------------------------------------------------------------------------
 
 /**
+ * Os horários deste serviço concluído foram informados/conferidos? (Pacote 29)
+ *   true  = o técnico iniciou o serviço, conferiu ou corrigiu os horários (ou o administrador corrigiu);
+ *   false = concluiu aceitando os horários sugeridos sem conferir ("Horário não conferido");
+ *   null  = não se aplica (serviço sem horários, anterior a esta função).
+ * Serviços concluídos antes do Pacote 29 não têm o campo: valem como conferidos se têm início registrado.
+ */
+export function horarioConferido(servico) {
+  if (servico.horariosConferidos === true) return true;
+  if (servico.horariosConferidos === false) return false;
+  return servico.iniciadoEm instanceof Date ? true : null;
+}
+
+/**
  * Tempo no cliente, em minutos, de um serviço concluído: conclusão menos início. Só vale com início informado,
  * conclusão depois do início e no máximo 12 h (senão null: fica fora das médias).
  */
 export function tempoNoCliente(servico) {
   if (servico.status !== STATUS.CONCLUIDO) return null;
+  if (horarioConferido(servico) === false) return null; // horário só sugerido: fora das médias
   const ini = servico.iniciadoEm?.getTime?.();
   const fim = servico.dataConclusao?.getTime?.();
   if (!Number.isFinite(ini) || !Number.isFinite(fim) || fim <= ini) return null;

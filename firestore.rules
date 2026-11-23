@@ -517,7 +517,7 @@ service cloud.firestore {
     }
 
     function servicoValido(d) {
-      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe', 'atrasoFalta', 'atrasoInformadoEm'])
+      return d.keys().hasOnly(['clienteId', 'clienteNome', 'clienteWhatsapp', 'local', 'localLat', 'localLng', 'enderecoId', 'aparelhoId', 'aparelhoResumo', 'tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'status', 'dataAgendada', 'tecnicoUid', 'tecnicoNome', 'descricao', 'pago', 'valorDefinido', 'dataConclusao', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'ultimoAvisoEm', 'garantiaAte', 'concluidoPorNome', 'origemRetornoId', 'criadoEm', 'atualizadoEm', 'agendamentoId', 'obsAgendamento', 'obsAparelho', 'obsServico', 'duracaoMin', 'ocupacaoMin', 'ordem', 'tecnicoUids', 'tecnicosNomes', 'ocupacaoPorTecnico', 'cobradoEm', 'pendente', 'motivoPendencia', 'reagendado', 'adicionadoPeloTecnico', 'vistoPeloAdmin', 'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe', 'atrasoFalta', 'atrasoInformadoEm', 'horariosConferidos'])
         && d.keys().hasAll(['clienteId', 'tipoServicoId', 'tipoServicoNome', 'status', 'dataAgendada'])
         && d.status in ['agendado', 'concluido', 'cancelado']
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
@@ -531,6 +531,7 @@ service cloud.firestore {
         && (!('atrasoTecnicoNome' in d) || (d.atrasoTecnicoNome is string && d.atrasoTecnicoNome.size() <= 120))
         && (!('iniciadoEm' in d) || d.iniciadoEm is timestamp)
         && (!('atrasoInformadoEm' in d) || d.atrasoInformadoEm is timestamp)
+        && (!('horariosConferidos' in d) || d.horariosConferidos is bool)
         && (!('atrasoMotivo' in d) || (d.atrasoMotivo is string && d.atrasoMotivo.size() <= 60))
         && (!('atrasoDetalhe' in d) || (d.atrasoDetalhe is string && d.atrasoDetalhe.size() <= 300))
         && (!('atrasoFalta' in d) || d.atrasoFalta in ['15', '30', '60', 'mais'])
@@ -569,7 +570,7 @@ service cloud.firestore {
     function tecnicoConcluiServico(emp, sid) {
       let d = request.resource.data;
       let mudou = d.diff(resource.data).affectedKeys();
-      let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe'];
+      let basicas = ['status', 'descricao', 'pago', 'dataConclusao', 'aparelhoId', 'aparelhoResumo', 'retornoMeses', 'dataRetorno', 'retornoSituacao', 'garantiaAte', 'concluidoPorNome', 'atualizadoEm', 'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe', 'horariosConferidos'];
       let podeValor = cadastroDoTecnico(emp).get('alterarValores', false) == true && existsAfter(/databases/$(database)/documents/empresas/$(emp)/valores/$(sid));
       let comValor = podeValor ? basicas.concat(['valorDefinido']) : basicas;
       let comTipo = comValor.concat(['tipoServicoId', 'tipoServicoNome', 'geraRetorno', 'duracaoMin']);
@@ -583,6 +584,7 @@ service cloud.firestore {
         && (!('iniciadoEm' in d) || !('dataConclusao' in d) || d.iniciadoEm <= d.dataConclusao)
         && (!('atrasoMotivo' in mudou) || (d.atrasoMotivo is string && d.atrasoMotivo.size() <= 60))
         && (!('atrasoDetalhe' in mudou) || (d.atrasoDetalhe is string && d.atrasoDetalhe.size() <= 300))
+        && (!('horariosConferidos' in mudou) || d.horariosConferidos is bool)
         && d.status == 'concluido'
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
         && (!('pago' in d) || d.pago is bool);

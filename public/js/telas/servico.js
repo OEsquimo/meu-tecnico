@@ -27,7 +27,7 @@ import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
 import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
 import { textoDoRetorno } from './agendamento-comum.js';
 import { pedirCorrecaoDeHorarios } from './tempo-comum.js';
-import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita } from '../dominio/tempo-servico.js';
+import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita, horarioConferido } from '../dominio/tempo-servico.js';
 import { carregarEstilos, contextoDoUsuario, mostrarErroComTentar, mostrarNaoEncontrado, abrirNavegacao, linkLigar, tituloSecao, oferecerAvisoDasLinhas } from './servicos-comum.js';
 
 export default async function montar(ctx) {
@@ -133,11 +133,13 @@ export default async function montar(ctx) {
           ${!ehLinhaSemServico(l) && selo(textoDoRetorno(tipoParaOSelo(l)), l.geraRetorno ? 'azul' : '')}
           ${!repetidos.situacao && selo(sit.texto, sit.tom)}
           ${l.adicionadoPeloTecnico === true && selo('Incluído pelo técnico')}
+          ${concluida && horarioConferido(l) === false && selo('Horário não conferido', 'amarelo')}
         </div>
         ${nota && html`<div class="visita-obs">${nota}</div>`}
         ${concluida && listaDeDados([
           ['Concluído em', formatarDataHoraBR(l.dataConclusao)],
           ...(l.iniciadoEm instanceof Date ? [['Início', horaDeCampo(l.iniciadoEm)]] : []),
+          ...(horarioConferido(l) === false ? [['Horários', 'Sugeridos pelo app, não conferidos (fora das médias)']] : []),
           ...(tempoNoCliente(l) !== null ? [['Tempo no cliente', textoDeMinutos(tempoNoCliente(l))]] : []),
           ...(l.atrasoMotivo ? [['Motivo do atraso', l.atrasoDetalhe ? `${l.atrasoMotivo} — ${l.atrasoDetalhe}` : l.atrasoMotivo]] : []),
           ['Por', l.concluidoPorNome],
