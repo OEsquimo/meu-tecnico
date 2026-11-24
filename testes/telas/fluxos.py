@@ -215,11 +215,13 @@ with sync_playwright() as p:
     if pag.locator("dialog", has_text="pendente").count(): pag.locator("dialog button", has_text="Decidir depois").click(); pag.wait_for_timeout(800)
     ok(pag.url.endswith("#/") or pag.url.endswith("/") or "#/servico/" in pag.url, "concluiu sem escrever 'o que foi feito' (opcional)")
     ir(pag, "/servico/" + href.split("/concluir/")[1])
+    pag.locator("summary").first.click(); pag.wait_for_timeout(300)  # Pacote 32: a composição do valor fica em "Ver detalhes"
     txt = pag.inner_text("#conteudo")
-    ok("Extra: Peça" in txt and "Desconto" in txt and "Total" in txt, "detalhe mostra extra, desconto e total")
+    ok("Extra: Peça" in txt and "Desconto" in txt and "Valor" in txt, "detalhe mostra extra, desconto e valor")
     pag.locator("a:has-text('Corrigir valor')").first.click(); pag.wait_for_timeout(800)
     ok(pag.input_value("input[name=desconto]") == "20,00" and pag.locator("input[name=extraDescricao]").count() == 1, "corrigir valor abre com os dados gravados")
     pag.fill("input[name=desconto]", "30,00"); pag.click("#form-valor [type=submit]"); pag.wait_for_timeout(900)
+    pag.locator("summary").first.click(); pag.wait_for_timeout(300)
     ok("30,00" in pag.inner_text("#conteudo"), "administrador corrige o desconto de serviço concluído")
 
     # 6d) permissões do funcionário
