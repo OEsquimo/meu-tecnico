@@ -94,5 +94,11 @@ export function lerDocumentoDeValores(doc) {
   const extras = Array.isArray(doc.extras) ? doc.extras : [];
   const desconto = Number.isInteger(doc.descontoCentavos) ? doc.descontoCentavos : 0;
   const base = Number.isInteger(doc.baseCentavos) ? doc.baseCentavos : Math.max(0, total - somaDosExtras(extras) + desconto);
-  return { valorCentavos: total, baseCentavos: base, extras, descontoCentavos: desconto };
+  const resultado = { valorCentavos: total, baseCentavos: base, extras, descontoCentavos: desconto };
+  // Pacote 31: pagamentos parciais ([{ centavos, em }]); só aparecem quando existem (formato antigo = 4 campos).
+  const pagamentos = Array.isArray(doc.pagamentos)
+    ? doc.pagamentos.filter((p) => p && Number.isInteger(p.centavos) && p.centavos > 0 && p.em instanceof Date).map((p) => ({ centavos: p.centavos, em: p.em }))
+    : [];
+  if (pagamentos.length > 0) resultado.pagamentos = pagamentos;
+  return resultado;
 }

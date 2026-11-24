@@ -19,6 +19,7 @@ export const STATUS_DA_LISTA = [
   { valor: 'cancelado', rotulo: 'Cancelados' },
   { valor: 'pendente', rotulo: 'Pendentes' },
   { valor: 'reagendado', rotulo: 'Reagendados' },
+  { valor: 'a-receber', rotulo: 'A receber' },
   { valor: 'todos', rotulo: 'Todos' },
 ];
 
@@ -30,7 +31,13 @@ export function statusValido(valor) {
 
 /** Só os Agendados ignoram o mês (mostram todos os futuros e os atrasados). */
 export function usaFiltroDeMes(status) {
-  return statusValido(status) !== 'agendado';
+  const s = statusValido(status);
+  return s !== 'agendado' && s !== 'a-receber';
+}
+
+/** "A receber" (Pacote 31) não é uma consulta de lista de serviços: tem tela própria, sem mês. */
+export function ehAReceber(status) {
+  return statusValido(status) === 'a-receber';
 }
 
 /** Primeiro dia do mês (inclusive) e do mês seguinte (exclusive). mesIndice: 0 a 11. */

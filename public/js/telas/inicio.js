@@ -19,7 +19,7 @@ import { sessao, situacaoAtual, resumoDoPlano } from '../nucleo/sessao.js';
 import { podeGerirClientes } from '../nucleo/permissoes.js';
 import { ferramentasDoUsuario } from '../nucleo/ferramentas.js';
 import { DIAS_AVISO_RETORNO_PADRAO } from '../nucleo/constantes.js';
-import { listarAgendados, listarAtrasados, contarRetornos, listarAguardandoReagendamento, listarIncluidosNaoVistos, listarReatribuidosNaoVistos, conferirAtrasosDoDia, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
+import { listarAgendados, listarAtrasados, contarRetornos, contarAReceber, listarAguardandoReagendamento, listarIncluidosNaoVistos, listarReatribuidosNaoVistos, conferirAtrasosDoDia, cancelarAgendamentoCompleto, excluirAgendamentoCompleto } from '../servicos/servicos.js';
 import { inicioDoDia, inicioDoDiaSeguinte, formatarDiaExtenso, formatarDataBR, hojeISO, diasEntre, paraISO } from '../dominio/datas.js';
 import { fimDoTeste } from '../dominio/planos.js';
 import { estaAtrasado, agruparAgendamentos, chaveDoAgendamento, nomesDosTecnicos } from '../dominio/servicos.js';
@@ -105,13 +105,14 @@ export default async function montar(ctx) {
     } catch { /* sem ajuste desta vez */ }
 
     // Retornos e atrasados não podem derrubar a tela inteira: se falharem, só somem.
-    const [doDia, atrasados, retornos, aguardando, naoVistos, trocas] = await Promise.all([
+    const [doDia, atrasados, retornos, aguardando, naoVistos, trocas, visitasAReceber] = await Promise.all([
       listarAgendados({ empresaId: usuario.empresaId, de: hoje, ate: inicioDoDiaSeguinte(agora) }),
       listarAtrasados({ empresaId: usuario.empresaId, agora }).catch(() => []),
       contarRetornos({ empresaId: usuario.empresaId, hojeISO: hojeISO(agora), diasAviso }).catch(() => 0),
       listarAguardandoReagendamento({ empresaId: usuario.empresaId }).catch(() => []),
       listarIncluidosNaoVistos({ empresaId: usuario.empresaId }).catch(() => []),
       listarReatribuidosNaoVistos({ empresaId: usuario.empresaId }).catch(() => []),
+      contarAReceber({ empresaId: usuario.empresaId }).catch(() => 0),
     ]);
     incluidos = naoVistos;
     reatribuidos = trocas;
@@ -146,6 +147,7 @@ export default async function montar(ctx) {
           ${atalho('#/retornos', 'sino', 'Retornos', 'Quem já deve voltar', retornos)}
           ${atalho('#/historico', 'relogio', 'Concluídos', 'Serviços concluídos')}
           ${atalho('#/financeiro', 'grafico', 'Financeiro', 'Quanto você ganhou')}
+          ${atalho('#/servicos?status=a-receber', 'dinheiro', 'A receber', 'Quem ainda deve', visitasAReceber)}
           ${atalho('#/administrativa', 'ajustes', 'Administrativa', 'Equipe, plano e mais')}
           ${ferramentasDoUsuario(sessao).length > 0 ? atalho('#/ferramentas', 'ferramenta', 'Ferramentas', 'Horários ao cliente e mais') : ''}
         </div>

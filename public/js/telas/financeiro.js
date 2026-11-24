@@ -14,9 +14,10 @@ import { html, mostrar, aoClicar } from '../nucleo/ui.js';
 import { cabecalho, botao, abas, estadoVazio, esqueletos, aviso, itemLista } from '../nucleo/componentes.js';
 import { resumoDoPlano } from '../nucleo/sessao.js';
 import { carregarFinanceiro } from '../servicos/valores.js';
-import { listarSemValor, listarEsperandoConclusao } from '../servicos/servicos.js';
+import { listarSemValor, listarEsperandoConclusao, listarAReceber } from '../servicos/servicos.js';
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarDataBR } from '../dominio/datas.js';
+import { totaisAReceber } from '../dominio/pagamentos.js';
 import { mostrarFalha } from './_auxiliar-admin.js';
 
 const ABAS = [
@@ -31,19 +32,22 @@ export default async function montar(ctx) {
   const topo = cabecalho({ titulo: 'Financeiro', voltarPara: '#/' });
   let periodo = 'hoje';
   let semValor = [];
+  let totalGeral = null; // Pacote 31: tudo o que falta receber, de qualquer época (null = não deu para ler)
   let esperando = 0; // visitas que passaram do horário e ainda não foram concluídas (não entram nos totais)
 
   async function carregar() {
     mostrar(raiz, html`${topo}${esqueletos(3)}`);
     try {
-      const [dados, pendentes, aguardando] = await Promise.all([
+      const [dados, pendentes, aguardando, geral] = await Promise.all([
         carregarFinanceiro(empresaId, periodo),
         listarSemValor(empresaId).catch(() => []),
         listarEsperandoConclusao({ empresaId }).catch(() => []),
+        listarAReceber({ empresaId }).then((r) => totaisAReceber(r.cartoes).dividaCentavos).catch(() => null),
       ]);
       if (!ctx.ativo()) return;
       semValor = pendentes;
       esperando = aguardando.length;
+      totalGeral = geral;
       desenhar(dados);
     } catch (erro) {
       if (ctx.ativo()) mostrarFalha(raiz, erro, carregar);
@@ -65,6 +69,8 @@ export default async function montar(ctx) {
           <div class="financeiro-numero"><span class="financeiro-numero__rotulo">A receber</span><span class="numero-medio valor-a-receber">${formatarReais(r.aReceberCentavos)}</span></div>
           <div class="financeiro-numero"><span class="financeiro-numero__rotulo">Serviços</span><span class="numero-medio">${r.quantidade}</span></div>
         </div>
+
+        ${totalGeral !== null && html`<a class="aviso-link" href="#/servicos?status=a-receber" data-total-geral><div class="cartao">Total geral a receber: <strong>${formatarReais(totalGeral)}</strong> ›</div></a>`}
 
         ${!completo ? aviso({ titulo: 'Financeiro completo', texto: html`Gráficos, totais por tipo e por técnico e os outros períodos estão nos planos pagos. ${botao({ texto: 'Ver planos', href: '#/plano', variante: 'secundario', pequeno: true })}` }) : ''}
 
