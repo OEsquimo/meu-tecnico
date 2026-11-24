@@ -146,6 +146,7 @@ with sync_playwright() as p:
     a.fill("dialog[open] [data-inicio]", "10:00"); a.fill("dialog[open] [data-conclusao]", "11:10")
     a.locator("dialog[open] label.chip", has_text="Trânsito").click()
     a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
+    a.locator("summary").first.click(); a.wait_for_timeout(300)  # Pacote 32: horários ficam em "Ver detalhes"
     corpo = texto(a)
     ok("10:00" in corpo and "1h 10" in corpo, "o serviço mostra início e tempo no cliente (1h 10)")
     ok("Trânsito" in corpo, "e o motivo do atraso")

@@ -70,8 +70,9 @@ with sync_playwright() as p:
     # Abrir serviço: mostra pagamento e permite apagar
     a.locator("[data-a-receber]").nth(0).locator("text=Abrir serviço").click(); a.wait_for_selector("[data-bloco=pagamentos]")
     ok("Falta pagar" in texto(a), "detalhe mostra 'Falta pagar'")
-    a.locator('[data-acao="apagar-pagamento"]').first.click(); a.wait_for_selector("dialog[open]")
-    a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1200)
+    a.locator('[data-acao="pagamento"]').first.click(); a.wait_for_selector("dialog[open]")
+    a.click("dialog[open] [data-escolha=apagar]"); a.wait_for_selector("dialog[open] [data-resposta=sim]")
+    a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
     ok("Falta pagar" in texto(a) and "R$ 220,00" in texto(a).replace("\xa0", " "), "apagar pagamento devolve o saldo todo")
 
     # Financeiro: total geral

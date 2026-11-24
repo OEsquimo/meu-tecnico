@@ -53,7 +53,7 @@ with sync_playwright() as p:
 
     # ---------------- Menu suspenso: todas as opções, Agendados por padrão ----------------
     ops = pag.locator("select[name=status] option").all_inner_texts()
-    ok(ops == ["Agendados", "Concluídos", "Cancelados", "Pendentes", "Reagendados", "Todos"], f"opções do menu suspenso: {ops}")
+    ok(ops == ["Agendados", "Concluídos", "Cancelados", "Pendentes", "Reagendados", "A receber", "Todos"], f"opções do menu suspenso: {ops}")
     ok(pag.locator("select[name=status]").input_value() == "agendado", "abre em Agendados")
     t = pag.inner_text("#conteudo")
     ok("A partir de hoje" in t, "Agendados mostram 'A partir de hoje' (sem mês)")

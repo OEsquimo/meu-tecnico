@@ -286,3 +286,10 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Pagamento parcial** (só administrador): valor + dia (padrão hoje; não pode ser futuro), sem forma de pagamento. Registrado na visita ("Recebi um valor": o app abate dos serviços na ordem e mostra a divisão antes de confirmar) ou por serviço. Fica em `valores/{servicoId}.pagamentos` (até 30) e `ultimoPagamentoEm`; `servicos.pago` = quitado.
 - Regras: (1) o "recebido" do Financeiro conta no dia de cada pagamento; (2) serviço antigo pago = um pagamento do valor todo na data de conclusão; (3) técnico "cliente pagou? sim" = pagamento total na conclusão; (4) administrador corrige ou apaga pagamento (com confirmação; o saldo recalcula); (5) pagamento maior que o saldo é bloqueado; (6) a cobrança leva só o saldo; (7) o valor do serviço não pode ficar abaixo do já pago.
 - As regras do Firestore conferem só o formato (lista até 30, data); a soma é conferida pelo app. Depois de aprovar o pacote, rode `regras`.
+
+## Pacote 32 — Serviço concluído mais enxuto (administrador)
+
+- Cada serviço concluído mostra um resumo (concluído em, o que foi feito, valor, já pago / falta pagar, garantia, retorno) e "Ver detalhes" recolhido (início, horários, tempo no cliente, atraso, quem concluiu, composição do valor, cobrança). O técnico vê a tela de antes.
+- Pagamentos são linhas tocáveis: tocar abre "Corrigir valor ou dia" / "Apagar pagamento". Os botões do serviço: Corrigir descrição (antigo Editar), Corrigir horários, Corrigir valor (ou Informar valor) e Excluir (confirmação dupla).
+- A visita tem um bloco "Falta receber" com "Registrar pagamento" (um serviço) ou "Recebi um valor" (vários) e "Cobrar cliente" (só o saldo). Some quando tudo está pago. Saíram: Marcar como pago, Marcar como a receber e "Cobrar no WhatsApp" por serviço, "Cliente pagou?" (admin) e "Ir até o cliente" em visita concluída.
+- Pagar, corrigir ou apagar um pagamento atualiza só o serviço alterado (sem recarregar a visita). As regras do Firestore não mudam.

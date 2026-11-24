@@ -118,6 +118,7 @@ with sync_playwright() as p:
     a.click("[data-acao=corrigir-horarios]"); a.wait_for_selector("dialog[open]")
     a.fill("dialog[open] [data-inicio]", "10:00"); a.fill("dialog[open] [data-conclusao]", "11:00")
     a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
+    a.locator("summary").first.click(); a.wait_for_timeout(300)
     ok("Horário não conferido" not in texto(a) and "Tempo no cliente" in texto(a), "administrador corrige: serviço conferido, com tempo no cliente")
     ir(a, "/desempenho")
     a.locator("[data-acao=aba][data-aba=ano]").click() if a.locator("[data-acao=aba][data-aba=ano]").count() else None

@@ -708,3 +708,13 @@
 /* Avisos "Você já começou?" e "Serviço esperando concluir" dentro do cartão (Pacote 27). */
 .aviso-tempo { margin-top: var(--espaco-3, 12px); }
 .aviso-tempo > .acoes-cartao { margin-top: var(--espaco-3, 12px); }
+
+/* Pacote 32: serviço concluído (administrador) — pagamentos tocáveis e "Ver detalhes" */
+.pagamentos-lista { display: grid; gap: var(--espaco-2, 8px); margin: 8px 0; }
+.pagamento-linha {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--cor-borda, #d5e0e8); border-radius: 12px;
+  background: var(--cor-fundo-suave, #f3f8fb); color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.detalhes-servico { margin: 6px 0; }
+.detalhes-servico > summary { cursor: pointer; font-weight: 600; color: var(--cor-primaria, #0b6e99); padding: 6px 0; }

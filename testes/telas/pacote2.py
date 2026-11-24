@@ -50,8 +50,9 @@ with sync_playwright() as p:
         abertos = pag.evaluate("window.__abertos")
         ok(len(abertos) == 1 and "wa.me" in abertos[0], "abre o WhatsApp com a mensagem")
         ok("pix%40marcosfrio.com" in abertos[0] or "Chave%20Pix" in abertos[0], "a mensagem leva o Pix")
+        pag.locator("summary").first.click(); pag.wait_for_timeout(300)
         ok("Cobrado em" in texto(), "registra 'Cobrado em'")
-        ok("Marcar como pago" in texto(), "continua a receber (cobrar não marca como pago)")
+        ok("Falta pagar" in texto() or "Registrar pagamento" in texto(), "continua a receber (cobrar não marca como pago)")
     # concluído e pago nunca tem botão de cobrar
     ir("/historico")
     for i in range(pag.locator("#resultado a[href^='#/servico/']").count()):
