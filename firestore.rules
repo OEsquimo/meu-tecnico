@@ -475,7 +475,8 @@ service cloud.firestore {
                 && get(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data.status == 'agendado'
                 && ehDoServico(get(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data)
                 && getAfter(/databases/$(database)/documents/empresas/$(emp)/servicos/$(sid)).data.status == 'concluido'))
-          && valoresValidos(request.resource.data);
+          && valoresValidos(request.resource.data)
+          && (ehAdmin(emp) || (!('pagamentos' in request.resource.data) && !('ultimoPagamentoEm' in request.resource.data)));
         allow update: if ehAdmin(emp) && valoresValidos(request.resource.data);
         allow delete: if ehAdmin(emp);
       }
@@ -555,12 +556,16 @@ service cloud.firestore {
     // Valor do serviço (coleção valores): confere o formato. O total (valorCentavos) não dá para
     // conferir aqui (as regras não somam listas); o app calcula e o administrador pode corrigir.
     function valoresValidos(d) {
-      return d.keys().hasOnly(['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'])
+      return d.keys().hasOnly(['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm', 'pagamentos', 'ultimoPagamentoEm'])
         && d.valorCentavos is int && d.valorCentavos >= 0 && d.valorCentavos <= 100000000
         && d.tipoNome is string
         && (!('baseCentavos' in d) || (d.baseCentavos is int && d.baseCentavos >= 0 && d.baseCentavos <= 100000000))
         && (!('descontoCentavos' in d) || (d.descontoCentavos is int && d.descontoCentavos >= 0 && d.descontoCentavos <= 100000000))
-        && (!('extras' in d) || (d.extras is list && d.extras.size() <= 20));
+        && (!('extras' in d) || (d.extras is list && d.extras.size() <= 20))
+        // Pagamento parcial (Pacote 31): lista de até 30 pagamentos; só o administrador mexe (o técnico cria o valor
+        // ao concluir, sem pagamentos). O app confere que a soma não passa do valor (as regras não somam listas).
+        && (!('pagamentos' in d) || (d.pagamentos is list && d.pagamentos.size() <= 30))
+        && (!('ultimoPagamentoEm' in d) || d.ultimoPagamentoEm == null || d.ultimoPagamentoEm is timestamp);
     }
 
     // O técnico só pode concluir/preencher um serviço SEU (qualquer um dos técnicos do serviço)

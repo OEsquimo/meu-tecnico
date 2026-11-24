@@ -29,6 +29,7 @@ import { combinarDataHora, paraISO, inicioDoDia } from '../dominio/datas.js';
 import { montarConsultaDaLista } from '../dominio/lista-servicos.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { documentoDeValores, lerDocumentoDeValores } from '../dominio/valores.js';
+import { comNovoPagamento, comPagamentoCorrigido, comPagamentoApagado, comNovoValor, distribuirRecebimento, situacaoDePagamento, cartoesAReceber, contarVisitasAReceber } from '../dominio/pagamentos.js';
 
 const caminho = (empresaId) => `empresas/${empresaId}/servicos`;
 const caminhoValores = (empresaId) => `empresas/${empresaId}/valores`;
@@ -899,15 +900,138 @@ export async function buscarValores(empresaId, servicoId) {
  * `valores`: número em centavos (antigo) ou { baseCentavos, extras, descontoCentavos }.
  */
 export async function definirValor(empresaId, servico, valores) {
+  const documento = documentoDeValores(valores);
+  // Pacote 31: o valor não pode ficar abaixo do que já foi pago; os pagamentos são preservados.
+  const atual = await buscarValoresCompletos(empresaId, servico.id);
+  const efeito = comNovoValor(servico, atual, documento.valorCentavos);
+  if (efeito.erro) throw new ErroApp(efeito.erro);
+  const temPagamentos = efeito.pagamentos.length > 0;
   await gravar([
     op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
-      ...documentoDeValores(valores),
+      ...documento,
+      ...(temPagamentos ? { pagamentos: efeito.pagamentos, ultimoPagamentoEm: efeito.ultimoPagamentoEm } : {}),
       tipoNome: servico.tipoServicoNome,
       dataConclusao: servico.dataConclusao,
       atualizadoEm: AGORA,
     }),
-    op.atualizar(`${caminho(empresaId)}/${servico.id}`, { valorDefinido: true, atualizadoEm: AGORA }),
+    op.atualizar(`${caminho(empresaId)}/${servico.id}`, { valorDefinido: true, pago: efeito.pago, atualizadoEm: AGORA }),
   ]);
+}
+
+/** Documento de valores com a lista de pagamentos (ou null). */
+export async function buscarValoresCompletos(empresaId, servicoId) {
+  return lerDocumentoDeValores(await ler(`${caminhoValores(empresaId)}/${servicoId}`));
+}
+
+/** Grava o resultado de uma mudança de pagamentos (valor + serviço.pago no mesmo lote). */
+async function gravarPagamentos(empresaId, servico, valor, efeito) {
+  await gravar([
+    op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
+      valorCentavos: valor.valorCentavos, baseCentavos: valor.baseCentavos, extras: valor.extras, descontoCentavos: valor.descontoCentavos,
+      ...(efeito.pagamentos.length > 0 ? { pagamentos: efeito.pagamentos } : {}),
+      ultimoPagamentoEm: efeito.ultimoPagamentoEm,
+      tipoNome: servico.tipoServicoNome,
+      dataConclusao: servico.dataConclusao,
+      atualizadoEm: AGORA,
+    }),
+    op.atualizar(`${caminho(empresaId)}/${servico.id}`, { pago: efeito.pago, atualizadoEm: AGORA }),
+  ]);
+}
+
+async function valorParaPagamento(empresaId, servico) {
+  const valor = await buscarValoresCompletos(empresaId, servico.id);
+  if (!valor || !(valor.valorCentavos > 0)) throw new ErroApp('Informe o valor do serviço antes de registrar o pagamento.');
+  return valor;
+}
+
+/** Administrador: "Marcar como a receber" — apaga todos os pagamentos do serviço (o saldo volta a ser o valor todo). */
+export async function limparPagamentos(empresaId, servico) {
+  const valor = await buscarValoresCompletos(empresaId, servico.id);
+  if (!valor) { await marcarPago(empresaId, servico.id, false); return; }
+  await gravarPagamentos(empresaId, servico, valor, { pagamentos: [], pago: false, ultimoPagamentoEm: null });
+}
+
+/** Administrador: registra um pagamento (valor + dia) de um serviço. */
+export async function registrarPagamento(empresaId, servico, { centavos, em }) {
+  const valor = await valorParaPagamento(empresaId, servico);
+  const efeito = comNovoPagamento(servico, valor, { centavos, em });
+  if (efeito.erro) throw new ErroApp(efeito.erro);
+  await gravarPagamentos(empresaId, servico, valor, efeito);
+}
+
+/** Administrador: corrige valor e dia de um pagamento (índice da lista ordenada). */
+export async function corrigirPagamento(empresaId, servico, indice, { centavos, em }) {
+  const valor = await valorParaPagamento(empresaId, servico);
+  const efeito = comPagamentoCorrigido(servico, valor, indice, { centavos, em });
+  if (efeito.erro) throw new ErroApp(efeito.erro);
+  await gravarPagamentos(empresaId, servico, valor, efeito);
+}
+
+/** Administrador: apaga um pagamento; o saldo volta. */
+export async function apagarPagamento(empresaId, servico, indice) {
+  const valor = await valorParaPagamento(empresaId, servico);
+  const efeito = comPagamentoApagado(servico, valor, indice);
+  if (efeito.erro) throw new ErroApp(efeito.erro);
+  await gravarPagamentos(empresaId, servico, valor, efeito);
+}
+
+/**
+ * Administrador: "Recebi R$ X" da VISITA inteira. O app abate na ordem dos serviços e grava tudo num lote só.
+ * `linhas`: serviços concluídos da visita (na ordem mostrada). Devolve a divisão feita.
+ */
+export async function registrarRecebimentoDaVisita(empresaId, linhas, { centavos, em }) {
+  const valores = {};
+  for (const l of linhas) valores[l.id] = await buscarValoresCompletos(empresaId, l.id);
+  const itens = linhas.map((l) => ({ id: l.id, saldoCentavos: situacaoDePagamento(l, valores[l.id]).saldoCentavos }));
+  const d = distribuirRecebimento(itens, centavos);
+  if (!d.ok) throw new ErroApp(d.erro);
+  const operacoes = [];
+  for (const parte of d.divisao) {
+    const linha = linhas.find((l) => l.id === parte.id);
+    const valor = valores[parte.id];
+    const efeito = comNovoPagamento(linha, valor, { centavos: parte.centavos, em });
+    if (efeito.erro) throw new ErroApp(efeito.erro);
+    operacoes.push(
+      op.definir(`${caminhoValores(empresaId)}/${linha.id}`, {
+        valorCentavos: valor.valorCentavos, baseCentavos: valor.baseCentavos, extras: valor.extras, descontoCentavos: valor.descontoCentavos,
+        pagamentos: efeito.pagamentos, ultimoPagamentoEm: efeito.ultimoPagamentoEm,
+        tipoNome: linha.tipoServicoNome, dataConclusao: linha.dataConclusao, atualizadoEm: AGORA,
+      }),
+      op.atualizar(`${caminho(empresaId)}/${linha.id}`, { pago: efeito.pago, atualizadoEm: AGORA }),
+    );
+  }
+  await gravar(operacoes);
+  return d.divisao;
+}
+
+export const LIMITE_A_RECEBER = 500;
+
+/**
+ * Lista "A receber" (administrador): cartões por visita + totais. Lê os serviços concluídos não pagos
+ * (no máximo LIMITE_A_RECEBER) e o valor de cada um.
+ * @returns {Promise<{ cartoes, truncado: boolean }>}
+ */
+export async function listarAReceber({ empresaId, agora = new Date() }) {
+  const linhas = await listar(caminho(empresaId), {
+    onde: [['status', '==', 'concluido'], ['pago', '==', false]],
+    limite: LIMITE_A_RECEBER,
+  });
+  const valores = {};
+  for (let i = 0; i < linhas.length; i += 25) {
+    const lote = linhas.slice(i, i + 25);
+    const lidos = await Promise.all(lote.map((l) => buscarValoresCompletos(empresaId, l.id).catch(() => null)));
+    lote.forEach((l, k) => { valores[l.id] = lidos[k]; });
+  }
+  return { cartoes: cartoesAReceber(linhas, valores, agora), truncado: linhas.length >= LIMITE_A_RECEBER };
+}
+
+/** Bolinha do Início: quantas visitas têm serviço concluído sem quitar (conta só pelos serviços, sem ler valores). */
+export async function contarAReceber({ empresaId }) {
+  const linhas = await listar(caminho(empresaId), {
+    onde: [['status', '==', 'concluido'], ['pago', '==', false]],
+    limite: LIMITE_A_RECEBER,
+  });
+  return contarVisitasAReceber(linhas);
 }
 
 /** Marca como pago / a receber. */

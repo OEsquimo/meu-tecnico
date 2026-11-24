@@ -19,13 +19,14 @@ const col = (id) => `empresas/${E}/servicos/${id}`;
 test('a página tem 30 por vez e abre em Agendados', () => {
   assert.equal(PAGINA_SERVICOS, 30);
   assert.equal(STATUS_PADRAO_DA_LISTA, 'agendado');
-  assert.deepEqual(STATUS_DA_LISTA.map((s) => s.rotulo), ['Agendados', 'Concluídos', 'Cancelados', 'Pendentes', 'Reagendados', 'Todos']);
+  assert.deepEqual(STATUS_DA_LISTA.map((s) => s.rotulo), ['Agendados', 'Concluídos', 'Cancelados', 'Pendentes', 'Reagendados', 'A receber', 'Todos']);
   assert.equal(statusValido('lixo'), 'agendado');
 });
 
 test('só Agendados ignoram o mês', () => {
   assert.equal(usaFiltroDeMes('agendado'), false);
   for (const s of ['concluido', 'cancelado', 'pendente', 'reagendado', 'todos']) assert.equal(usaFiltroDeMes(s), true);
+  assert.equal(usaFiltroDeMes('a-receber'), false); // Pacote 31: A receber não tem mês
 });
 
 test('mês: período e navegação virando o ano', () => {

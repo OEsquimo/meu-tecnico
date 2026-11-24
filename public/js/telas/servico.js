@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico, registrarPagamento, corrigirPagamento, apagarPagamento, limparPagamentos, registrarRecebimentoDaVisita,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -24,7 +24,9 @@ import { formatarDataHoraBR, formatarDataBR, paraISO, hojeISO } from '../dominio
 import { formatarReais } from '../dominio/dinheiro.js';
 import { formatarTelefone } from '../dominio/telefone.js';
 import { linkWhatsappDoCliente } from '../dominio/whatsapp.js';
-import { linhasCobraveis, montarCobranca, modeloDaEmpresa } from '../dominio/cobranca.js';
+import { linhasCobraveis, montarCobranca, modeloDaEmpresa, saldoDaLinha } from '../dominio/cobranca.js';
+import { situacaoDePagamento, distribuirRecebimento } from '../dominio/pagamentos.js';
+import { pedirPagamento, textoDaDivisao } from './pagamento-comum.js';
 import { textoDoRetorno } from './agendamento-comum.js';
 import { pedirCorrecaoDeHorarios } from './tempo-comum.js';
 import { horaDeCampo, tempoNoCliente, textoDeMinutos, inicioDaVisita, horarioConferido, seloDaLinha } from '../dominio/tempo-servico.js';
@@ -145,10 +147,11 @@ export default async function montar(ctx) {
           ['Por', l.concluidoPorNome],
           ['O que foi feito', l.descricao],
           ['Cliente pagou?', l.pago ? 'Sim' : 'Não'],
-          ...linhasDeValor(valor),
+          ...linhasDeValor(valor, l),
           ['Garantia até', l.garantiaAte ? formatarDataBR(l.garantiaAte) : ''],
           ['Próximo retorno', l.dataRetorno ? formatarDataBR(l.dataRetorno) : ''],
         ])}
+        ${concluida && usuario.admin && valor && blocoDePagamentos(l, valor)}
         ${concluida && usuario.admin && html`
           <div class="acoes-cartao">
             ${botao({ texto: l.pago ? 'Marcar como a receber' : 'Marcar como pago', variante: 'secundario', acao: 'alternar-pago', dados: { id: l.id }, pequeno: true })}
@@ -170,14 +173,34 @@ export default async function montar(ctx) {
       </div>`;
   }
 
+  /** Pacote 31 (admin): pagamentos já feitos deste serviço e o botão "Registrar pagamento" enquanto houver saldo. */
+  function blocoDePagamentos(l, valor) {
+    const p = situacaoDePagamento(l, valor);
+    if (p.pagamentos.length === 0 && p.saldoCentavos === 0) return '';
+    return html`
+      <div class="visita-obs" data-bloco="pagamentos">
+        ${p.pagamentos.map((pg, i) => html`
+          <div class="item-lista__sub" data-pagamento="${i}">${pg.em ? `${formatarDataBR(pg.em)} · ` : ''}${formatarReais(pg.centavos)}${pg.implicito ? ' (ao concluir)' : ''}
+            ${botao({ texto: 'Corrigir', variante: 'secundario', acao: 'corrigir-pagamento', dados: { id: l.id, indice: String(i) }, pequeno: true })}
+            ${botao({ texto: 'Apagar', variante: 'perigo', acao: 'apagar-pagamento', dados: { id: l.id, indice: String(i) }, pequeno: true })}
+          </div>`)}
+        ${p.saldoCentavos > 0 && botao({ texto: p.pagamentos.length > 0 ? 'Registrar mais um pagamento' : 'Registrar pagamento', variante: 'secundario', acao: 'registrar-pagamento', dados: { id: l.id }, pequeno: true })}
+      </div>`;
+  }
+
   /** Linhas "Valor / Extras / Desconto / Total" para a lista de dados (vazio se não pode ver). */
-  function linhasDeValor(valor) {
+  function linhasDeValor(valor, linha) {
     if (!podeVerValores(sessao)) return [];
     if (!valor) return [['Valor', usuario.admin ? 'Ainda não informado' : 'Ainda não confirmado']];
     const itens = [['Valor do serviço', formatarReais(valor.baseCentavos)]];
     for (const e of valor.extras) itens.push([`Extra: ${e.descricao}`, formatarReais(e.valorCentavos)]);
     if (valor.descontoCentavos > 0) itens.push(['Desconto', `- ${formatarReais(valor.descontoCentavos)}`]);
     itens.push(['Total', formatarReais(valor.valorCentavos)]);
+    if (usuario.admin && linha) {
+      const p = situacaoDePagamento(linha, valor);
+      if (p.pagoCentavos > 0) itens.push(['Já pago', formatarReais(p.pagoCentavos)]);
+      if (p.saldoCentavos > 0) itens.push(['Falta pagar', formatarReais(p.saldoCentavos)]);
+    }
     return itens;
   }
 
@@ -233,6 +256,7 @@ export default async function montar(ctx) {
         </div>
 
         ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita. Toque em Editar e escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado. Toque em Editar e escolha uma nova data para reagendar, ou exclua se não for mais acontecer.' })}
+        ${usuario.admin && cobraveis.length > 1 && botao({ texto: 'Recebi um valor desta visita', variante: 'secundario', acao: 'recebi-visita', bloco: true })}
         ${cobraveis.length > 1 && botao({ texto: 'Cobrar tudo desta visita', variante: 'whatsapp', iconeNome: 'whatsapp', acao: 'cobrar', dados: { ids: cobraveis.map((c) => c.id).join(',') }, bloco: true })}
         ${tituloSecao('Aparelhos e serviços')}
         ${grupos.map(([aparelhoId, lista]) => (!aparelhoId && lista.every((l) => l.status === STATUS.AGENDADO && ehLinhaSemServico(l)) ? html`
@@ -273,11 +297,62 @@ export default async function montar(ctx) {
       'alternar-pago': (el) => comCarregando(el, async () => {
         try {
           const linha = linhas.find((l) => l.id === el.dataset.id);
-          await marcarPago(usuario.empresaId, linha.id, !linha.pago);
+          if (linha.pago) {
+            if (!await confirmar({ titulo: 'Marcar como a receber?', mensagem: 'Os pagamentos registrados deste serviço serão apagados e o valor todo volta a ficar a receber.', confirmar: 'Marcar como a receber', cancelar: 'Voltar' })) return;
+            await limparPagamentos(usuario.empresaId, linha);
+          } else if (valores[linha.id]?.valorCentavos > 0) {
+            await registrarPagamento(usuario.empresaId, linha, { centavos: saldoDaLinha(linha, valores[linha.id]), em: new Date() });
+          } else {
+            await marcarPago(usuario.empresaId, linha.id, true);
+          }
           toast('Atualizado.', 'sucesso');
           ctx.recarregar();
         } catch (e) { mostrarErro(e); }
       }),
+      'registrar-pagamento': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        const saldo = saldoDaLinha(linha, valores[linha.id]);
+        const r = await pedirPagamento({ titulo: 'Registrar pagamento', saldoMaximoCentavos: saldo });
+        if (!r) return;
+        await comCarregando(el, async () => {
+          try { await registrarPagamento(usuario.empresaId, linha, r); toast('Pagamento registrado.', 'sucesso'); ctx.recarregar(); } catch (e) { mostrarErro(e); }
+        });
+      },
+      'corrigir-pagamento': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        const indice = Number(el.dataset.indice);
+        const sit = situacaoDePagamento(linha, valores[linha.id]);
+        const atual = sit.pagamentos[indice];
+        if (!atual) return;
+        const r = await pedirPagamento({ titulo: 'Corrigir pagamento', saldoMaximoCentavos: sit.saldoCentavos + atual.centavos, valorInicial: atual.centavos, diaInicial: atual.em, confirmarTexto: 'Salvar correção' });
+        if (!r) return;
+        await comCarregando(el, async () => {
+          try { await corrigirPagamento(usuario.empresaId, linha, indice, r); toast('Pagamento corrigido.', 'sucesso'); ctx.recarregar(); } catch (e) { mostrarErro(e); }
+        });
+      },
+      'apagar-pagamento': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        const indice = Number(el.dataset.indice);
+        const atual = situacaoDePagamento(linha, valores[linha.id]).pagamentos[indice];
+        if (!atual) return;
+        if (!await confirmar({ titulo: 'Apagar este pagamento?', mensagem: `${atual.em ? `${formatarDataBR(atual.em)} · ` : ''}${formatarReais(atual.centavos)}. O saldo deste serviço volta a aumentar.`, confirmar: 'Apagar pagamento', cancelar: 'Voltar', perigo: true })) return;
+        await comCarregando(el, async () => {
+          try { await apagarPagamento(usuario.empresaId, linha, indice); toast('Pagamento apagado.', 'sucesso'); ctx.recarregar(); } catch (e) { mostrarErro(e); }
+        });
+      },
+      'recebi-visita': async (el) => {
+        const itens = cobraveis.map((l) => ({ id: l.id, nome: l.tipoServicoNome, saldoCentavos: saldoDaLinha(l, valores[l.id]) }));
+        const total = itens.reduce((t, i) => t + i.saldoCentavos, 0);
+        const r = await pedirPagamento({
+          titulo: 'Recebi um valor desta visita', saldoMaximoCentavos: total,
+          explicacao: 'O app abate dos serviços na ordem em que aparecem.',
+          previsao: (c) => textoDaDivisao(distribuirRecebimento(itens, c).divisao, itens),
+        });
+        if (!r) return;
+        await comCarregando(el, async () => {
+          try { await registrarRecebimentoDaVisita(usuario.empresaId, cobraveis, r); toast('Pagamento registrado.', 'sucesso'); ctx.recarregar(); } catch (e) { mostrarErro(e); }
+        });
+      },
       'editar-adicionado': (el) => comCarregando(el, async () => {
         try {
           const linha = linhas.find((l) => l.id === el.dataset.id);
@@ -358,7 +433,7 @@ export default async function montar(ctx) {
         const e = sessao.empresa || {};
         const texto = montarCobranca(modeloDaEmpresa(e), {
           nome: String(s.clienteNome || '').split(' ')[0], empresa: e.nome, pix: e.chavePix,
-          itens: itens.map((l) => ({ servico: l.tipoServicoNome, aparelho: l.aparelhoResumo, data: l.dataConclusao, centavos: valores[l.id].valorCentavos })),
+          itens: itens.map((l) => ({ servico: l.tipoServicoNome, aparelho: l.aparelhoResumo, data: l.dataConclusao, centavos: saldoDaLinha(l, valores[l.id]) })),
         });
         const link = linkWhatsappDoCliente(s.clienteWhatsapp, texto);
         if (!link) { toast('Este cliente não tem WhatsApp cadastrado.', 'erro'); return; }

@@ -30,7 +30,7 @@ export const CAMPOS_PERMITIDOS = {
     'atrasoPorTecnico', 'atrasoTecnicoNome', 'reatribuidoDeNome', 'reatribuidoDeUid', 'reatribuicaoVista',
     'iniciadoEm', 'atrasoMotivo', 'atrasoDetalhe', 'atrasoFalta', 'atrasoInformadoEm', 'horariosConferidos',
   ],
-  valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm'],
+  valores: ['valorCentavos', 'baseCentavos', 'extras', 'descontoCentavos', 'tipoNome', 'dataConclusao', 'atualizadoEm', 'pagamentos', 'ultimoPagamentoEm'],
   precos: ['valorCentavos', 'atualizadoEm'],
 };
 

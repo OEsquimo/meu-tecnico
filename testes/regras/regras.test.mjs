@@ -85,6 +85,17 @@ test('isolamento entre empresas: admin de outra empresa não lê nem grava aqui'
   await assertFails(setDoc(doc(db, `empresas/${E}/clientes/x`), novoCliente()));
 });
 
+test('valores: pagamentos parciais (Pacote 31) só o administrador grava, formato conferido', async () => {
+  const ref = (u) => doc(como(u), `empresas/${E}/valores/s-tec`);
+  const base = { valorCentavos: 15000, tipoNome: 'Limpeza' };
+  await assertSucceeds(setDoc(ref(ADMIN), { ...base, pagamentos: [{ centavos: 5000, em: new Date() }], ultimoPagamentoEm: new Date() }));
+  await assertSucceeds(setDoc(ref(ADMIN), { ...base, pagamentos: [], ultimoPagamentoEm: null }));
+  await assertFails(setDoc(ref(ADMIN), { ...base, pagamentos: 'x' }));
+  await assertFails(setDoc(ref(ADMIN), { ...base, pagamentos: Array.from({ length: 31 }, () => ({ centavos: 1, em: new Date() })) }));
+  await assertFails(setDoc(ref(ADMIN), { ...base, ultimoPagamentoEm: 'ontem' }));
+  await assertFails(setDoc(ref(TEC), { ...base, pagamentos: [{ centavos: 5000, em: new Date() }] }));
+});
+
 test('valores em dinheiro: só o administrador lê', async () => {
   await assertSucceeds(getDoc(doc(como(ADMIN), `empresas/${E}/valores/s-tec`)));
   await assertFails(getDoc(doc(como(TEC), `empresas/${E}/valores/s-tec`)));

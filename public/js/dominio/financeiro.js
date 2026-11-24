@@ -95,6 +95,45 @@ export function resumir(servicos, valores) {
 }
 
 /**
+ * Resumo com pagamento parcial (Pacote 31). `docs`: { [servicoId]: documento de valores lido } de TODOS os valores
+ * úteis (do período e os com pagamento recente). Regras:
+ *   - recebido = pagamentos feitos DENTRO do período (cada um conta no dia em que foi feito); serviço antigo
+ *     "pago" sem lista conta o valor todo no dia da conclusão;
+ *   - aReceber = saldo dos serviços concluídos no período (valor - o que já foi pago, até hoje);
+ *   - total e porTipo continuam sendo o valor dos serviços concluídos no período.
+ */
+export function resumirComPagamentos(servicos, docs, periodo) {
+  const valores = {};
+  for (const s of servicos) if (docs[s.id]) valores[s.id] = docs[s.id].valorCentavos;
+  const base = resumir(servicos, valores);
+  const porId = new Map(servicos.map((s) => [s.id, s]));
+  const dentro = (d) => d >= periodo.inicio && d < periodo.fim;
+  let recebido = 0;
+  let aReceber = 0;
+  const recebidoPorTipo = new Map();
+  for (const [id, doc] of Object.entries(docs)) {
+    if (!doc) continue;
+    const s = porId.get(id) || { id, pago: false, dataConclusao: doc.dataConclusao };
+    const real = Array.isArray(doc.pagamentos) ? doc.pagamentos : [];
+    let somaNoPeriodo = 0;
+    if (real.length > 0) {
+      for (const p of real) if (dentro(p.em)) somaNoPeriodo += p.centavos;
+    } else if (s.pago === true && s.dataConclusao instanceof Date && dentro(s.dataConclusao)) {
+      somaNoPeriodo = doc.valorCentavos;
+    }
+    recebido += somaNoPeriodo;
+    const nomeTipo = s.tipoServicoNome || doc.tipoNome || 'Outros';
+    if (somaNoPeriodo > 0) recebidoPorTipo.set(nomeTipo, (recebidoPorTipo.get(nomeTipo) || 0) + somaNoPeriodo);
+    if (porId.has(id)) {
+      const pagoTotal = real.length > 0 ? real.reduce((t, p) => t + p.centavos, 0) : (s.pago === true ? doc.valorCentavos : 0);
+      aReceber += Math.max(0, doc.valorCentavos - pagoTotal);
+    }
+  }
+  const porTipo = base.porTipo.map((t) => ({ ...t, recebidoCentavos: recebidoPorTipo.get(t.nome) || 0 }));
+  return { ...base, recebidoCentavos: recebido, aReceberCentavos: aReceber, porTipo };
+}
+
+/**
  * Série para o gráfico de barras do período (soma dos valores por barra):
  *   semana -> 7 barras (Seg..Dom);  mes -> barras por semana do mês (dias 1-7, 8-14...)
  *   ano -> 12 barras (Jan..Dez);    hoje -> nenhuma barra.

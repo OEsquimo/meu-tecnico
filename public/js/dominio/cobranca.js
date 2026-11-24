@@ -18,6 +18,7 @@
 
 import { formatarReais } from './dinheiro.js';
 import { formatarDataBR } from './datas.js';
+import { situacaoDePagamento } from './pagamentos.js';
 
 export const TONS_COBRANCA = [
   { id: 'amigavel', rotulo: 'Amigável' },
@@ -49,9 +50,14 @@ export function modeloDaEmpresa(empresa) {
   return MODELOS_COBRANCA[empresa?.tomCobranca] || MODELOS_COBRANCA[TOM_COBRANCA_PADRAO];
 }
 
-/** Só os serviços que dá para cobrar: concluído, não pago e com valor maior que zero. */
+/** Só os serviços que dá para cobrar: concluído, com valor maior que zero e saldo a receber (pagamento parcial: só o que falta). */
 export function linhasCobraveis(linhas, valores) {
-  return linhas.filter((l) => l.status === 'concluido' && l.pago !== true && (valores[l.id]?.valorCentavos || 0) > 0);
+  return linhas.filter((l) => l.status === 'concluido' && situacaoDePagamento(l, valores[l.id] || null).saldoCentavos > 0);
+}
+
+/** Quanto falta receber deste serviço, em centavos. */
+export function saldoDaLinha(linha, valor) {
+  return situacaoDePagamento(linha, valor || null).saldoCentavos;
 }
 
 function juntar(nomes) {
