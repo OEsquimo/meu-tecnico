@@ -12,7 +12,7 @@
 
 import { html, bruto, mostrar, aoClicar, confirmar, comCarregando, toast, mostrarErro, escolher, pedirTexto } from '../nucleo/ui.js';
 import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucleo/componentes.js';
-import { podeVerValores } from '../nucleo/permissoes.js';
+import { podeVerValores, podeGerirClientes } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
   buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico, registrarPagamento, corrigirPagamento, apagarPagamento, limparPagamentos, registrarRecebimentoDaVisita, corrigirTipoDoConcluido,
@@ -274,7 +274,7 @@ export default async function montar(ctx) {
         <div class="cartao">
           ${listaDeDados([
             ['Quando', formatarDataHoraBR(s.dataAgendada)],
-            ['Cliente', s.clienteNome],
+            ['Cliente', podeGerirClientes(sessao) && s.clienteId ? html`<a class="link" href="#/cliente/${encodeURIComponent(s.clienteId)}?de=${encodeURIComponent('/servico/' + s.id)}" data-link-cliente>${s.clienteNome} ›</a>` : s.clienteNome],
             ...(visitaTodaConcluida ? [] : [['Telefone', s.clienteWhatsapp ? formatarTelefone(s.clienteWhatsapp) : ''], ['Local', s.local]]),
             ['Técnicos', tecnicos],
             ...(usuario.admin && abertas.length > 0 && inicioDaVisita(abertas) ? [['Em andamento', `desde ${horaDeCampo(inicioDaVisita(abertas))}`]] : []),

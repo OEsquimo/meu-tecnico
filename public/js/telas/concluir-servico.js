@@ -15,18 +15,18 @@
 // padrão do tipo (configurado em Tipos de serviço); a tela não pergunta mais (Pacote 28).
 // =============================================================================
 
-import { html, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, confirmar, avancarEntreCampos } from '../nucleo/ui.js';
+import { html, bruto, mostrar, aoEnviar, aoClicar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, toast, escolher, pedirTexto, confirmar, avancarEntreCampos } from '../nucleo/ui.js';
 import { cabecalho, campoTexto, campoTextoLongo, campoPilulas, campoSelecao, interruptor, botao, esqueletos, estadoVazio } from '../nucleo/componentes.js';
 import { traduzirErro } from '../nucleo/erros.js';
 import { buscarServico, concluirServico, listarLinhasDoAgendamento, marcarPendente, listarConcluidosECancelados } from '../servicos/servicos.js';
 import { situacaoDaVisita, sugerirInicio, sugerirConclusao, validarHorarios, horaDeCampo, MOTIVOS_ATRASO } from '../dominio/tempo-servico.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { validarConclusao } from '../dominio/validacoes.js';
-import { validarValores } from '../dominio/valores.js';
-import { centavosParaCampo } from '../dominio/dinheiro.js';
+import { validarValores, calcularTotal } from '../dominio/valores.js';
+import { centavosParaCampo, reaisParaCentavos, formatarReais } from '../dominio/dinheiro.js';
 import { listarPrecos } from '../servicos/precos.js';
-import { podeVerValores, podeAlterarValores } from '../nucleo/permissoes.js';
-import { editorDeValores, valorSoParaLer, ligarEditorDeValores } from './valores-editor.js';
+import { podeVerValores, podeAlterarValores, podeGerirClientes } from '../nucleo/permissoes.js';
+import { editorDeValores, valorSoParaLer, ligarEditorDeValores, travarValor } from './valores-editor.js';
 import { resumoDoAparelho } from '../dominio/aparelhos.js';
 import { STATUS, ehLinhaSemServico, MOTIVOS_PENDENCIA } from '../dominio/servicos.js';
 import { hojeISO, paraISO, inicioDoDia, inicioDoDiaSeguinte } from '../dominio/datas.js';
@@ -159,7 +159,7 @@ export default async function montar(ctx) {
     mostrar(raiz, html`
       ${cabecalho({
     titulo: 'Concluir serviço',
-    subtitulo: html`${semServico ? 'Serviço a definir' : s.tipoServicoNome} · ${s.clienteNome}${s.aparelhoResumo ? html`<div class="cabecalho__aparelho">${s.aparelhoResumo}</div>` : ''}`,
+    subtitulo: html`${semServico ? 'Serviço a definir' : s.tipoServicoNome} · ${podeGerirClientes(sessao) && s.clienteId ? html`<a class="link" href="#/cliente/${encodeURIComponent(s.clienteId)}?de=${encodeURIComponent('/concluir/' + s.id)}" data-link-cliente>${s.clienteNome} ›</a>` : s.clienteNome}${s.aparelhoResumo ? html`<div class="cabecalho__aparelho">${s.aparelhoResumo}</div>` : ''}`,
     voltarPara,
   })}
       <form id="form-concluir" class="formulario" novalidate>
@@ -177,9 +177,19 @@ export default async function montar(ctx) {
         ${editaValores ? editorDeValores({
     base: salvo?.valor ?? (precoDe(tipoInicial) === null ? '' : centavosParaCampo(precoDe(tipoInicial))),
     extras: salvo?.extras || [], desconto: salvo?.desconto || '',
-    ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : 'Valor padrão deste serviço. Pode mudar.',
+    ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : 'Valor do cadastro de tipos de serviço. Para ajustar, use Extras ou Desconto.',
+    travarBase: precoDe(tipoInicial) !== null,
   }) : (veValores ? valorSoParaLer(precoDe(tipoInicial)) : '')}
-        ${interruptor({ nome: 'pago', titulo: 'O cliente já pagou?', descricao: usuario.admin ? '' : 'Só marque se o cliente pagou na hora.' })}
+        ${editaValores && usuario.admin ? html`
+          <div class="campo" data-campo="valorPago">
+            <label class="campo__rotulo" for="campo-valor-pago">Valor pago (R$)</label>
+            <div class="acoes-cartao">
+              <input class="campo__entrada" id="campo-valor-pago" name="valorPago" type="text" inputmode="decimal" maxlength="12" value="${salvo?.valorPago || ''}" placeholder="0,00" />
+              ${botao({ texto: 'Pagou tudo', variante: 'secundario', pequeno: true, acao: 'pagou-tudo' })}
+            </div>
+            <p class="campo__ajuda">Quanto o cliente pagou agora. Em branco = ainda não pagou.</p>
+            <p class="campo__ajuda" data-a-pagar hidden></p>
+          </div>` : interruptor({ nome: 'pago', titulo: 'O cliente já pagou?', descricao: usuario.admin ? '' : 'Só marque se o cliente pagou na hora.' })}
         <section class="cartao pilha pilha--pequena" data-bloco="horarios" aria-label="Horários do serviço">
           <h2 class="titulo-secao">Horários do serviço</h2>
           <p class="texto-suave texto-pequeno">${s.iniciadoEm instanceof Date ? 'O início foi registrado quando você iniciou.' : 'Sugerimos estes horários. Confira e corrija se precisar.'}${iniSug.ajustada ? ' O início foi ajustado para caber antes da conclusão.' : ''}</p>
@@ -218,6 +228,22 @@ export default async function montar(ctx) {
     const form = raiz.querySelector('#form-concluir');
     avancarEntreCampos(form); // Enter vai ao próximo campo
     const editor = editaValores ? ligarEditorDeValores(form) : null;
+    // Pacote 34: total (valor do serviço + extras - desconto) e "Valor a pagar" na hora.
+    const cent = (t) => (String(t).trim() === '' ? 0 : reaisParaCentavos(String(t)));
+    const totalAtual = () => {
+      const v = editor.ler();
+      const n = (t) => cent(t) ?? 0;
+      return calcularTotal({ baseCentavos: n(v.base), extras: v.extras.map((x) => ({ valorCentavos: n(x.valor) })), descontoCentavos: n(v.desconto) });
+    };
+    const atualizarAPagar = () => {
+      const aviso = form.querySelector('[data-a-pagar]');
+      if (!aviso || !editor) return;
+      const pago = cent(form.elements.valorPago?.value ?? '');
+      const falta = totalAtual() - (pago ?? 0);
+      aviso.hidden = !(pago !== null && totalAtual() > 0 && falta > 0);
+      aviso.textContent = aviso.hidden ? '' : `Valor a pagar: ${formatarReais(falta)}`;
+    };
+    if (editor && form.elements.valorPago) { form.addEventListener('input', atualizarAPagar); atualizarAPagar(); }
     let valorMexido = false; // se a pessoa já mexeu no valor, trocar o tipo não o sobrescreve
     form.addEventListener('input', (e) => { if (e.target.name === 'valor') valorMexido = true; });
 
@@ -225,7 +251,8 @@ export default async function montar(ctx) {
     form.addEventListener('change', (e) => {
       if (e.target.name !== 'tipoServicoId') return;
       const t = tipoAtual();
-      if (editor && !valorMexido) {
+      if (editor) travarValor(form, precoDe(t)); // Pacote 34/35: com preço cadastrado, o valor do serviço só informa (texto)
+      if (editor && (!valorMexido || precoDe(t) !== null)) {
         form.elements.valor.value = precoDe(t) === null ? '' : centavosParaCampo(precoDe(t));
         form.elements.valor.dispatchEvent(new Event('input', { bubbles: true }));
         valorMexido = false;
@@ -234,10 +261,14 @@ export default async function montar(ctx) {
 
     aoClicar(raiz, {
       ...(editor?.acoes || {}),
+      'pagou-tudo': () => {
+        form.elements.valorPago.value = centavosParaCampo(totalAtual());
+        form.elements.valorPago.dispatchEvent(new Event('input', { bubbles: true }));
+      },
       'novo-aparelho': () => {
         const c = lerCampos(form);
         rascunho = {
-          ...(editor ? { valor: c.valor, extras: editor.ler().extras, desconto: c.desconto } : {}),
+          ...(editor ? { valor: c.valor, extras: editor.ler().extras, desconto: c.desconto, valorPago: c.valorPago || '' } : {}),
           id: s.id, descricao: c.descricao || '', tipoServicoId: c.tipoServicoId || '', aparelhoId: c.aparelhoId || '',
           aparelhosAntes: aparelhos.map((a) => a.id),
         };
@@ -258,6 +289,15 @@ export default async function montar(ctx) {
       // Valor, extras e desconto (só quem pode alterar). O administrador precisa informar o valor.
       const v = editor ? validarValores(editor.ler(), { exigirBase: usuario.admin }) : null;
       if (v) Object.assign(erros, v.erros);
+      // Pacote 34 (administrador): "Valor pago" — em branco = nada pago; não pode passar do total.
+      let pagoAgora = 0;
+      if (editor && usuario.admin && form.elements.valorPago) {
+        const lido = cent(form.elements.valorPago.value);
+        const total = totalAtual();
+        if (lido === null) erros.valorPago = 'Informe um valor válido. Exemplo: 100 ou 100,50';
+        else if (lido > total) erros.valorPago = `O valor pago não pode ser maior que o total (${formatarReais(total)}).`;
+        else pagoAgora = lido;
+      }
       if (semServico && !tipoEscolhido) erros.tipoServicoId = 'Escolha qual serviço foi feito.';
       // Horários (Pacote 27): erros bloqueiam; casos estranhos pedem confirmação.
       const diaInformado = campos.dataConclusao || diaSug;
@@ -277,7 +317,10 @@ export default async function montar(ctx) {
           await concluirServico({
             empresaId: usuario.empresaId, servico: s, papel: usuario.admin ? 'admin' : 'tecnico', nomeQuemConcluiu: usuario.nome,
             dados: {
-              descricao: r.dados.descricao, pago: r.dados.pago, retornoMeses: r.dados.retornoMeses,
+              descricao: r.dados.descricao,
+              pago: editor && usuario.admin && form.elements.valorPago ? (totalAtual() > 0 && pagoAgora >= totalAtual()) : r.dados.pago,
+              pagamentoInicialCentavos: pagoAgora,
+              retornoMeses: r.dados.retornoMeses,
               valores: v && v.dados.valorCentavos !== null ? v.dados : null,
               podeAlterarValores: editaValores,
               aparelho: aparelhos.find((a) => a.id === r.dados.aparelhoId && a.id !== s.aparelhoId) || null,

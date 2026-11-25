@@ -302,3 +302,14 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - **Editar** (só administrador; antigo "Corrigir descrição"): Tipo de serviço (só os tipos cadastrados; não muda valor nem pagamentos; o Desempenho passa a contar no novo tipo), O que foi feito e Informar pagamento (só com saldo). Pagamento acima do saldo é bloqueado e cada pagamento é gravado com data e hora, preservando os anteriores. Registrar pagamento, Recebi, Cobrar cliente, Corrigir horários, Corrigir valor e Excluir continuam.
 - **Excluir** serviço concluído pede uma confirmação (a segunda saiu).
 - Renomear um tipo no cadastro não altera os serviços já concluídos (o nome fica gravado em cada serviço). As regras do Firestore não mudam.
+
+## Pacote 34 — Concluir serviço: valor informativo e "Valor pago"
+
+- **Valor do serviço** na tela de concluir vem do cadastro de Tipos de serviço e é somente informação (não editável). Se o tipo não tem preço cadastrado, o campo continua editável. Cobrança adicional vai em **Extras** (com descrição) e abatimento em **Desconto**; total = valor + extras − desconto.
+- **Valor pago (R$)** (só administrador): em branco ou 0 = nada pago; botão "Pagou tudo" preenche o total; "Valor a pagar" aparece ao vivo quando há saldo. Não pode passar do total. O valor vira o primeiro pagamento, gravado na data/hora da conclusão. Com saldo o serviço fica "Concluído a receber".
+- A caixa "O cliente já pagou?" saiu para o administrador; o técnico continua com sim/não. "Corrigir valor" depois de concluído continua editável. As regras do Firestore não mudam.
+
+## Pacote 35 — Cliente clicável e valor como texto
+
+- Nas telas do serviço e de concluir, o nome do cliente abre o cadastro dele (para editar), só para quem pode gerir clientes (administrador, ou técnico com essa permissão); sem permissão continua texto. A seta de voltar do cadastro retorna à tela de origem.
+- Na tela de concluir, o "Valor do serviço" com preço cadastrado aparece só como texto (sem caixa de digitação); tipo sem preço continua com campo para digitar.
