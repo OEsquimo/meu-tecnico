@@ -11,7 +11,7 @@
 //       const lido = editor.ler();                             // { base, extras, desconto } (textos)
 // =============================================================================
 
-import { html, mostrar } from '../nucleo/ui.js';
+import { html, bruto, mostrar } from '../nucleo/ui.js';
 import { botao } from '../nucleo/componentes.js';
 import { reaisParaCentavos, formatarReais, centavosParaCampo } from '../dominio/dinheiro.js';
 import { calcularTotal, MAXIMO_EXTRAS } from '../dominio/valores.js';
@@ -35,12 +35,13 @@ export function textosDeValores(v) {
   };
 }
 
-export function editorDeValores({ base = '', extras = [], desconto = '', ajudaValor = '' }) {
+export function editorDeValores({ base = '', extras = [], desconto = '', ajudaValor = '', travarBase = false }) {
   return html`
     <section class="editor-valores" id="editor-valores">
       <div class="campo" data-campo="valor">
-        <label class="campo__rotulo" for="campo-valor">Valor do serviço (R$)</label>
-        <input class="campo__entrada" id="campo-valor" name="valor" type="text" inputmode="decimal" maxlength="12" value="${base}" placeholder="150,00" />
+        <label class="campo__rotulo" for="campo-valor" data-valor-rotulo ${travarBase ? bruto('hidden') : ''}>Valor do serviço (R$)</label>
+        <div class="editor-valores__total" data-valor-info ${travarBase ? '' : bruto('hidden')}><span>Valor do serviço</span><strong data-valor-info-texto>${travarBase && base !== '' ? 'R$ ' + base : ''}</strong></div>
+        <input class="campo__entrada" id="campo-valor" name="valor" type="text" inputmode="decimal" maxlength="12" value="${base}" placeholder="150,00" ${travarBase ? bruto('hidden readonly aria-readonly="true"') : ''} />
         ${ajudaValor && html`<p class="campo__ajuda">${ajudaValor}</p>`}
       </div>
       <div class="campo" data-campo="extras">
@@ -65,6 +66,16 @@ export function valorSoParaLer(centavos) {
       <div class="editor-valores__total"><span>Valor do serviço</span><strong>${centavos === null ? 'Ainda não definido' : formatarReais(centavos)}</strong></div>
       <p class="campo__ajuda">O administrador confirma o valor final depois.</p>
     </section>`;
+}
+
+/** Pacote 35: com preço cadastrado o valor aparece só como texto; sem preço, volta o campo para digitar. */
+export function travarValor(form, centavos) {
+  const travar = centavos !== null && centavos !== undefined;
+  const campo = form.elements.valor;
+  campo.hidden = travar; campo.readOnly = travar;
+  form.querySelector('[data-valor-rotulo]').hidden = travar;
+  form.querySelector('[data-valor-info]').hidden = !travar;
+  form.querySelector('[data-valor-info-texto]').textContent = travar ? formatarReais(centavos) : '';
 }
 
 export function ligarEditorDeValores(form) {

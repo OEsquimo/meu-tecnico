@@ -30,13 +30,16 @@ import { linkLigar, oferecerAvisoDasLinhas, cartaoDaVisita } from './servicos-co
 /** Quantos agendamentos (visitas) aparecem na ficha. */
 const MAXIMO_HISTORICO = 15;
 
-export default async function montar({ raiz, params, sessao, ir, recarregar, ativo }) {
+export default async function montar({ raiz, params, consulta, sessao, ir, recarregar, ativo }) {
   const empresaId = sessao.vinculo.empresaId;
   const administrador = ehAdmin(sessao);
   const idCliente = params.id;
+  // Pacote 35: vindo de um serviço, a seta de voltar leva de volta para ele (só caminhos internos conhecidos).
+  const de = consulta?.get('de') || '';
+  const voltarDoCliente = /^\/(servico|concluir)\/[\w-]+$/.test(de) ? `#${de}` : '#/clientes';
 
   await carregarEstilosClientes();
-  mostrar(raiz, html`${cabecalho({ titulo: 'Cliente', voltarPara: '#/clientes' })}${esqueletos(3)}`);
+  mostrar(raiz, html`${cabecalho({ titulo: 'Cliente', voltarPara: voltarDoCliente })}${esqueletos(3)}`);
 
   // ---- 1. Carrega cliente, aparelhos e (admin) histórico ----
   let cliente;
@@ -65,7 +68,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
 
   if (!cliente) {
     mostrar(raiz, html`
-      ${cabecalho({ titulo: 'Cliente', voltarPara: '#/clientes' })}
+      ${cabecalho({ titulo: 'Cliente', voltarPara: voltarDoCliente })}
       ${estadoVazio({ icone: 'info', titulo: 'Cliente não encontrado', texto: 'Ele pode ter sido excluído.', acao: botao({ texto: 'Ver clientes', href: '#/clientes' }) })}`);
     return undefined;
   }
@@ -91,7 +94,7 @@ export default async function montar({ raiz, params, sessao, ir, recarregar, ati
     const colapsado = varios && !verTodos;
     const enderecosVisiveis = colapsado ? enderecos.filter((e) => e.id === idEnderecoAtual) : enderecos;
     mostrar(raiz, html`
-    ${cabecalho({ titulo: cliente.nome, voltarPara: '#/clientes' })}
+    ${cabecalho({ titulo: cliente.nome, voltarPara: voltarDoCliente })}
     <div class="pilha">
       <section class="cartao pilha">
         ${listaDeDados([
