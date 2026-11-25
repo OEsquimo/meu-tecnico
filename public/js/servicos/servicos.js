@@ -800,8 +800,17 @@ export async function concluirServico({ empresaId, servico, papel, nomeQuemConcl
   const valores = dados.valores ?? (Number.isInteger(dados.valorCentavos) ? dados.valorCentavos : null);
   if (defineValor && valores !== null) {
     campos.valorDefinido = true;
+    const documento = documentoDeValores(valores);
+    // Pacote 34: "Valor pago" informado na conclusão (administrador) vira o primeiro pagamento, na hora da conclusão.
+    const pagoAgora = ehAdmin && Number.isInteger(dados.pagamentoInicialCentavos) ? dados.pagamentoInicialCentavos : 0;
+    if (pagoAgora > documento.valorCentavos) throw new ErroApp('O valor pago não pode ser maior que o total do serviço.', 'pago-maior');
+    if (pagoAgora > 0) {
+      documento.pagamentos = [{ centavos: pagoAgora, em: concluidoEm }];
+      documento.ultimoPagamentoEm = concluidoEm;
+      campos.pago = pagoAgora >= documento.valorCentavos;
+    }
     operacoes.push(op.definir(`${caminhoValores(empresaId)}/${servico.id}`, {
-      ...documentoDeValores(valores),
+      ...documento,
       tipoNome: tipoFinal && !servico.tipoServicoId ? tipoFinal.nome : servico.tipoServicoNome,
       dataConclusao: concluidoEm,
       atualizadoEm: AGORA,
