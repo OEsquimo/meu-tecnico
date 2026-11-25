@@ -56,7 +56,7 @@ with sync_playwright() as p:
     # ---- Concluído: admin corrige e exclui com dupla confirmação ----
     ir("/historico")
     pag.locator("#resultado a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
-    ok(pag.locator("[data-acao=editar-concluido]").count() >= 1 and pag.locator("[data-acao=excluir-concluido]").count() >= 1, "concluído: Editar e Excluir (admin)")
+    ok(pag.locator("[data-acao=editar-menu]").count() >= 1 and pag.locator("[data-acao=excluir-concluido]").count() >= 1, "concluído: Editar e Excluir (admin; Pacote 33)")
     pag.locator("[data-acao=excluir-concluido]").first.click(); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=nao]"); pag.wait_for_timeout(400)
     ok("/servico/" in pag.url, "recusar a confirmação não exclui")

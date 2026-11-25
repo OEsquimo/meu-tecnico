@@ -50,13 +50,11 @@ with sync_playwright() as p:
     ir(f"/servico/{sid}")
     ok(pag.locator("[data-acao=excluir-concluido]").count() == 2, "visita com 2 serviços concluídos")
     pag.locator("[data-acao=excluir-concluido]").first.click(); pag.wait_for_timeout(500)
-    pag.locator("dialog button", has_text="Continuar").click(); pag.wait_for_timeout(500)
-    pag.locator("dialog button", has_text="Excluir de vez").click(); pag.wait_for_timeout(1500)
+    pag.locator("dialog button", has_text="Excluir").last.click(); pag.wait_for_timeout(1500)  # Pacote 33: uma confirmação só
     ok("#/servico/" in pag.url and "Serviço não encontrado" not in texto(), "excluiu 1 de 2: continua na visita (sem 'Serviço não encontrado')")
     ok(pag.locator("[data-acao=excluir-concluido]").count() == 1, "sobrou 1 serviço na visita")
     pag.locator("[data-acao=excluir-concluido]").first.click(); pag.wait_for_timeout(500)
-    pag.locator("dialog button", has_text="Continuar").click(); pag.wait_for_timeout(500)
-    pag.locator("dialog button", has_text="Excluir de vez").click(); pag.wait_for_timeout(1500)
+    pag.locator("dialog button", has_text="Excluir").last.click(); pag.wait_for_timeout(1500)  # Pacote 33: uma confirmação só
     ok(pag.url.endswith("#/") or pag.url.endswith("/"), f"excluiu o último: vai para o Início ({pag.url})")
     ok("Serviço não encontrado" not in texto(), "sem 'Serviço não encontrado' no Início")
     ok(not erros, f"sem erros no console ({erros[:2]})")

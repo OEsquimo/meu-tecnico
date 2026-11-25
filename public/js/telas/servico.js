@@ -15,7 +15,7 @@ import { cabecalho, botao, selo, listaDeDados, esqueletos, aviso } from '../nucl
 import { podeVerValores } from '../nucleo/permissoes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import {
-  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico, registrarPagamento, corrigirPagamento, apagarPagamento, limparPagamentos, registrarRecebimentoDaVisita,
+  buscarServico, listarLinhasDoAgendamento, cancelarAgendamentoCompleto, excluirAgendamentoCompleto, excluirServico, editarDescricao, marcarPago, registrarCobranca, informarServicoNaVisita, informarAparelhoNaLinha, corrigirServicoAdicionado, excluirServicoAdicionado, marcarIncluidosComoVistos, marcarReatribuicoesComoVistas, buscarValores, iniciarVisita, corrigirHorariosDoServico, registrarPagamento, corrigirPagamento, apagarPagamento, limparPagamentos, registrarRecebimentoDaVisita, corrigirTipoDoConcluido,
 } from '../servicos/servicos.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { seloDoServico, resumoDaVisita, STATUS, ehLinhaSemServico, precisaInformarAparelhoEServico, textoDosTecnicos, nomesDosTecnicos, servicoTemTecnico } from '../dominio/servicos.js';
@@ -160,11 +160,11 @@ export default async function montar(ctx) {
             ['Garantia até', l.garantiaAte ? formatarDataBR(l.garantiaAte) : ''],
             ['Próximo retorno', l.dataRetorno ? formatarDataBR(l.dataRetorno) : ''],
           ])}
-          ${valor && blocoDePagamentos(l, valor)}
+          ${valor && situacaoDePagamento(l, valor).saldoCentavos > 0 && blocoDePagamentos(l, valor)}
           ${detalhesDoAdmin(l, valor)}`}
         ${concluida && usuario.admin && html`
           <div class="acoes-cartao">
-            ${botao({ texto: 'Corrigir descrição', variante: 'secundario', iconeNome: 'editar', acao: 'editar-concluido', dados: { id: l.id }, pequeno: true })}
+            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', acao: 'editar-menu', dados: { id: l.id }, pequeno: true })}
             ${botao({ texto: 'Corrigir horários', variante: 'secundario', iconeNome: 'relogio', acao: 'corrigir-horarios', dados: { id: l.id }, pequeno: true })}
             ${botao({ texto: valor ? 'Corrigir valor' : 'Informar valor', variante: 'secundario', pequeno: true, href: `#/servico/${l.id}/valor` })}
             ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-concluido', dados: { id: l.id }, pequeno: true })}
@@ -192,13 +192,18 @@ export default async function montar(ctx) {
       </div>`;
   }
 
-  /** Admin: valor, quanto já foi pago e quanto falta (o detalhe do cálculo fica em "Ver detalhes"). */
+  /**
+   * Admin (Pacote 33): "Valor do serviço" é sempre o valor integral; "Valor pago" e "Valor a pagar" só aparecem com pagamento parcial
+   * (nada pago: só "Valor a pagar"; quitado: só "Valor do serviço" — o histórico de pagamentos fica em "Ver detalhes").
+   */
   function resumoDeValorDoAdmin(valor, linha) {
-    if (!valor) return [['Valor', 'Ainda não informado']];
+    if (!valor) return [['Valor do serviço', 'Ainda não informado']];
     const p = situacaoDePagamento(linha, valor);
-    const itens = [['Valor', formatarReais(valor.valorCentavos)]];
-    if (p.pagoCentavos > 0) itens.push(['Já pago', formatarReais(p.pagoCentavos)]);
-    if (p.saldoCentavos > 0) itens.push(['Falta pagar', formatarReais(p.saldoCentavos)]);
+    const itens = [['Valor do serviço', formatarReais(valor.valorCentavos)]];
+    if (p.saldoCentavos > 0) {
+      if (p.pagoCentavos > 0) itens.push(['Valor pago', formatarReais(p.pagoCentavos)]);
+      itens.push(['Valor a pagar', formatarReais(p.saldoCentavos)]);
+    }
     return itens;
   }
 
@@ -213,8 +218,9 @@ export default async function montar(ctx) {
       ...(valor ? [['Valor do serviço', formatarReais(valor.baseCentavos)], ...valor.extras.map((e) => [`Extra: ${e.descricao}`, formatarReais(e.valorCentavos)]), ...(valor.descontoCentavos > 0 ? [['Desconto', `- ${formatarReais(valor.descontoCentavos)}`]] : [])] : []),
       ...(l.cobradoEm && !l.pago ? [['Cobrado em', formatarDataBR(l.cobradoEm)]] : []),
     ].filter(([, v]) => v);
-    if (itens.length === 0) return '';
-    return html`<details class="detalhes-servico" data-detalhes="${l.id}" ${detalhesAbertos.has(l.id) ? bruto('open') : ''}><summary>Ver detalhes</summary>${listaDeDados(itens)}</details>`;
+    const pagamentosNosDetalhes = valor && situacaoDePagamento(l, valor).saldoCentavos === 0 ? blocoDePagamentos(l, valor) : '';
+    if (itens.length === 0 && !pagamentosNosDetalhes) return '';
+    return html`<details class="detalhes-servico" data-detalhes="${l.id}" ${detalhesAbertos.has(l.id) ? bruto('open') : ''}><summary>Ver detalhes</summary>${pagamentosNosDetalhes}${itens.length > 0 ? listaDeDados(itens) : ''}</details>`;
   }
 
   /** Linhas "Valor / Extras / Desconto / Total" para a lista de dados (vazio se não pode ver). */
@@ -258,6 +264,8 @@ export default async function montar(ctx) {
     // Se já há botão de cobrança (abre o WhatsApp do cliente com a mensagem pronta), o "WhatsApp" simples sai.
     const temCobranca = cobraveis.length > 0;
     const resumo = resumoDaVisita(linhas);
+    // Pacote 33: visita toda concluída não repete telefone e endereço (ficam no cadastro do cliente).
+    const visitaTodaConcluida = linhas.length > 0 && linhas.every((l) => l.status === STATUS.CONCLUIDO);
     const pendentes = canceladas.filter((l) => l.pendente === true);
 
     mostrar(raiz, html`
@@ -267,8 +275,7 @@ export default async function montar(ctx) {
           ${listaDeDados([
             ['Quando', formatarDataHoraBR(s.dataAgendada)],
             ['Cliente', s.clienteNome],
-            ['Telefone', s.clienteWhatsapp ? formatarTelefone(s.clienteWhatsapp) : ''],
-            ['Local', s.local],
+            ...(visitaTodaConcluida ? [] : [['Telefone', s.clienteWhatsapp ? formatarTelefone(s.clienteWhatsapp) : ''], ['Local', s.local]]),
             ['Técnicos', tecnicos],
             ...(usuario.admin && abertas.length > 0 && inicioDaVisita(abertas) ? [['Em andamento', `desde ${horaDeCampo(inicioDaVisita(abertas))}`]] : []),
             ...(abertas[0]?.reatribuidoDeNome ? [['Passou de', `${abertas[0].reatribuidoDeNome} (atraso)`]] : []),
@@ -315,7 +322,7 @@ export default async function montar(ctx) {
             ${agendado ? botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar', pequeno: true }) : ''}
             ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', pequeno: true })}
           </div>` : ''}
-        ${usuario.admin && temConcluida ? html`<p class="texto-suave texto-pequeno">Serviço concluído é registro e garantia: o administrador só corrige o que está errado, e excluir pede confirmação dupla.</p>` : ''}
+        ${usuario.admin && temConcluida ? html`<p class="texto-suave texto-pequeno">Serviço concluído é registro e garantia: o administrador só corrige o que está errado, e excluir pede confirmação.</p>` : ''}
       </div>`);
 
     desligar();
@@ -338,7 +345,7 @@ export default async function montar(ctx) {
         // eslint-disable-next-line no-await-in-loop
         valores[id] = await buscarValores(usuario.empresaId, id).catch(() => null);
       }
-      if (ctx.ativo()) desenhar(s, linhas, valores);
+      if (ctx.ativo()) desenhar(linhas.find((x) => x.id === s.id) || s, linhas, valores);
     }
 
     const acoes = {
@@ -441,6 +448,29 @@ export default async function montar(ctx) {
           } catch (e) { mostrarErro(e); }
         });
       },
+      'editar-menu': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        if (!linha) return;
+        const sit = situacaoDePagamento(linha, valores[linha.id]);
+        const opcoes = [
+          { id: 'tipo', rotulo: 'Tipo de serviço' },
+          { id: 'descricao', rotulo: 'O que foi feito' },
+          ...(sit.saldoCentavos > 0 ? [{ id: 'pagamento', rotulo: 'Informar pagamento' }] : []),
+        ];
+        const escolha = await escolher({ titulo: 'Editar serviço concluído', opcoes });
+        if (escolha === 'descricao') acoes['editar-concluido'](el);
+        if (escolha === 'pagamento') acoes['registrar-pagamento'](el);
+        if (escolha === 'tipo') {
+          const tipos = tiposAtivos();
+          const tipoId = await escolher({ titulo: 'Tipo de serviço', opcoes: tipos.map((t) => ({ id: t.id, rotulo: t.nome })) });
+          const tipo = tipos.find((t) => t.id === tipoId);
+          if (!tipo || tipo.id === linha.tipoServicoId) return;
+          if (!await confirmar({ titulo: `Trocar para "${tipo.nome}"?`, mensagem: 'O valor e os pagamentos não mudam. A média de tempo desse serviço no Desempenho passa a contar no novo tipo.', confirmar: 'Trocar', cancelar: 'Voltar' })) return;
+          await comCarregando(el, async () => {
+            try { await corrigirTipoDoConcluido(usuario.empresaId, linha, tipo); toast('Tipo de serviço corrigido.', 'sucesso'); await atualizar([linha.id]); } catch (e) { mostrarErro(e); }
+          });
+        }
+      },
       'editar-concluido': async (el) => {
         const linha = linhas.find((l) => l.id === el.dataset.id);
         const texto = await pedirTexto({ titulo: 'O que foi feito?', rotulo: 'Descreva o serviço', valor: linha.descricao || '', multilinha: true, maximo: 2000, confirmar: 'Salvar' });
@@ -455,8 +485,7 @@ export default async function montar(ctx) {
       },
       'excluir-concluido': async (el) => {
         const linha = linhas.find((l) => l.id === el.dataset.id);
-        if (!await confirmar({ titulo: 'Excluir este serviço concluído?', mensagem: `"${linha.tipoServicoNome}" sai do histórico e do financeiro (o valor também é apagado). Ele era registro e garantia do cliente.`, confirmar: 'Continuar', cancelar: 'Voltar', perigo: true })) return;
-        if (!await confirmar({ titulo: 'Tem certeza?', mensagem: 'Não dá para desfazer. O cliente e os aparelhos dele não são apagados.', confirmar: 'Excluir de vez', cancelar: 'Voltar', perigo: true })) return;
+        if (!await confirmar({ titulo: 'Excluir este serviço concluído?', mensagem: `"${linha.tipoServicoNome}" sai do histórico e do financeiro (o valor também é apagado). Ele era registro e garantia do cliente. Não dá para desfazer.`, confirmar: 'Excluir', cancelar: 'Voltar', perigo: true })) return;
         await comCarregando(el, async () => {
           try {
             await excluirServico(usuario.empresaId, linha.id, { permitirConcluido: true });

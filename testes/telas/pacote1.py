@@ -48,7 +48,7 @@ with sync_playwright() as p:
 
     # ---- Concluído não pode ser excluído ----
     pag.locator("#resultado a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
-    ok(pag.locator("[data-acao=excluir-concluido]").count() >= 1 and pag.locator("[data-acao=editar-concluido]").count() >= 1, "concluído do admin tem Corrigir descrição e Excluir")
+    ok(pag.locator("[data-acao=excluir-concluido]").count() >= 1 and pag.locator("[data-acao=editar-menu]").count() >= 1, "concluído do admin tem Editar e Excluir (Pacote 33)")
     ok("registro e garantia" in texto(), "explica que concluído é registro e garantia")
 
     # ---- Nome do cliente não se repete no topo ----

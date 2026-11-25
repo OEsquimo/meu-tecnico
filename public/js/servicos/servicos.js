@@ -944,6 +944,18 @@ async function valorParaPagamento(empresaId, servico) {
   return valor;
 }
 
+/**
+ * Administrador (Pacote 33): troca o TIPO de um serviço concluído (sempre um tipo cadastrado). Não mexe em valor, pagamentos,
+ * garantia nem retorno. O nome antigo do tipo no cadastro nunca é reescrito nos serviços já concluídos.
+ */
+export async function corrigirTipoDoConcluido(empresaId, servico, tipo) {
+  if (!tipo?.id || !tipo?.nome) throw new ErroApp('Escolha um tipo de serviço da lista.');
+  const operacoes = [op.atualizar(`${caminho(empresaId)}/${servico.id}`, { tipoServicoId: tipo.id, tipoServicoNome: tipo.nome, atualizadoEm: AGORA })];
+  const v = await ler(`${caminhoValores(empresaId)}/${servico.id}`);
+  if (v) operacoes.push(op.atualizar(`${caminhoValores(empresaId)}/${servico.id}`, { tipoNome: tipo.nome, atualizadoEm: AGORA }));
+  await gravar(operacoes);
+}
+
 /** Administrador: "Marcar como a receber" — apaga todos os pagamentos do serviço (o saldo volta a ser o valor todo). */
 export async function limparPagamentos(empresaId, servico) {
   const valor = await buscarValoresCompletos(empresaId, servico.id);
