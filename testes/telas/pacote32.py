@@ -40,12 +40,12 @@ with sync_playwright() as p:
 
     # serviço concluído e a receber (Ana, R$ 220): poucos botões
     ir(a, "/servico/s-c3")
-    ok(all(a.locator(f"[data-acao={x}]").count() == 1 for x in ["editar-concluido", "corrigir-horarios", "excluir-concluido"]) and a.locator("a:has-text('Corrigir valor')").count() == 1, "tem Corrigir descrição, Corrigir horários, Corrigir valor e Excluir")
+    ok(all(a.locator(f"[data-acao={x}]").count() == 1 for x in ["editar-menu", "corrigir-horarios", "excluir-concluido"]) and a.locator("a:has-text('Corrigir valor')").count() == 1, "tem Editar, Corrigir horários, Corrigir valor e Excluir")
     for velho in ["alternar-pago", "corrigir-servico", "cobrar-servico"]:
         ok(a.locator(f"[data-acao={velho}]").count() == 0, f"sem o botão antigo {velho}")
     ok(a.locator("[data-acao=navegar]").count() == 0, "visita concluída não tem 'Ir até o cliente'")
     ok("Cliente pagou?" not in texto(a), "sem a linha 'Cliente pagou?' para o administrador")
-    ok("Falta pagar" in texto(a) and "R$ 220,00" in texto(a), "mostra o que falta pagar")
+    ok("Valor a pagar" in texto(a) and "R$ 220,00" in texto(a), "mostra o que falta pagar")
     ok(a.locator("[data-bloco=receber-visita] [data-acao=recebi-visita]").count() == 1 and a.locator("[data-bloco=receber-visita] [data-acao=cobrar]").count() == 1, "botões Registrar pagamento e Cobrar cliente na visita")
     ok("Registrar pagamento" in a.inner_text("[data-bloco=receber-visita]"), "com um serviço só o botão se chama 'Registrar pagamento'")
 
@@ -57,7 +57,7 @@ with sync_playwright() as p:
     a.click("[data-acao=recebi-visita]"); a.wait_for_selector("dialog[open]")
     a.fill("dialog[open] [data-valor]", "100"); a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
     ok(a.evaluate("window.__marca") == 1, "a tela não recarregou a página")
-    ok("Já pago" in texto(a) and "R$ 120,00" in texto(a), "atualiza para já pago 100 e falta 120")
+    ok("Valor pago" in texto(a) and "R$ 120,00" in texto(a), "atualiza para já pago 100 e falta 120")
     ok(a.locator("[data-pagamento]").count() == 1, "o pagamento aparece como uma linha tocável")
 
     # tocar no pagamento: Corrigir / Apagar
@@ -69,7 +69,7 @@ with sync_playwright() as p:
     # quitar tudo: some o bloco de receber/cobrar
     a.click("[data-acao=recebi-visita]"); a.wait_for_selector("dialog[open]")
     a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
-    ok(a.locator("[data-bloco=receber-visita]").count() == 0 and "Falta pagar" not in texto(a), "quitado: some Registrar pagamento, Cobrar cliente e Falta pagar")
+    ok(a.locator("[data-bloco=receber-visita]").count() == 0 and "Valor a pagar" not in texto(a), "quitado: some Registrar pagamento, Cobrar cliente e Valor a pagar")
 
     ok(not erros, f"sem erros no console {erros}")
     nav.close()

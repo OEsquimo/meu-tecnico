@@ -293,3 +293,12 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 - Pagamentos são linhas tocáveis: tocar abre "Corrigir valor ou dia" / "Apagar pagamento". Os botões do serviço: Corrigir descrição (antigo Editar), Corrigir horários, Corrigir valor (ou Informar valor) e Excluir (confirmação dupla).
 - A visita tem um bloco "Falta receber" com "Registrar pagamento" (um serviço) ou "Recebi um valor" (vários) e "Cobrar cliente" (só o saldo). Some quando tudo está pago. Saíram: Marcar como pago, Marcar como a receber e "Cobrar no WhatsApp" por serviço, "Cliente pagou?" (admin) e "Ir até o cliente" em visita concluída.
 - Pagar, corrigir ou apagar um pagamento atualiza só o serviço alterado (sem recarregar a visita). As regras do Firestore não mudam.
+
+## Pacote 33 — Serviço concluído: valores, Editar e status
+
+- **Topo**: visita toda concluída não mostra Telefone nem Local (ficam no cadastro do cliente). Mantém Quando, Cliente e Técnicos.
+- **Valores (administrador)**: "Valor do serviço" é sempre o valor integral e não cai com pagamento parcial. Com pagamento parcial aparecem "Valor pago" e "Valor a pagar"; nada pago mostra só "Valor a pagar"; quitado mostra só "Valor do serviço" (o histórico de pagamentos fica em "Ver detalhes"). "Valor a pagar" nunca é negativo.
+- **Selo "Concluído a receber"**: calculado (serviço concluído, com valor definido e não quitado). Continua concluído para garantia, retorno e histórico; vira "Concluído" ao quitar. Serviço sem valor continua "Concluído".
+- **Editar** (só administrador; antigo "Corrigir descrição"): Tipo de serviço (só os tipos cadastrados; não muda valor nem pagamentos; o Desempenho passa a contar no novo tipo), O que foi feito e Informar pagamento (só com saldo). Pagamento acima do saldo é bloqueado e cada pagamento é gravado com data e hora, preservando os anteriores. Registrar pagamento, Recebi, Cobrar cliente, Corrigir horários, Corrigir valor e Excluir continuam.
+- **Excluir** serviço concluído pede uma confirmação (a segunda saiu).
+- Renomear um tipo no cadastro não altera os serviços já concluídos (o nome fica gravado em cada serviço). As regras do Firestore não mudam.

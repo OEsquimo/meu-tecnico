@@ -73,7 +73,11 @@ export function estaAtrasado(servico, agora = new Date()) {
  * Reagendado (roxo: era cancelado e ganhou nova data) e Agendado (azul).
  */
 export function seloDoServico(servico, agora = new Date()) {
-  if (servico.status === STATUS.CONCLUIDO) return { texto: 'Concluído', tom: 'verde' };
+  if (servico.status === STATUS.CONCLUIDO) {
+    // Pacote 33: concluído com valor definido e ainda não quitado = "Concluído a receber" (calculado; continua concluído para garantia/retorno).
+    if (servico.valorDefinido === true && servico.pago === false) return { texto: 'Concluído a receber', tom: 'amarelo' };
+    return { texto: 'Concluído', tom: 'verde' };
+  }
   if (servico.status === STATUS.CANCELADO) return { texto: 'Cancelado', tom: 'amarelo' };
   if (estaAtrasado(servico, agora)) return { texto: 'Atrasado', tom: 'vermelho' };
   if (servico.reagendado === true) return { texto: 'Reagendado', tom: 'roxo' };
