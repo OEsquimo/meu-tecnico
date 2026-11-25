@@ -145,7 +145,7 @@ export default async function montar(ctx) {
           ...(horarioConferido(l) === false ? [['Horários', 'Sugeridos pelo app, não conferidos (fora das médias)']] : []),
           ...(tempoNoCliente(l) !== null ? [['Tempo no cliente', textoDeMinutos(tempoNoCliente(l))]] : []),
           ...(l.atrasoMotivo ? [['Motivo do atraso', l.atrasoDetalhe ? `${l.atrasoMotivo} — ${l.atrasoDetalhe}` : l.atrasoMotivo]] : []),
-          ['Por', l.concluidoPorNome],
+          ['Técnico', l.concluidoPorNome],
           ['O que foi feito', l.descricao],
           ['Cliente pagou?', l.pago ? 'Sim' : 'Não'],
           ...linhasDeValor(valor, l),
@@ -209,18 +209,23 @@ export default async function montar(ctx) {
 
   /** Admin: "Ver detalhes" (recolhido): horários, tempo, atraso, quem concluiu, composição do valor e cobrança. */
   function detalhesDoAdmin(l, valor) {
-    const itens = [
+    const horarios = [
       ...(l.iniciadoEm instanceof Date ? [['Início', horaDeCampo(l.iniciadoEm)]] : []),
       ...(horarioConferido(l) === false ? [['Horários', 'Sugeridos pelo app, não conferidos (fora das médias)']] : []),
       ...(tempoNoCliente(l) !== null ? [['Tempo no cliente', textoDeMinutos(tempoNoCliente(l))]] : []),
       ...(l.atrasoMotivo ? [['Motivo do atraso', l.atrasoDetalhe ? `${l.atrasoMotivo} — ${l.atrasoDetalhe}` : l.atrasoMotivo]] : []),
-      ['Por', l.concluidoPorNome],
-      ...(valor ? [['Valor do serviço', formatarReais(valor.baseCentavos)], ...valor.extras.map((e) => [`Extra: ${e.descricao}`, formatarReais(e.valorCentavos)]), ...(valor.descontoCentavos > 0 ? [['Desconto', `- ${formatarReais(valor.descontoCentavos)}`]] : [])] : []),
+      ['Técnico', l.concluidoPorNome],
+    ].filter(([, v]) => v);
+    // Pacote 37: valores em bloco próprio, com o Total em destaque no fim.
+    const valores = [
+      ...(valor ? [['Valor do serviço', formatarReais(valor.baseCentavos)], ...valor.extras.map((e) => [`Extra: ${e.descricao}`, formatarReais(e.valorCentavos)]), ...(valor.descontoCentavos > 0 ? [['Desconto', `- ${formatarReais(valor.descontoCentavos)}`]] : []), ['Total', html`<strong class="dados__total">${formatarReais(valor.valorCentavos)}</strong>`]] : []),
       ...(l.cobradoEm && !l.pago ? [['Cobrado em', formatarDataBR(l.cobradoEm)]] : []),
     ].filter(([, v]) => v);
+    const itens = [...horarios, ...valores];
+    const bloco = (titulo, lista) => (lista.length === 0 ? '' : html`<div class="detalhes-bloco" data-bloco-detalhe="${titulo}"><h4 class="detalhes-bloco__titulo">${titulo}</h4>${listaDeDados(lista)}</div>`);
     const pagamentosNosDetalhes = valor && situacaoDePagamento(l, valor).saldoCentavos === 0 ? blocoDePagamentos(l, valor) : '';
     if (itens.length === 0 && !pagamentosNosDetalhes) return '';
-    return html`<details class="detalhes-servico" data-detalhes="${l.id}" ${detalhesAbertos.has(l.id) ? bruto('open') : ''}><summary>Ver detalhes</summary>${pagamentosNosDetalhes}${itens.length > 0 ? listaDeDados(itens) : ''}</details>`;
+    return html`<details class="detalhes-servico" data-detalhes="${l.id}" ${detalhesAbertos.has(l.id) ? bruto('open') : ''}><summary>Ver detalhes</summary>${pagamentosNosDetalhes}${bloco('Horários', horarios)}${bloco('Valores', valores)}</details>`;
   }
 
   /** Linhas "Valor / Extras / Desconto / Total" para a lista de dados (vazio se não pode ver). */
@@ -281,7 +286,7 @@ export default async function montar(ctx) {
             ...(abertas[0]?.reatribuidoDeNome ? [['Passou de', `${abertas[0].reatribuidoDeNome} (atraso)`]] : []),
             ['Observação', observacao],
             ...(pendentes.length > 0 && temConcluida ? [['Situação da visita', resumo]] : []),
-            ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Total da visita', formatarReais(totalDaVisita)]] : []),
+            ...(podeVerValores(sessao) && concluidasComValor > 1 ? [['Valor dos serviços', formatarReais(totalDaVisita)]] : []),
           ])}
           ${linhas.every((l) => l.status === STATUS.CONCLUIDO) ? '' : botao({ texto: 'Ir até o cliente', variante: 'secundario', iconeNome: 'navegar', acao: 'navegar', bloco: true })}
           ${usuario.admin && abertas.length > 0 && !inicioDaVisita(abertas) && paraISO(s.dataAgendada) === hojeISO() ? botao({ texto: 'Iniciar serviço', variante: 'secundario', iconeNome: 'relogio', acao: 'iniciar-visita', bloco: true }) : ''}

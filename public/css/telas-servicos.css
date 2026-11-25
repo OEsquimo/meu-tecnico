@@ -718,3 +718,11 @@
 }
 .detalhes-servico { margin: 6px 0; }
 .detalhes-servico > summary { cursor: pointer; font-weight: 600; color: var(--cor-primaria, #0b6e99); padding: 6px 0; }
+
+/* Pacote 37: "Ver detalhes" do concluído — valor numa linha só, rótulo longo quebra, dois blocos */
+.detalhes-servico .dados { grid-template-columns: minmax(0, 1fr) fit-content(60%); }
+.detalhes-servico .dados dd { text-align: right; overflow-wrap: normal; word-break: normal; }
+.detalhes-bloco { padding: 8px 0; }
+.detalhes-bloco + .detalhes-bloco { border-top: 1px solid var(--cor-borda, #dbe5ea); margin-top: 4px; padding-top: 12px; }
+.detalhes-bloco__titulo { margin: 0 0 8px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--cor-texto-suave); }
+.dados__total { font-size: 16px; }

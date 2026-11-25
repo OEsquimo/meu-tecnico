@@ -313,3 +313,8 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 
 - Nas telas do serviço e de concluir, o nome do cliente abre o cadastro dele (para editar), só para quem pode gerir clientes (administrador, ou técnico com essa permissão); sem permissão continua texto. A seta de voltar do cadastro retorna à tela de origem.
 - Na tela de concluir, o "Valor do serviço" com preço cadastrado aparece só como texto (sem caixa de digitação); tipo sem preço continua com campo para digitar.
+
+## Pacote 37 — Textos e "Ver detalhes"
+
+- "Por" (quem concluiu) passou a "Técnico". "Total da visita" passou a "Valor dos serviços" (aparece só com mais de um serviço concluído com valor).
+- "Ver detalhes" do administrador: blocos "Horários" (Início, Tempo no cliente, atraso, Técnico) e "Valores" (Valor do serviço, Extras, Desconto, Total em destaque, Cobrado em). O valor fica numa linha só e o rótulo longo quebra.
