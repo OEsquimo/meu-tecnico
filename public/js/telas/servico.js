@@ -170,6 +170,11 @@ export default async function montar(ctx) {
             ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-concluido', dados: { id: l.id }, pequeno: true })}
           </div>`}
         ${l.status === STATUS.CANCELADO && l.pendente === true && l.motivoPendencia && html`<div class="visita-obs">Motivo: ${l.motivoPendencia}</div>`}
+        ${l.status === STATUS.CANCELADO && usuario.admin && linhasDaTela.some((x) => x.status === STATUS.CONCLUIDO) && html`
+          <div class="acoes-cartao" data-acoes-cancelado="${l.id}">
+            ${botao({ texto: 'Reagendar', variante: 'secundario', iconeNome: 'relogio', href: `#/servico/${encodeURIComponent(l.id)}/editar?so=${encodeURIComponent(l.id)}`, pequeno: true })}
+            ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir-cancelado', dados: { id: l.id }, pequeno: true })}
+          </div>`}
         ${agendada && botaoDaLinha(l)}
         ${agendada && !usuario.admin && l.adicionadoPeloTecnico === true && html`
           <div class="acoes-cartao">
@@ -256,6 +261,11 @@ export default async function montar(ctx) {
     const aguardando = !agendado && canceladas.length > 0;
     const temConcluida = linhas.some((l) => l.status === STATUS.CONCLUIDO);
     const aguardandoSemConcluida = () => aguardando && !temConcluida;
+    // Com serviço concluído, os cancelados têm Reagendar/Excluir no próprio cartão: o rodapé só repete a ação com um cancelado;
+    // com vários, fica só "Excluir todos" (reagendar é um por vez, pelo cartão).
+    const cartoesComBotoes = usuario.admin && aguardando && temConcluida;
+    const botoesNoCartao = cartoesComBotoes && canceladas.length === 1;
+    const soExcluirTodos = cartoesComBotoes && canceladas.length > 1;
     const situacao = agendado ? seloDaLinha(abertas[0], new Date(), { curto: true }) : (aguardandoSemConcluida() ? seloDoServico(canceladas[0], new Date(), { curto: true }) : seloDoServico(linhas.find((l) => l.status === STATUS.CONCLUIDO) || linhas[0], new Date(), { curto: true }));
     const ligar = linkLigar(s.clienteWhatsapp);
     const whats = linkWhatsappDoCliente(s.clienteWhatsapp, '');
@@ -296,7 +306,7 @@ export default async function montar(ctx) {
           </div>
         </div>
 
-        ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? 'Há serviço pendente nesta visita. Toque em Editar e escolha uma nova data para ele, ou exclua se não for mais acontecer.' : 'Este agendamento foi cancelado. Toque em Editar e escolha uma nova data para reagendar, ou exclua se não for mais acontecer.' })}
+        ${aguardando && aviso({ tom: 'amarelo', texto: pendentes.length > 0 ? (botoesNoCartao ? 'Há serviço pendente nesta visita. Toque em Reagendar no serviço pendente para escolher uma nova data, ou exclua se não for mais acontecer.' : (temConcluida ? 'Há serviços pendentes nesta visita. Use Reagendar em cada serviço, ou Excluir todos se não for mais acontecer.' : 'Há serviço pendente nesta visita. Toque em Editar e escolha uma nova data para ele, ou exclua se não for mais acontecer.')) : 'Este agendamento foi cancelado. Toque em Editar e escolha uma nova data para reagendar, ou exclua se não for mais acontecer.' })}
         ${usuario.admin && cobraveis.length > 0 && html`
           <div class="cartao" data-bloco="receber-visita">
             <div class="item-lista__sub">Falta receber</div>
@@ -321,11 +331,11 @@ export default async function montar(ctx) {
           </section>`))}
 
         ${temServicoReal ? botao({ texto: 'Adicionar aparelhos e serviços', variante: 'secundario', iconeNome: 'mais', acao: 'adicionar-servico', bloco: true }) : ''}
-        ${usuario.admin && (agendado || aguardando) ? html`
+        ${usuario.admin && (agendado || aguardando) && !botoesNoCartao ? html`
           <div class="acoes-cartao">
-            ${botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${s.id}/editar`, pequeno: true })}
+            ${soExcluirTodos ? '' : botao({ texto: 'Editar', variante: 'secundario', iconeNome: 'editar', href: `#/servico/${s.id}/editar`, pequeno: true })}
             ${agendado ? botao({ texto: 'Cancelar', variante: 'secundario', acao: 'cancelar', pequeno: true }) : ''}
-            ${botao({ texto: 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', pequeno: true })}
+            ${botao({ texto: soExcluirTodos ? 'Excluir todos' : 'Excluir', variante: 'perigo', iconeNome: 'lixeira', acao: 'excluir', pequeno: true })}
           </div>` : ''}
         ${usuario.admin && temConcluida ? html`<p class="texto-suave texto-pequeno">Serviço concluído é registro e garantia: o administrador só corrige o que está errado, e excluir pede confirmação.</p>` : ''}
       </div>`);
@@ -488,6 +498,17 @@ export default async function montar(ctx) {
           } catch (e) { mostrarErro(e); }
         });
       },
+      'excluir-cancelado': async (el) => {
+        const linha = linhas.find((l) => l.id === el.dataset.id);
+        if (!linha || !await confirmar({ titulo: 'Excluir este serviço cancelado?', mensagem: `"${linha.tipoServicoNome}" sai desta visita. Não dá para desfazer.`, confirmar: 'Excluir', cancelar: 'Voltar', perigo: true })) return;
+        await comCarregando(el, async () => {
+          try {
+            await excluirServico(usuario.empresaId, linha.id);
+            toast('Serviço excluído.', 'sucesso');
+            seguirDepoisDeExcluir([linha.id]);
+          } catch (e) { mostrarErro(e); }
+        });
+      },
       'excluir-concluido': async (el) => {
         const linha = linhas.find((l) => l.id === el.dataset.id);
         if (!await confirmar({ titulo: 'Excluir este serviço concluído?', mensagem: `"${linha.tipoServicoNome}" sai do histórico e do financeiro (o valor também é apagado). Ele era registro e garantia do cliente. Não dá para desfazer.`, confirmar: 'Excluir', cancelar: 'Voltar', perigo: true })) return;
@@ -528,7 +549,8 @@ export default async function montar(ctx) {
         });
       },
       excluir: async (el) => {
-        if (!await confirmar({ titulo: 'Excluir este agendamento?', mensagem: 'Apaga os dados deste agendamento. Não apaga o cliente, os aparelhos dele nem serviços já concluídos. Não dá para desfazer.', confirmar: 'Excluir agendamento', cancelar: 'Voltar', perigo: true })) return;
+        const varios = linhas.some((l) => l.status === STATUS.CONCLUIDO) && linhas.filter((l) => l.status === STATUS.CANCELADO).length > 1;
+        if (!await confirmar({ titulo: varios ? 'Excluir todos os serviços cancelados?' : 'Excluir este agendamento?', mensagem: varios ? 'Apaga todos os serviços cancelados desta visita. Os serviços já concluídos continuam guardados. Não dá para desfazer.' : 'Apaga os dados deste agendamento. Não apaga o cliente, os aparelhos dele nem serviços já concluídos. Não dá para desfazer.', confirmar: 'Excluir agendamento', cancelar: 'Voltar', perigo: true })) return;
         await comCarregando(el, async () => {
           try {
             await excluirAgendamentoCompleto(usuario.empresaId, linhas);

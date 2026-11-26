@@ -203,7 +203,7 @@ export async function verificarAparelhosLivres({ empresaId, aparelhoIds, ignorar
  *                                não são apagadas; só acompanham o novo dia/hora e a observação.
  * @returns {Promise<string>} id do agendamento
  */
-export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [], regras = null }) {
+export async function salvarAgendamento({ empresaId, agendamentoId = null, existentes = [], cliente, endereco, tecnico = null, tecnicos = null, data, hora, observacao = '', linhas, origemRetornoId = null, preservar = [], regras = null, separar: separarPedido = false }) {
   const inicio = combinarDataHora(data, hora);
   const editando = Boolean(agendamentoId);
   // Editar mexe nas linhas agendadas; se o agendamento foi cancelado, nas canceladas (reagendar).
@@ -218,7 +218,7 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   }
   // Pendentes de uma visita que já teve serviços concluídos viram um agendamento NOVO:
   // a visita original fica só com o que foi feito (registro e garantia).
-  const separar = reagendando && fechadas.some((l) => l.status === STATUS.CONCLUIDO);
+  const separar = reagendando && (separarPedido || fechadas.some((l) => l.status === STATUS.CONCLUIDO));
   const id = (agendamentoId && !separar) ? agendamentoId : novoId(caminho(empresaId));
   const limpaPendencia = reagendando ? { pendente: false, motivoPendencia: '', reagendado: true } : {};
   const herdaReagendado = abertas.some((l) => l.reagendado === true);
@@ -293,6 +293,67 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
   return id;
+}
+
+/**
+ * Pacote 38: acha uma visita JÁ MARCADA do mesmo cliente, no mesmo endereço, no mesmo dia e horário e com o(s) mesmo(s)
+ * técnico(s), para oferecer "Juntar à visita já marcada". Devolve as linhas dessa visita, ou null.
+ */
+export async function acharVisitaParaJuntar({ empresaId, clienteId, enderecoId = null, inicio, tecnicoUids = [], ignorarIds = [] }) {
+  if (!clienteId || !(inicio instanceof Date) || tecnicoUids.length === 0) return null;
+  const agendados = await listarAgendados({ empresaId, de: new Date(inicio.getTime() - 60000), ate: new Date(inicio.getTime() + 60000) });
+  const candidata = agendados.find((l) => l.status === STATUS.AGENDADO && !ignorarIds.includes(l.id)
+    && l.clienteId === clienteId
+    && (l.enderecoId || null) === (enderecoId || null)
+    && l.dataAgendada instanceof Date && l.dataAgendada.getTime() === inicio.getTime()
+    && tecnicoUids.every((uid) => tecnicosDoServico(l).includes(uid)));
+  if (!candidata) return null;
+  return listarLinhasDoAgendamento(empresaId, candidata);
+}
+
+/**
+ * Pacote 38: junta um serviço cancelado (aguardando reagendamento) a uma visita já marcada. O serviço entra na visita
+ * (mesmo agendamentoId, dia e hora) e o tempo de cada técnico passa a ser a soma dos serviços da visita.
+ * Confere se os técnicos estão livres para o tempo total (sem contar a própria visita).
+ */
+export async function juntarServicoNaVisita({ empresaId, linha, visita, tecnicos, regras = null }) {
+  const abertas = visita.filter((l) => l.status === STATUS.AGENDADO);
+  if (abertas.length === 0 || linha.status !== STATUS.CANCELADO) {
+    throw new ErroApp('Não dá para juntar: a visita já não está mais agendada.', 'visita-fechada');
+  }
+  const chave = chaveDoAgendamento(abertas[0]);
+  const inicio = abertas[0].dataAgendada;
+  const comoLinhaDeCalculo = (l) => ({
+    duracaoMin: duracaoDoServico(l),
+    tecnicos: tecnicosDoServico(l).map((uid, i) => ({ uid, nome: nomesDosTecnicos(l)[i] || '' })),
+  });
+  const novaLinha = { duracaoMin: duracaoDoServico(linha), tecnicos };
+  const todas = [...abertas.map(comoLinhaDeCalculo), novaLinha];
+  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: chave, regras });
+  await verificarAparelhosLivres({ empresaId, aparelhoIds: [linha.aparelhoId], ignorarAgendamento: chave });
+  const minutos = minutosPorTecnico(todas);
+  const operacoes = abertas.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, { ...ocupacaoDaLinha(comoLinhaDeCalculo(l), minutos), atualizadoEm: AGORA }));
+  const ordem = Math.max(0, ...visita.map((l) => Number(l.ordem) || 0)) + 1;
+  operacoes.push(op.atualizar(`${caminho(empresaId)}/${linha.id}`, {
+    ...camposDosTecnicos(tecnicos),
+    ...ocupacaoDaLinha(novaLinha, minutos),
+    status: STATUS.AGENDADO,
+    agendamentoId: chave,
+    dataAgendada: inicio,
+    enderecoId: abertas[0].enderecoId ?? null,
+    local: abertas[0].local ?? linha.local,
+    obsAgendamento: abertas[0].obsAgendamento || '',
+    ordem,
+    pendente: false,
+    motivoPendencia: '',
+    reagendado: true,
+    atrasoPorTecnico: false,
+    atualizadoEm: AGORA,
+  }));
+  if (linha.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${linha.origemRetornoId}`, { retornoSituacao: 'agendado', atualizadoEm: AGORA }));
+  await gravar(operacoes);
+  invalidarCache(`${empresaId}:servicos`);
+  return chave;
 }
 
 /** Tempo que cada técnico da linha fica ocupado (por técnico) e o maior deles (`ocupacaoMin`, usado por serviços antigos). */

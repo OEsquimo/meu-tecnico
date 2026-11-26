@@ -1,7 +1,6 @@
 name: Publicar site
+# Pacote 38: só roda se você mandar (Actions → Run workflow). Quem publica a cada merge é o static.yml.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

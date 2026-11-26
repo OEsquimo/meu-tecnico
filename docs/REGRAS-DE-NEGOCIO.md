@@ -318,3 +318,12 @@ Gravações recusadas offline e com limite de 15 s (nada fica "fantasma" na fila
 
 - "Por" (quem concluiu) passou a "Técnico". "Total da visita" passou a "Valor dos serviços" (aparece só com mais de um serviço concluído com valor).
 - "Ver detalhes" do administrador: blocos "Horários" (Início, Tempo no cliente, atraso, Técnico) e "Valores" (Valor do serviço, Extras, Desconto, Total em destaque, Cobrado em). O valor fica numa linha só e o rótulo longo quebra.
+
+## Pacote 38 — Cancelado na visita, reagendar um de cada vez e juntar visitas
+
+- Tela de concluir: saiu a frase de ajuda do valor (o "(opcional)" de Extras e Desconto fica) e há mais espaço entre os blocos.
+- `pages.yml` ("Publicar site") passou a rodar só manualmente; a cada merge publica apenas o `static.yml`, o que evita o conflito de artifacts.
+- Visita com serviço concluído e serviço(s) cancelado(s) (administrador; o técnico só vê informação): cada cartão cancelado tem **Reagendar** e **Excluir**. O Reagendar do cartão reagenda SÓ aquele serviço (`?so=ID`): ele sai da visita antiga e vira um agendamento novo; os outros cancelados continuam na visita antiga.
+- Rodapé da visita com concluído: com **um** cancelado não há botões (os do cartão bastam); com **2 ou mais** só **Excluir todos** (sem Editar/Reagendar todos: cada serviço é reagendado pelo próprio cartão). Visita sem concluído mantém Editar/Excluir.
+- Ao reagendar um serviço para o MESMO dia, horário, endereço e técnico(s) de uma visita já marcada do mesmo cliente, o app pergunta **"Juntar à visita já marcada"** ou **"Marcar separado"**. Juntando, o técnico fica ocupado a soma do tempo dos serviços e a visita mostra todos os serviços num cartão/aviso só. Em horário diferente no mesmo dia valem as regras normais de disponibilidade; nessa tela, visitas do mesmo cliente e endereço não contam como ocupação do técnico (a conferência ao salvar ainda avisa de conflitos).
+- Regra geral: botões que repetem a mesma ação na mesma tela devem ser evitados.
