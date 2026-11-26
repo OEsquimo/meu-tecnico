@@ -177,7 +177,7 @@ export default async function montar(ctx) {
         ${editaValores ? editorDeValores({
     base: salvo?.valor ?? (precoDe(tipoInicial) === null ? '' : centavosParaCampo(precoDe(tipoInicial))),
     extras: salvo?.extras || [], desconto: salvo?.desconto || '',
-    ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : 'Valor do cadastro de tipos de serviço. Para ajustar, use Extras ou Desconto.',
+    ajudaValor: precoDe(tipoInicial) === null ? (usuario.admin ? '' : 'Se não souber, deixe vazio: o administrador confirma depois.') : '',
     travarBase: precoDe(tipoInicial) !== null,
   }) : (veValores ? valorSoParaLer(precoDe(tipoInicial)) : '')}
         ${editaValores && usuario.admin ? html`

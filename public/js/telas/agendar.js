@@ -37,7 +37,7 @@ import { icone } from '../nucleo/icones.js';
 import { listarClientes, buscarCliente } from '../servicos/clientes.js';
 import { listarAparelhosDoCliente } from '../servicos/aparelhos.js';
 import { tecnicosParaAtribuir } from '../servicos/equipe.js';
-import { buscarServico, listarAgendados, listarLinhasDoAgendamento, salvarAgendamento } from '../servicos/servicos.js';
+import { buscarServico, listarAgendados, listarLinhasDoAgendamento, salvarAgendamento, acharVisitaParaJuntar, juntarServicoNaVisita } from '../servicos/servicos.js';
 import { filtrarClientes, enderecoDoCliente } from '../dominio/clientes.js';
 import { validarAgendamento } from '../dominio/validacoes.js';
 import { resumoDoAparelho, tituloDoAparelho, descricaoTecnica } from '../dominio/aparelhos.js';
@@ -161,11 +161,25 @@ export default async function montar(ctx) {
     }
   }
 
+  /**
+   * Pacote 40: "?so=ID" (botão Reagendar do cartão de um serviço cancelado) reagenda SÓ aquele serviço.
+   * Os outros cancelados ficam fora desta edição: o serviço escolhido sai da visita antiga e vira um agendamento novo
+   * (os concluídos ficam com o registro e a garantia).
+   */
+  let reagendarSoEste = false;
+  function apenasEste(linhas) {
+    const so = consulta.get('so');
+    const alvo = so ? linhas.find((l) => l.id === so && l.status === STATUS.CANCELADO) : null;
+    reagendarSoEste = Boolean(alvo);
+    if (!alvo) return linhas;
+    return linhas.filter((l) => l.id === alvo.id || l.status === STATUS.CONCLUIDO);
+  }
+
   async function carregarParaEditar() {
     servico = await buscarServico(usuario.empresaId, params.id);
     if (!servico) { mostrarNaoEncontrado(raiz, 'Serviço não encontrado', 'Ele pode ter sido excluído.', '#/agenda'); return; }
     agendamentoId = chaveDoAgendamento(servico);
-    linhasExistentes = await listarLinhasDoAgendamento(usuario.empresaId, servico);
+    linhasExistentes = apenasEste(await listarLinhasDoAgendamento(usuario.empresaId, servico));
     // Só dá para mexer em agendamento ainda agendado ou cancelado (aguardando reagendamento). Concluído, não.
     if (linhasEditaveis(linhasExistentes).length === 0) {
       servico = null;
@@ -189,7 +203,7 @@ export default async function montar(ctx) {
       servico = await buscarServico(usuario.empresaId, params.id);
       if (!servico) { mostrarNaoEncontrado(raiz, 'Serviço não encontrado', 'Ele pode ter sido excluído.', '#/agenda'); return; }
       agendamentoId = chaveDoAgendamento(servico);
-      linhasExistentes = await listarLinhasDoAgendamento(usuario.empresaId, servico);
+      linhasExistentes = apenasEste(await listarLinhasDoAgendamento(usuario.empresaId, servico));
     }
     if (estado.cliente) {
       // O cliente pode ter sido editado: pega a ficha atualizada.
@@ -293,11 +307,22 @@ export default async function montar(ctx) {
   }
 
   /** Lê, no banco, quem já está ocupado em volta do dia escolhido. */
+  /**
+   * Serviços agendados em volta do dia (para saber quem está ocupado). Pacote 38: ao reagendar um serviço só, os serviços do
+   * MESMO cliente no MESMO endereço não contam como ocupação: o técnico que já estará lá pode atender os dois (se o horário
+   * for exatamente o mesmo, o app pergunta se junta à visita; se só se sobrepõem, a conferência ao salvar avisa).
+   */
+  async function listarOcupacao(periodo) {
+    const lista = await listarAgendados({ empresaId: usuario.empresaId, ...periodo });
+    if (!reagendarSoEste || !estado.cliente) return lista;
+    return lista.filter((l) => !(l.clienteId === estado.cliente.id && (l.enderecoId || null) === (estado.enderecoId || null)));
+  }
+
   async function carregarOcupacao({ avisar = true } = {}) {
     const inicio = inicioDoEstado(estado);
     if (!inicio) { ocupacao = []; return; }
     const meu = ++contadorOcupacao;
-    const lista = await listarAgendados({ empresaId: usuario.empresaId, de: new Date(inicio.getTime() - 24 * 3600000), ate: new Date(inicio.getTime() + 24 * 3600000) });
+    const lista = await listarOcupacao({ de: new Date(inicio.getTime() - 24 * 3600000), ate: new Date(inicio.getTime() + 24 * 3600000) });
     if (meu !== contadorOcupacao) return; // chegou resposta mais nova
     ocupacao = lista;
     const perdidos = limparTecnicosOcupados(contexto());
@@ -635,7 +660,7 @@ export default async function montar(ctx) {
     calCarregando = true;
     desenharQuando();
     try {
-      const lista = await listarAgendados({ empresaId: usuario.empresaId, de: new Date(calAno, calMes, 0), ate: new Date(calAno, calMes + 1, 2) });
+      const lista = await listarOcupacao({ de: new Date(calAno, calMes, 0), ate: new Date(calAno, calMes + 1, 2) });
       if (meu !== contadorCal || !ctx.ativo()) return;
       calGuardados.set(chave, lista);
       calAgendados = lista;
@@ -723,7 +748,7 @@ export default async function montar(ctx) {
       tecnicos,
       agendamentoId,
       // Só os agendados do mês do dia (com uma folga de 1 dia antes e 1 depois).
-      carregarMes: (ano, mes) => listarAgendados({ empresaId: usuario.empresaId, de: new Date(ano, mes, 0), ate: new Date(ano, mes + 1, 2) }),
+      carregarMes: (ano, mes) => listarOcupacao({ de: new Date(ano, mes, 0), ate: new Date(ano, mes + 1, 2) }),
     });
     if (!escolha || !ctx.ativo()) return;
     const mesmos = (a, b) => a.length === b.length && a.every((uid) => b.includes(uid));
@@ -1013,7 +1038,29 @@ export default async function montar(ctx) {
     await comCarregando(botaoSalvar, async () => {
       let id;
       try {
-        id = await salvarAgendamento({
+        // Pacote 38: reagendar um serviço só para o mesmo dia/hora/endereço/técnico de uma visita já marcada do mesmo cliente: pergunta se junta.
+        let juntar = null;
+        if (reagendarSoEste && linhas[0]?.id) {
+          const tecnicosEscolhidos = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]).filter(Boolean);
+          const visita = await acharVisitaParaJuntar({
+            empresaId: usuario.empresaId, clienteId: estado.cliente?.id, enderecoId: limpos.enderecoId || null,
+            inicio: new Date(`${limpos.data}T${limpos.hora}:00`), tecnicoUids: tecnicosEscolhidos.map((t) => t.uid), ignorarIds: [linhas[0].id],
+          });
+          if (visita) {
+            const duracao = visita.filter((l) => l.status === STATUS.AGENDADO).length;
+            const resposta = await escolher({
+              titulo: 'Já existe uma visita neste horário',
+              mensagem: `Este cliente já tem uma visita marcada para esse dia e horário, no mesmo endereço e com o mesmo técnico (${duracao} ${duracao === 1 ? 'serviço' : 'serviços'}). Juntar este serviço a ela? O técnico fica ocupado o tempo de todos os serviços somados.`,
+              opcoes: [{ id: 'juntar', rotulo: 'Juntar à visita já marcada' }, { id: 'separado', rotulo: 'Marcar separado' }],
+              cancelar: 'Voltar',
+            });
+            if (!resposta) return;
+            if (resposta === 'juntar') juntar = { visita, tecnicos: tecnicosEscolhidos };
+          }
+        }
+        if (juntar) {
+          id = await juntarServicoNaVisita({ empresaId: usuario.empresaId, linha: linhasExistentes.find((l) => l.id === linhas[0].id), visita: juntar.visita, tecnicos: juntar.tecnicos, regras: regrasDaEmpresa(sessao.empresa) });
+        } else id = await salvarAgendamento({
           empresaId: usuario.empresaId,
           agendamentoId,
           existentes: linhasExistentes,
@@ -1026,6 +1073,7 @@ export default async function montar(ctx) {
           linhas,
           origemRetornoId,
           preservar: linhasPreservadas,
+          separar: reagendarSoEste, // Pacote 40: reagendar só um serviço cancelado cria um agendamento novo para ele
           regras: regrasDaEmpresa(sessao.empresa),
         });
       } catch (erro) {
