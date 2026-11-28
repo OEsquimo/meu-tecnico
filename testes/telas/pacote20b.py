@@ -99,7 +99,7 @@ with sync_playwright() as p:
     fechar()
 
     # ---------------- Cancelar ----------------
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.locator("dialog[open] [data-resposta=sim]").click(); pag.wait_for_timeout(1800)
     ok(pag.locator(PAINEL).count() == 1 and "cancelamento" in pag.inner_text(PAINEL), "depois de cancelar abre o painel")
     mt = mensagem(tid); mc = mensagem("cliente")

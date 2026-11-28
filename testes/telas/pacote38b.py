@@ -1,5 +1,5 @@
 """
-PACOTE 38 (final, modo demonstração): rodapé só com "Excluir todos" e pergunta "Juntar à visita já marcada" ao reagendar no mesmo horário.
+PACOTE 38 (final, modo demonstração): rodapé só com "Excluir todos" e pergunta "Juntar ao agendamento já marcado" ao reagendar no mesmo horário.
 Uso: node scripts/servir-local.mjs &   python3 testes/telas/pacote38b.py
 """
 import sys, os
@@ -58,8 +58,8 @@ with sync_playwright() as p:
     url_nova = a.url
     a.goto(url_visita); a.wait_for_timeout(1800)
     reagendar_primeiro()
-    ok(a.locator("dialog:has-text('Juntar à visita já marcada')").count() == 1, "pergunta se junta à visita já marcada")
-    a.locator("dialog button:has-text('Juntar à visita já marcada')").click(); a.wait_for_timeout(2000)
+    ok(a.locator("dialog:has-text('Juntar ao agendamento já marcado')").count() == 1, "pergunta se junta à visita já marcada")
+    a.locator("dialog button:has-text('Juntar ao agendamento já marcado')").click(); a.wait_for_timeout(2000)
     corpo = a.inner_text("#conteudo")
     ok("Limpeza" in corpo and "Manutenção preventiva" in corpo, "visita juntada mostra os dois serviços")
     a.goto(url_visita); a.wait_for_timeout(1800)

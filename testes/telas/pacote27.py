@@ -138,8 +138,9 @@ with sync_playwright() as p:
     ok(a.locator("[data-resumo=equipe]").count() == 1, "dá para voltar para a lista da equipe")
 
     ir(a, "/servico/s-c1")
-    ok("Corrigir horários" in texto(a), "serviço concluído tem 'Corrigir horários'")
-    a.click("[data-acao=corrigir-horarios]"); a.wait_for_selector("dialog[open]")
+    a.click("[data-acao=editar-menu]"); a.wait_for_selector("dialog[open]")
+    ok("Horários" in a.inner_text("dialog[open]"), "serviço concluído tem 'Horários' no menu Editar (Pacote 39)")
+    a.click("dialog[open] [data-escolha=horarios]"); a.wait_for_selector("dialog[open]")
     a.fill("dialog[open] [data-inicio]", "11:00"); a.fill("dialog[open] [data-conclusao]", "10:00")
     a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(300)
     ok("A conclusão não pode ser antes do início." in a.inner_text("dialog[open]"), "corrigir: conclusão antes do início é bloqueada")

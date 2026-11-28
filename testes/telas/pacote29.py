@@ -115,7 +115,7 @@ with sync_playwright() as p:
     a.locator("[data-acao=tecnico]").first.click(); a.wait_for_timeout(600)
     ok(a.locator("[data-linha=horarios-informados]").count() == 1 and "Horários informados" in texto(a), "o detalhe do técnico tem a linha 'Horários informados'")
     ir(a, "/servico/s-c1")
-    a.click("[data-acao=corrigir-horarios]"); a.wait_for_selector("dialog[open]")
+    a.click("[data-acao=editar-menu]"); a.wait_for_selector("dialog[open]"); a.click("dialog[open] [data-escolha=horarios]"); a.wait_for_selector("dialog[open] [data-inicio]")  # Pacote 39: Horários fica no menu Editar
     a.fill("dialog[open] [data-inicio]", "10:00"); a.fill("dialog[open] [data-conclusao]", "11:00")
     a.click("dialog[open] [data-resposta=sim]"); a.wait_for_timeout(1500)
     a.locator("summary").first.click(); a.wait_for_timeout(300)

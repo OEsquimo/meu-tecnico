@@ -26,7 +26,7 @@ with sync_playwright() as p:
     entrar(pag, "tecnico@meutecnico.app")
     pag.locator("#conteudo a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
     ok(pag.locator("[data-acao=editar-adicionado], [data-acao=excluir-adicionado]").count() == 0, "serviço do administrador: técnico sem Editar/Excluir")
-    ok(pag.locator("[data-acao=excluir], [data-acao=cancelar]").count() == 0, "técnico sem Cancelar/Excluir da visita")
+    ok(pag.locator("[data-acao=excluir], [data-acao=cancelar], [data-acao=excluir-servico], [data-acao=cancelar-servico]").count() == 0, "técnico sem Cancelar/Excluir da visita")
     ok(pag.locator("a:has-text('Ir até o cliente'), button:has-text('Ir até o cliente')").count() == 1 and sem_rolagem(), "Ir até o cliente em linha própria, sem rolagem lateral")
     pag.click("[data-acao=adicionar-servico]"); pag.wait_for_timeout(500)
     pag.locator("dialog [data-escolha]").first.click(); pag.wait_for_timeout(600)

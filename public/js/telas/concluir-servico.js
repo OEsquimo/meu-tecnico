@@ -56,7 +56,7 @@ export default async function montar(ctx) {
     const n = abertos.length;
     const nomes = abertos.map((l) => l.tipoServicoNome || 'Serviço a definir').join(', ');
     const r = await escolher({
-      titulo: `${n} ${n === 1 ? 'serviço pendente' : 'serviços pendentes'} nesta visita`,
+      titulo: `${n} ${n === 1 ? 'serviço pendente' : 'serviços pendentes'} neste agendamento`,
       mensagem: `${nomes}. Dá para fazer ainda hoje?`,
       opcoes: [
         { id: 'hoje', rotulo: 'Fazer ainda hoje' },
@@ -338,7 +338,7 @@ export default async function montar(ctx) {
           const aindaAberto = await perguntarPendentes(s);
           if (aindaAberto) {
             // Ainda há serviço aberto nesta visita: volta para ela para concluir o resto.
-            toast('Serviço concluído! Ainda falta concluir o resto desta visita.', 'sucesso');
+            toast('Serviço concluído! Ainda falta concluir o resto deste agendamento.', 'sucesso');
             ir(`/servico/${encodeURIComponent(aindaAberto)}`, { substituir: true });
           } else {
             toast('Serviço concluído!', 'sucesso');

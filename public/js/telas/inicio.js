@@ -195,7 +195,7 @@ export default async function montar(ctx) {
     return avisos;
   }
 
-  /** "Próxima visita" em destaque (ou convite para agendar). */
+  /** "Próximo agendamento" em destaque (ou convite para agendar). */
   function blocoProximo(visita, totalHoje) {
     if (!visita) {
       return html`<div class="cartao">
@@ -210,9 +210,9 @@ export default async function montar(ctx) {
     const dia = visita.linhas[0].dataAgendada;
     const ehHoje = paraISO(dia) === hojeISO();
     return html`
-      <section class="pilha pilha--pequena" aria-label="Próxima visita">
+      <section class="pilha pilha--pequena" aria-label="Próximo agendamento">
         <div class="texto-suave texto-pequeno negrito">
-          Próxima visita · ${ehHoje ? 'hoje' : formatarDiaExtenso(dia)}${totalHoje > 1 && ehHoje ? ` (${totalHoje} hoje)` : ''}
+          Próximo agendamento · ${ehHoje ? 'hoje' : formatarDiaExtenso(dia)}${totalHoje > 1 && ehHoje ? ` (${totalHoje} hoje)` : ''}
         </div>
         ${cartaoDaVisita(visita, { mostrarTecnico: true, acoes: true, editar: true })}
       </section>`;

@@ -86,7 +86,7 @@ with sync_playwright() as p:
         horas = pag.locator(f"{SELETOR} [data-acao=seletor-hora]:not([disabled])")
         horas.last.click(); pag.click(f"{SELETOR} [data-acao=seletor-confirmar]"); pag.wait_for_timeout(300)
         pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
-        pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+        pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
         pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
         pag.evaluate("location.hash='#/agenda'"); pag.wait_for_timeout(1500)
         ok("Cancelado" in pag.inner_text("#conteudo").split("Agendar hoje")[-1], "Agenda: o cancelado de hoje aparece no dia de hoje")

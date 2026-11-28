@@ -94,17 +94,17 @@ with sync_playwright() as p:
     url_visita = pag.url  # editar um agendamento só com 'Serviço a definir' regrava a linha (id novo)
 
     # ---- Reagendar cancelado: mesmo dia e hora é permitido ----
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir(url_visita.split("#")[1])
-    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
+    pag.locator("a:has-text('Reagendar')").first.click(); pag.wait_for_timeout(1200)
     ok("está cancelado" in texto() and "14/04/2031" in pag.inner_text("#botao-quando"), "reagendar abre com o dia e a hora de antes")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url and "Reagendado" in texto() and "10:00" in texto(), "salvou no mesmo dia e hora: ficou 'Reagendado'")
     url_visita = pag.url
 
     # ---- Reagendar com o técnico ocupado: bloqueia e nada muda ----
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/agenda"); ir("/agendar")
     pag.locator("[data-acao=escolher-cliente]", has_text="Maria Souza").click(); pag.wait_for_timeout(600)
@@ -112,7 +112,7 @@ with sync_playwright() as p:
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url, "outro agendamento ocupou o horário do Rafael")
     ir(url_visita.split("#")[1])
-    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
+    pag.locator("a:has-text('Reagendar')").first.click(); pag.wait_for_timeout(1200)
     q2 = pag.inner_text("#botao-quando")
     ok("Rafael" not in q2 and "14/04/2031" in q2 and "10:00" in q2, f"Rafael ocupado sai do campo 'Quando'; outro técnico livre assume ({q2!r})")
     pag.click("[data-acao=abrir-seletor]"); pag.wait_for_selector(f"{SELETOR}[open]"); pag.wait_for_timeout(700)
