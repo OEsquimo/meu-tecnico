@@ -55,8 +55,8 @@ with sync_playwright() as p:
     ok("/servico/" in pag.url, "tocar no resumo abre a página do agendamento")
     t = pag.inner_text("#conteudo")
     ok("Maria Souza" in t and "Limpeza" in t and "Split" in t, "a página mostra cliente, serviço e aparelho")
-    ok(pag.locator("a:has-text('Concluir serviço')").count() >= 1 and pag.locator("[data-acao=cancelar]").count() == 1
-       and pag.locator("[data-acao=excluir]").count() == 1 and pag.locator("a:has-text('Editar')").count() >= 1
+    ok(pag.locator("a:has-text('Concluir serviço')").count() >= 1 and pag.locator("[data-acao=cancelar-servico]").count() == 1
+       and pag.locator("[data-acao=excluir-servico]").count() == 1 and pag.locator("a:has-text('Editar')").count() >= 1
        and pag.locator("[data-acao=navegar]").count() == 1, "a página tem Concluir, Editar, Cancelar, Excluir e Ir até o cliente")
 
     # Concluídos: um cartão por agendamento, com dia, cliente, status, técnico e serviços

@@ -94,17 +94,10 @@ with sync_playwright() as p:
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Quarto")
     pag.locator("[data-acao=adicionar-servico]").nth(1).click(); pag.wait_for_timeout(300); dialogo("Manutenção")
     ok(pag.locator(".agenda-aparelho").count() == 2 and pag.locator(".agenda-servico").count() == 3, "2 aparelhos e 3 serviços em cartões")
-    cx = lambda i: pag.locator(".agenda-servico").nth(i).locator("input[type=checkbox]")
-    ok(pag.locator(".agenda-servico").nth(0).locator(".tecnico-opcao").count() >= 2 and cx(0).evaluate_all("l => l.filter(c => c.checked).length") == 1, "cada serviço tem a sua lista de técnicos, com um já marcado")
-    cx(2).first.uncheck(); pag.wait_for_timeout(200)  # tira o técnico sugerido do último serviço...
-    pag.locator(".agenda-servico").nth(2).locator("input[type=checkbox]").last.check(); pag.wait_for_timeout(300)  # ...e marca outro
-    # vários técnicos no primeiro serviço: marca todos
-    n0 = cx(0).count()
-    for i in range(n0): cx(0).nth(i).check()
-    pag.wait_for_timeout(300)
-    ok(cx(0).evaluate_all("l => l.filter(c => c.checked).length") == n0 and n0 >= 2, "um serviço aceita mais de um técnico")
-    cx(0).first.uncheck(); pag.wait_for_timeout(300)
-    ok(cx(0).evaluate_all("l => l.filter(c => c.checked).length") == n0 - 1, "desmarcar um técnico mantém os outros")
+    # Pacote 39: o agendamento tem UM grupo de técnicos (igual para todos os serviços), escolhido junto com dia e hora.
+    ok(pag.locator(".agenda-servico input[type=checkbox]").count() == 0, "técnicos não são mais escolhidos serviço a serviço")
+    qd = pag.inner_text("#botao-quando")
+    ok("10/03/2031" in qd and "14:00" in qd, f"o campo 'Quando' mostra o dia e a hora do agendamento ({qd!r})")
     ok(pag.locator("textarea").count() == 0, "observações começam recolhidas (só o botão '+ Observação')")
     ok(pag.locator("[data-acao=editar-servico]").count() == 3, "cada serviço tem o botão Editar")
     # Editar e Remover do aparelho ficam lado a lado
@@ -119,8 +112,8 @@ with sync_playwright() as p:
     pag.fill("textarea[name^=obsServico-]", "Filtro sujo")
     pag.locator("[data-acao=alternar-obs][data-tipo=agendamento]").click(); pag.wait_for_timeout(300)
     pag.fill("textarea[name=observacao]", "Portão azul")
-    # trocar o técnico (redesenha a tela) não fecha as observações abertas
-    cx(1).first.check(); pag.wait_for_timeout(300)
+    # escolher o horário de novo (redesenha a tela) não fecha as observações abertas
+    agendar_data("2031-03-10", "14:00"); pag.wait_for_timeout(300)
     ok(pag.locator("textarea").count() == 3, "observações abertas continuam abertas depois de redesenhar")
     # Editar serviço: troca o tipo e a duração só deste serviço
     pag.locator("[data-acao=editar-servico]").nth(1).click(); pag.wait_for_timeout(300); dialogo("Instalação")
@@ -135,12 +128,14 @@ with sync_playwright() as p:
     ok("Aparelho antigo" in texto and "Filtro sujo" in texto and "Portão azul" in texto, "observações do aparelho, do serviço e do agendamento aparecem")
     url_visita = pag.url
 
-    # 4) editar o agendamento: remover um serviço e trocar o horário
-    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
-    ok(pag.locator(".agenda-servico").count() == 3, "editar abre os 3 serviços")
-    pag.locator("[data-acao=remover-servico]").first.click(); pag.wait_for_timeout(400)
+    # 4) Pacote 39: Reagendar (topo) muda dia, hora e técnicos do agendamento inteiro, sem lista de serviços;
+    #    remover um serviço é pelo Excluir do cartão dele.
+    pag.locator("[data-bloco=todo-agendamento] a:has-text('Reagendar')").click(); pag.wait_for_timeout(1200)
+    ok(pag.locator(".agenda-servico").count() == 0, "Reagendar do topo não mostra a lista de aparelhos e serviços")
     agendar_data("2031-03-10", "13:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
+    pag.locator("[data-acao=excluir-servico]").first.click(); pag.wait_for_timeout(400)
+    pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1500)
     texto = pag.inner_text("#conteudo")
     ok(texto.count("Concluir serviço") == 2 and "13:00" in texto, "edição removeu 1 serviço e mudou o horário")
     url_visita = pag.url  # uma linha que ainda existe
@@ -218,7 +213,7 @@ with sync_playwright() as p:
     pag.locator("summary").first.click(); pag.wait_for_timeout(300)  # Pacote 32: a composição do valor fica em "Ver detalhes"
     txt = pag.inner_text("#conteudo")
     ok("Extra: Peça" in txt and "Desconto" in txt and "Valor" in txt, "detalhe mostra extra, desconto e valor")
-    pag.locator("a:has-text('Corrigir valor')").first.click(); pag.wait_for_timeout(800)
+    pag.click("[data-acao=editar-menu]"); pag.wait_for_selector("dialog[open]"); pag.click("dialog[open] [data-escolha=valor]"); pag.wait_for_timeout(800)  # Pacote 39: valor fica no menu Editar
     ok(pag.input_value("input[name=desconto]") == "20,00" and pag.locator("input[name=extraDescricao]").count() == 1, "corrigir valor abre com os dados gravados")
     pag.fill("input[name=desconto]", "30,00"); pag.click("#form-valor [type=submit]"); pag.wait_for_timeout(900)
     pag.locator("summary").first.click(); pag.wait_for_timeout(300)

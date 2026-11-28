@@ -66,7 +66,7 @@ with sync_playwright() as p:
     ir("/")
     # Pacote 22: o cartão do Início é só resumo; Cancelar e Excluir ficam na página do agendamento que ele abre.
     pag.locator(".servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1000)
-    ok(pag.locator("[data-acao=cancelar]").count() == 1 and pag.locator("[data-acao=excluir]").count() == 1, "a página da próxima visita tem Cancelar e Excluir")
+    ok(pag.locator("[data-acao=cancelar-servico]").count() == 1 and pag.locator("[data-acao=excluir-servico]").count() == 1, "a página da próxima visita tem Cancelar e Excluir")
     ir("/")
     ok(sem_rolagem_lateral(), "Início sem rolagem lateral (390px)")
 
@@ -81,7 +81,7 @@ with sync_playwright() as p:
     ir("/agenda")
     link = pag.locator("#conteudo a[href^='#/servico/']").first
     link.click(); pag.wait_for_timeout(900)
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/reagendamentos")
     ok(pag.locator('.selo:has-text("Cancelado")').count() >= 1 and "Cancelado — aguardando" not in texto(), "cancelado mostra selo curto 'Cancelado'")
@@ -97,7 +97,7 @@ with sync_playwright() as p:
     v = pag.locator("input[name=valor]")
     if v.count() and not v.input_value(): v.fill("100")
     pag.click("#form-concluir [type=submit]"); pag.wait_for_timeout(1200)
-    ok("serviço pendente nesta visita" in pag.inner_text("dialog"), "ao concluir, pergunta sobre o serviço que sobrou")
+    ok("serviço pendente neste agendamento" in pag.inner_text("dialog"), "ao concluir, pergunta sobre o serviço que sobrou")
     ok("Fazer ainda hoje" in pag.inner_text("dialog") and "Não deu para fazer" in pag.inner_text("dialog"), "opções 'Fazer ainda hoje' e 'Não deu para fazer'")
     pag.locator("dialog [data-escolha=nao]").click(); pag.wait_for_timeout(500)
     ok("Por que ficou pendente?" in pag.inner_text("dialog"), "pergunta o motivo")

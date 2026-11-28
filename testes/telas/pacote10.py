@@ -34,11 +34,11 @@ with sync_playwright() as p:
     novo_agendamento("Maria Souza")
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300); dialogo("Quarto")
     pag.locator("[data-acao=adicionar-servico]").first.click(); pag.wait_for_timeout(300); dialogo("Limpeza")
-    ok(pag.locator(".aviso-neutro").count() == 1 and "Escolha o dia e o horário" in pag.inner_text(".aviso-neutro"), "sem dia e hora: aviso neutro no cartão do serviço")
+    # Pacote 39: não há lista de técnicos por serviço; os técnicos livres aparecem no seletor de dia e hora.
     ok("Nenhum técnico está livre" not in texto(), "sem dia e hora: não diz que não há técnico livre")
-    ok(pag.locator(".agenda-servico input[type=checkbox]").count() == 0, "sem dia e hora: ainda não há lista de técnicos")
+    ok(pag.locator(".agenda-servico input[type=checkbox]").count() == 0, "sem dia e hora: não há lista de técnicos nos serviços")
     escolher_quando(pag, "2031-06-10", "09:00")
-    ok(pag.locator(".aviso-neutro").count() == 0 and pag.locator(".agenda-servico input[type=checkbox]").count() >= 1, "escolhido o dia e a hora: some o aviso e aparecem os técnicos livres")
+    ok(pag.locator(".aviso-neutro").count() == 0 and "10/06/2031" in pag.inner_text("#botao-quando"), "escolhido o dia e a hora: o campo 'Quando' mostra o horário e não há aviso")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok("/servico/" in pag.url, "agendou para 10/06/2031")
 
@@ -152,10 +152,10 @@ with sync_playwright() as p:
     escolher_quando(pag, "2031-06-11", "10:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     url_visita = pag.url
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir(url_visita.split("#")[1])
-    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
+    pag.locator("a:has-text('Reagendar')").first.click(); pag.wait_for_timeout(1200)
     t = texto()
     ok("está cancelado" in t and "volta para" not in t and "estava cancelado" not in t, "o aviso diz que o agendamento está cancelado, sem prometer o status")
     pag.click("#botao-salvar")
@@ -163,15 +163,15 @@ with sync_playwright() as p:
     ok("Agendamento reagendado" in pag.inner_text(".aviso-rapido"), f"depois de salvar: 'Agendamento reagendado' ({pag.inner_text('.aviso-rapido')!r})")
     pag.wait_for_timeout(1200)
     ok("Reagendado" in texto(), "o agendamento aparece como Reagendado")
-    # edição comum continua dizendo "atualizado"
+    # edição comum continua dizendo "atualizado" (Pacote 39: o Editar do cartão edita só o serviço)
     pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1200)
     ok("está cancelado" not in texto(), "agendamento já reagendado não mostra o aviso de cancelado")
     pag.click("#botao-salvar")
     try:
-        pag.wait_for_selector(".aviso-rapido:has-text('Agendamento atualizado')", timeout=4000); achou = True
+        pag.wait_for_selector(".aviso-rapido:has-text('Serviço atualizado')", timeout=4000); achou = True
     except Exception:
         achou = False
-    ok(achou, f"edição comum continua com 'Agendamento atualizado' ({pag.locator('.aviso-rapido').all_inner_texts()})")
+    ok(achou, f"edição comum continua com 'Serviço atualizado' ({pag.locator('.aviso-rapido').all_inner_texts()})")
     # ---- Técnico comum: só azul, nunca vermelho ----
     nav2 = p.chromium.launch(); pg2 = nav2.new_page(viewport={"width": 390, "height": 844}); pg2.add_init_script(path='testes/telas/sem-aviso.js')
     erros2 = []

@@ -26,7 +26,7 @@
 //     tira só deste agendamento; excluir o cadastro é na ficha do cliente.
 // =============================================================================
 
-import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, levarAte } from '../nucleo/ui.js';
+import { html, mostrar, aoClicar, aoEnviar, lerCampos, mostrarErrosNosCampos, limparErrosGerais, comCarregando, esperarDigitar, toast, escolher, confirmar, levarAte } from '../nucleo/ui.js';
 import { cabecalho, botao, aviso, avatar, estadoVazio, esqueletos, campoTextoLongo, campoPilulas, selo } from '../nucleo/componentes.js';
 import { sessao, tiposAtivos } from '../nucleo/sessao.js';
 import { menorDuracaoDosTipos, escolherTecnicoEquilibrado } from '../dominio/disponibilidade.js';
@@ -54,7 +54,7 @@ import { expedienteDaEmpresa, regrasDaEmpresa } from '../dominio/expediente.js';
 import {
   estadoInicial, novoGrupo, novoServico, inicioDoEstado, todosOsServicos, textoDoRetorno, duracaoDoTipo, duracaoDoServicoNaTela,
   DURACOES_OFERECIDAS, textoDaDuracao, problemasDoAgendamento,
-  tecnicosLivresParaServico, tecnicosLivresParaAgendamento, limparTecnicosOcupados, tecnicosSugeridos,
+  tecnicosLivresParaAgendamento, limparTecnicosOcupados, tecnicosSugeridos,
   duracaoNecessaria, pendenciasDoAgendamento, montarLinhas, estadoDeLinhas, guardarRascunho, pegarRascunho, descartarRascunho,
 } from './agendamento-comum.js';
 
@@ -66,8 +66,8 @@ export default async function montar(ctx) {
   const { raiz, params, consulta } = ctx;
   const usuario = contextoDoUsuario();
   const editando = Boolean(params.id);
-  const titulo = editando ? 'Editar agendamento' : 'Agendar serviço';
-  const topo = cabecalho({ titulo, voltarPara: true });
+  // Pacote 39: o título acompanha o que a pessoa está fazendo (reagendar o agendamento todo, ou editar/reagendar um serviço só).
+  let topo = cabecalho({ titulo: editando ? 'Reagendar agendamento' : 'Agendar serviço', voltarPara: true });
   let desligar = () => {};
   let ouvintes = [];
 
@@ -79,6 +79,12 @@ export default async function montar(ctx) {
   let linhasExistentes = []; // todas as linhas do agendamento em edição
   let quandoOriginal = ''; // 'AAAA-MM-DD HH:MM' do agendamento antes de editar (para saber se mudou o dia ou a hora)
   let agendamentoId = null;
+  let soAgendado = false; // Pacote 39: "Editar" do cartão de um serviço agendado: mexe só nele
+  let alvoDoServico = null; // id do serviço quando só ele está sendo editado/reagendado
+  let tecnicosOriginais = []; // técnicos do agendamento antes de editar
+  let outrosAgendados = 0; // quantos outros serviços agendados ficam no agendamento antigo
+  let aparelhoDoAlvo = '';
+  let aparelhosDosOutros = new Set(); // aparelhos dos outros serviços agendados (um aparelho só tem um agendamento aberto)
   let origemRetornoId = null;
   let pedidoDoCliente = null; // pedido que veio do link de horários (só em agendamento novo)
   let pedidoSemVaga = false; // o horário pedido já não está livre
@@ -108,7 +114,17 @@ export default async function montar(ctx) {
     // O administrador aparece na lista como "Nome (eu)"; dentro do serviço guardamos só o nome.
     nome: t.uid === usuario.uid ? (usuario.nome || 'Administrador') : t.nome,
   }]));
-  const contexto = () => ({ estado, tecnicos, tiposPorId: tiposPorId(), agendados: ocupacao, agendamentoId });
+  // Editando só UM serviço agendado, os outros serviços do mesmo agendamento continuam ocupando os técnicos: não se ignora o grupo.
+  const agendamentoParaChecar = () => (soAgendado ? null : agendamentoId);
+  const modoServico = () => reagendarSoEste || soAgendado;
+  // Um aparelho só tem UM agendamento aberto: se outro serviço do mesmo aparelho continua neste agendamento, o dia, a hora e os técnicos
+  // não mudam só para este serviço (mudam para o agendamento todo, em Reagendar).
+  const quandoTravado = () => soAgendado && Boolean(aparelhoDoAlvo) && aparelhosDosOutros.has(aparelhoDoAlvo);
+  const contexto = () => ({ estado, tecnicos, tiposPorId: tiposPorId(), agendados: ocupacao, agendamentoId: agendamentoParaChecar() });
+  /** Um agendamento = um grupo de técnicos (um ou mais) para todos os serviços. */
+  function sincronizarTecnicos() {
+    for (const s of todosOsServicos(estado)) s.tecnicoUids = [...estado.tecnicoUids];
+  }
 
   // ---------------------------------------------------------------------------
   // Carregamento
@@ -169,8 +185,14 @@ export default async function montar(ctx) {
   let reagendarSoEste = false;
   function apenasEste(linhas) {
     const so = consulta.get('so');
-    const alvo = so ? linhas.find((l) => l.id === so && l.status === STATUS.CANCELADO) : null;
-    reagendarSoEste = Boolean(alvo);
+    const alvo = so ? linhas.find((l) => l.id === so && (l.status === STATUS.CANCELADO || l.status === STATUS.AGENDADO)) : null;
+    reagendarSoEste = Boolean(alvo) && alvo.status === STATUS.CANCELADO;
+    soAgendado = Boolean(alvo) && alvo.status === STATUS.AGENDADO;
+    alvoDoServico = alvo ? alvo.id : null;
+    outrosAgendados = alvo ? linhas.filter((l) => l.status === STATUS.AGENDADO && l.id !== alvo.id).length : 0;
+    aparelhosDosOutros = new Set(alvo ? linhas.filter((l) => l.status === STATUS.AGENDADO && l.id !== alvo.id).map((l) => l.aparelhoId).filter(Boolean) : []);
+    aparelhoDoAlvo = alvo?.aparelhoId || '';
+    topo = cabecalho({ titulo: reagendarSoEste ? 'Reagendar serviço' : (soAgendado ? 'Editar serviço' : 'Reagendar agendamento'), voltarPara: true });
     if (!alvo) return linhas;
     return linhas.filter((l) => l.id === alvo.id || l.status === STATUS.CONCLUIDO);
   }
@@ -192,6 +214,8 @@ export default async function montar(ctx) {
       tipoExiste: (id) => sessao.tipos.some((t) => t.id === id),
     });
     if (estado.tecnicoUids.length === 0) estado.tecnicoUids = tecnicosDoServico(servico);
+    sincronizarTecnicos();
+    tecnicosOriginais = [...estado.tecnicoUids];
     quandoOriginal = `${estado.data} ${estado.hora}`;
   }
 
@@ -306,7 +330,6 @@ export default async function montar(ctx) {
     estado.grupos = estado.grupos.filter((g) => g.aparelhoId === '' || aparelhos.some((a) => a.id === g.aparelhoId));
   }
 
-  /** Lê, no banco, quem já está ocupado em volta do dia escolhido. */
   /**
    * Serviços agendados em volta do dia (para saber quem está ocupado). Pacote 38: ao reagendar um serviço só, os serviços do
    * MESMO cliente no MESMO endereço não contam como ocupação: o técnico que já estará lá pode atender os dois (se o horário
@@ -314,10 +337,14 @@ export default async function montar(ctx) {
    */
   async function listarOcupacao(periodo) {
     const lista = await listarAgendados({ empresaId: usuario.empresaId, ...periodo });
-    if (!reagendarSoEste || !estado.cliente) return lista;
-    return lista.filter((l) => !(l.clienteId === estado.cliente.id && (l.enderecoId || null) === (estado.enderecoId || null)));
+    if (!modoServico() || !estado.cliente) return lista;
+    // O próprio serviço (horário antigo) não ocupa ninguém; serviços do mesmo cliente e endereço de OUTROS agendamentos também não
+    // (se o horário for exatamente o mesmo, o app pergunta se junta). Os outros serviços do agendamento de origem continuam contando.
+    return lista.filter((l) => l.id !== alvoDoServico
+      && !(l.clienteId === estado.cliente.id && (l.enderecoId || null) === (estado.enderecoId || null) && chaveDoAgendamento(l) !== agendamentoId));
   }
 
+  /** Lê, no banco, quem já está ocupado em volta do dia escolhido. */
   async function carregarOcupacao({ avisar = true } = {}) {
     const inicio = inicioDoEstado(estado);
     if (!inicio) { ocupacao = []; return; }
@@ -415,6 +442,8 @@ export default async function montar(ctx) {
   function desenharObsAgendamento() {
     const area = raiz.querySelector('#area-obs-agendamento');
     if (!area) return;
+    // Editando só um serviço, a observação do agendamento (de todos) não muda por aqui.
+    if (soAgendado) { mostrar(area, ''); return; }
     mostrar(area, observacaoRecolhivel({
       nome: 'observacao', rotulo: 'Observação para o técnico', valor: estado.observacao, aberta: estado.obsAberta,
       tipo: 'agendamento', maximo: 2000, placeholder: 'Ex.: levar escada, avisar antes de chegar',
@@ -525,7 +554,7 @@ export default async function montar(ctx) {
           ${!editando && html`<button type="button" class="link-pequeno" data-acao="trocar-cliente">Não é o cliente?</button>`}
         </div>
       </div>
-      ${enderecos.length > 1 && campoPilulas({
+      ${enderecos.length > 1 && !soAgendado && campoPilulas({
     nome: 'enderecoId', rotulo: 'Endereço',
     opcoes: enderecos.map((e, i) => ({ valor: e.id, rotulo: [e.apelido || `Endereço ${i + 1}`, linhaCurtaDoEndereco(e)].filter(Boolean).join(' · ') })),
     valor: estado.enderecoId,
@@ -556,7 +585,9 @@ export default async function montar(ctx) {
   function desenharAparelhos() {
     const area = raiz.querySelector('#area-aparelhos');
     if (!area) return;
-    if (!estado.cliente) { mostrar(area, ''); return; }
+    // Pacote 39: reagendar o agendamento todo só mexe em dia, hora, técnicos, endereço e observação (os serviços não aparecem aqui:
+    // para acrescentar serviço usa-se o botão da página do agendamento; para mudar um serviço, o Editar do cartão dele).
+    if (!estado.cliente || (editando && !modoServico())) { mostrar(area, ''); return; }
     const total = todosOsServicos(estado).length;
     const mapa = aparelhosPorId();
     mostrar(area, html`
@@ -565,10 +596,10 @@ export default async function montar(ctx) {
         ${estado.grupos.length > 0 && html`<span class="agenda-secao__resumo">${estado.grupos.length} ${estado.grupos.length === 1 ? 'aparelho' : 'aparelhos'} · ${total} ${total === 1 ? 'serviço' : 'serviços'}</span>`}
       </div>
       ${estado.grupos.map((g) => cartaoDoAparelho(g, mapa[g.aparelhoId]))}
-      <div class="acoes-cartao agenda-adicionar">
+      ${!editando && html`<div class="acoes-cartao agenda-adicionar">
         ${botao({ texto: '+ Aparelho do cliente', variante: 'secundario', acao: 'adicionar-aparelho', pequeno: true })}
         ${botao({ texto: '+ Novo aparelho', variante: 'secundario', acao: 'novo-aparelho', pequeno: true })}
-      </div>`);
+      </div>`}`);
   }
 
   function cartaoDoAparelho(g, aparelho) {
@@ -580,22 +611,21 @@ export default async function montar(ctx) {
             <div class="item-lista__titulo">${semCadastro ? 'Sem aparelho cadastrado' : tituloDoAparelho(aparelho)}</div>
             <div class="item-lista__sub">${semCadastro ? 'Informe o aparelho na página do agendamento, antes de concluir.' : descricaoTecnica(aparelho)}</div>
           </div>
-          <div class="agenda-acoes">
+          ${!editando && html`<div class="agenda-acoes">
             ${!semCadastro && botao({ texto: 'Editar', variante: 'secundario', pequeno: true, acao: 'editar-aparelho', dados: { grupo: g.chave } })}
             ${botao({ texto: 'Remover', variante: 'perigo', pequeno: true, acao: 'remover-aparelho', dados: { grupo: g.chave } })}
-          </div>
+          </div>`}
         </header>
         <div class="pilha pilha--pequena">
           ${g.servicos.map((s) => cartaoDoServico(g, s))}
         </div>
-        ${!semCadastro && botao({ texto: 'Adicionar serviço neste aparelho', variante: 'secundario', iconeNome: 'mais', bloco: true, acao: 'adicionar-servico', dados: { grupo: g.chave } })}
+        ${!editando && !semCadastro && botao({ texto: 'Adicionar serviço neste aparelho', variante: 'secundario', iconeNome: 'mais', bloco: true, acao: 'adicionar-servico', dados: { grupo: g.chave } })}
         ${observacaoRecolhivel({ nome: `obsAparelho-${g.chave}`, rotulo: 'Observações do aparelho', valor: g.obs, aberta: g.obsAberta, tipo: 'grupo', chave: g.chave })}
       </section>`;
   }
 
   function cartaoDoServico(g, s) {
     const tipo = tiposPorId()[s.tipoId];
-    const livres = tecnicosLivresParaServico({ ...contexto(), servico: s });
     const duracao = duracaoDoServicoNaTela(s, tiposPorId());
     const ajustada = Boolean(s.duracaoMin) && s.duracaoMin !== duracaoDoTipo(tipo);
     return html`
@@ -608,37 +638,11 @@ export default async function montar(ctx) {
           </div>
           <div class="agenda-acoes">
             ${botao({ texto: 'Editar', variante: 'secundario', pequeno: true, acao: 'editar-servico', dados: { servico: s.chave } })}
-            ${botao({ texto: 'Remover', variante: 'perigo', pequeno: true, acao: 'remover-servico', dados: { servico: s.chave } })}
+            ${!editando && botao({ texto: 'Remover', variante: 'perigo', pequeno: true, acao: 'remover-servico', dados: { servico: s.chave } })}
           </div>
         </div>
-        ${!inicioDoEstado(estado)
-    ? html`<div class="aviso-neutro" data-campo="tec-${s.chave}">Escolha o dia e o horário em "Quando" para ver os técnicos livres.</div>`
-    : livres.length === 0
-    ? html`<div data-campo="tec-${s.chave}">${aviso({ tom: 'amarelo', texto: 'Nenhum técnico está livre nesse dia e horário. Mude o dia ou a hora.' })}</div>`
-    : caixasDeTecnicos({ nome: `tec-${s.chave}`, rotulo: 'Técnicos deste serviço', livres, marcados: s.tecnicoUids })}
         ${observacaoRecolhivel({ nome: `obsServico-${s.chave}`, rotulo: 'Observações do serviço', valor: s.obs, aberta: s.obsAberta, tipo: 'servico', chave: s.chave })}
       </div>`;
-  }
-
-  /** Lista de técnicos livres com caixinhas: pode marcar mais de um (pelo menos um é obrigatório). */
-  function caixasDeTecnicos({ nome, rotulo, livres, marcados, ajuda = '' }) {
-    return html`
-      <fieldset class="campo campo--tecnicos" data-campo="${nome}">
-        <legend class="campo__rotulo">${rotulo}</legend>
-        <div class="tecnicos-caixas">
-          ${livres.map((t) => html`
-            <label class="tecnico-opcao">
-              <input type="checkbox" name="${nome}" value="${t.uid}" ${marcados.includes(t.uid) ? 'checked' : ''} />
-              <span>${t.nome}</span>
-            </label>`)}
-        </div>
-        ${ajuda && html`<p class="campo__ajuda">${ajuda}</p>`}
-      </fieldset>`;
-  }
-
-  /** Quais caixinhas desse nome estão marcadas (na ordem da tela). */
-  function marcadosNaTela(form, nome) {
-    return [...form.querySelectorAll('input[type="checkbox"]')].filter((c) => c.name === nome && c.checked).map((c) => c.value);
   }
 
   // ---- Quando (dia, hora e técnicos da visita): calendário aqui na tela + tela flutuante com horários e técnicos ----
@@ -648,7 +652,7 @@ export default async function montar(ctx) {
     duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
     regras: regrasDaEmpresa(sessao.empresa),
     tecnicos,
-    agendamentoId,
+    agendamentoId: agendamentoParaChecar(),
   });
 
   /** Busca os agendados do mês do calendário (e guarda; só busca de novo se a pessoa mudar de mês). */
@@ -702,6 +706,10 @@ export default async function montar(ctx) {
     if (daAgenda) { desenharResumoDaAgenda(); return; }
     const area = raiz.querySelector('#area-quando');
     if (!area) return;
+    if (quandoTravado()) {
+      mostrar(area, aviso({ texto: 'Este aparelho tem outro serviço neste agendamento, então o dia, a hora e os técnicos mudam juntos. Para mudar, use Reagendar no topo da página do agendamento.' }));
+      return;
+    }
     const inicio = inicioDoEstado(estado);
     const nomes = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]?.nome).filter(Boolean);
     const destaque = diaDestaque || (estado.data >= hojeDaTela ? estado.data : ''); // dia que já passou não fica em destaque
@@ -733,7 +741,6 @@ export default async function montar(ctx) {
   async function abrirFolha(iso) {
     if (!iso || iso < hojeDaTela) return;
     const mesmoDia = iso === estado.data;
-    const antes = [...estado.tecnicoUids];
     diaDestaque = iso;
     desenharQuando();
     const escolha = await abrirSeletorDeHorario({
@@ -746,17 +753,15 @@ export default async function montar(ctx) {
       duracaoMinima: menorDuracaoDosTipos(sessao.tipos),
       regras: regrasDaEmpresa(sessao.empresa),
       tecnicos,
-      agendamentoId,
+      agendamentoId: agendamentoParaChecar(),
       // Só os agendados do mês do dia (com uma folga de 1 dia antes e 1 depois).
       carregarMes: (ano, mes) => listarOcupacao({ de: new Date(ano, mes, 0), ate: new Date(ano, mes + 1, 2) }),
     });
     if (!escolha || !ctx.ativo()) return;
-    const mesmos = (a, b) => a.length === b.length && a.every((uid) => b.includes(uid));
-    // Serviços que seguiam os técnicos da visita passam para os novos; os que tinham técnico só deles continuam.
-    for (const s of todosOsServicos(estado)) if (mesmos(s.tecnicoUids, antes)) s.tecnicoUids = [...escolha.tecnicoUids];
     estado.data = escolha.data;
     estado.hora = escolha.hora;
     estado.tecnicoUids = [...escolha.tecnicoUids];
+    sincronizarTecnicos(); // todos os serviços do agendamento têm os mesmos técnicos
     diaDestaque = escolha.data;
     try { await carregarOcupacao(); } catch (erro) { toast(traduzirErro(erro), 'erro'); }
     for (const s of todosOsServicos(estado)) {
@@ -817,14 +822,7 @@ export default async function montar(ctx) {
 
     ouvir(form, 'change', (e) => {
       const nome = e.target.name || '';
-      if (nome.startsWith('tec-')) {
-        const s = acharServico(nome.slice(4));
-        if (s) {
-          s.tecnicoUids = marcadosNaTela(form, nome);
-          if (servicoComErro === s.chave) servicoComErro = null;
-          redesenharTudo();
-        }
-      } else if (nome === 'enderecoId') {
+      if (nome === 'enderecoId') {
         estado.enderecoId = e.target.value;
       }
     });
@@ -1028,10 +1026,24 @@ export default async function montar(ctx) {
       mostrarErrosNosCampos(form, descricao ? { ...outros, observacao: descricao } : outros);
       return;
     }
+    sincronizarTecnicos(); // um agendamento = os mesmos técnicos para todos os serviços
     const problemas = problemasDoAgendamento(estado, contexto());
     if (problemas.length > 0) {
       mostrarProblema(form, problemas[0]);
       return;
+    }
+    // Pacote 39: mudar dia, hora ou técnicos de UM serviço agendado separa ele do agendamento (os outros ficam onde estão).
+    const mudouDiaHora = quandoOriginal !== `${limpos.data} ${limpos.hora}`;
+    const mesmosTecnicos = tecnicosOriginais.length === estado.tecnicoUids.length && tecnicosOriginais.every((uid) => estado.tecnicoUids.includes(uid));
+    const separarAgora = reagendarSoEste || (soAgendado && (mudouDiaHora || !mesmosTecnicos));
+    if (soAgendado && separarAgora && outrosAgendados > 0) {
+      const nome = linhasExistentes.find((l) => l.id === alvoDoServico)?.tipoServicoNome || 'O serviço';
+      const quandoAntes = formatarDataHoraBR(new Date(`${quandoOriginal.replace(' ', 'T')}:00`));
+      const quandoDepois = formatarDataHoraBR(new Date(`${limpos.data}T${limpos.hora}:00`));
+      const mensagem = mudouDiaHora
+        ? `Só ${nome} muda para ${quandoDepois}. Os outros ${outrosAgendados} ${outrosAgendados === 1 ? 'serviço continua' : 'serviços continuam'} em ${quandoAntes}.`
+        : `Só ${nome} muda de técnico. Os outros ${outrosAgendados} ${outrosAgendados === 1 ? 'serviço continua' : 'serviços continuam'} com os técnicos de antes.`;
+      if (!await confirmar({ titulo: mudouDiaHora ? 'Mudar o dia ou a hora?' : 'Mudar o técnico?', mensagem, confirmar: 'Salvar', cancelar: 'Voltar' })) return;
     }
     const linhas = montarLinhas(estado, { tiposPorId: tiposPorId(), aparelhosPorId: aparelhosPorId(), tecnicosPorUid: tecnicosPorUid() });
     const botaoSalvar = form.querySelector('#botao-salvar');
@@ -1040,7 +1052,7 @@ export default async function montar(ctx) {
       try {
         // Pacote 38: reagendar um serviço só para o mesmo dia/hora/endereço/técnico de uma visita já marcada do mesmo cliente: pergunta se junta.
         let juntar = null;
-        if (reagendarSoEste && linhas[0]?.id) {
+        if (separarAgora && linhas[0]?.id) {
           const tecnicosEscolhidos = estado.tecnicoUids.map((uid) => tecnicosPorUid()[uid]).filter(Boolean);
           const visita = await acharVisitaParaJuntar({
             empresaId: usuario.empresaId, clienteId: estado.cliente?.id, enderecoId: limpos.enderecoId || null,
@@ -1049,9 +1061,9 @@ export default async function montar(ctx) {
           if (visita) {
             const duracao = visita.filter((l) => l.status === STATUS.AGENDADO).length;
             const resposta = await escolher({
-              titulo: 'Já existe uma visita neste horário',
-              mensagem: `Este cliente já tem uma visita marcada para esse dia e horário, no mesmo endereço e com o mesmo técnico (${duracao} ${duracao === 1 ? 'serviço' : 'serviços'}). Juntar este serviço a ela? O técnico fica ocupado o tempo de todos os serviços somados.`,
-              opcoes: [{ id: 'juntar', rotulo: 'Juntar à visita já marcada' }, { id: 'separado', rotulo: 'Marcar separado' }],
+              titulo: 'Já existe um agendamento neste horário',
+              mensagem: `Este cliente já tem um agendamento para esse dia e horário, no mesmo endereço e com o mesmo técnico (${duracao} ${duracao === 1 ? 'serviço' : 'serviços'}). Juntar este serviço a ele? O técnico fica ocupado o tempo de todos os serviços somados.`,
+              opcoes: [{ id: 'juntar', rotulo: 'Juntar ao agendamento já marcado' }, { id: 'separado', rotulo: 'Marcar separado' }],
               cancelar: 'Voltar',
             });
             if (!resposta) return;
@@ -1073,7 +1085,7 @@ export default async function montar(ctx) {
           linhas,
           origemRetornoId,
           preservar: linhasPreservadas,
-          separar: reagendarSoEste, // Pacote 40: reagendar só um serviço cancelado cria um agendamento novo para ele
+          separar: separarAgora, // reagendar (ou mudar dia/hora/técnicos de) um serviço só cria um agendamento novo para ele
           regras: regrasDaEmpresa(sessao.empresa),
         });
       } catch (erro) {
@@ -1091,6 +1103,7 @@ export default async function montar(ctx) {
       const restantes = await listarLinhasDoAgendamento(usuario.empresaId, { agendamentoId: id });
       const destino = restantes.find((l) => l.status === STATUS.AGENDADO) || restantes[0];
       if (reagendouAgora) toast('Agendamento reagendado.', 'sucesso');
+      else if (soAgendado) toast(separarAgora ? 'Serviço reagendado.' : 'Serviço atualizado.', 'sucesso');
       else if (editando) toast('Agendamento atualizado.', 'sucesso');
       else toast(`Agendado para ${formatarDataHoraBR(new Date(`${limpos.data}T${limpos.hora}:00`))}.`, 'sucesso');
       // Avisa cliente e técnicos (só administrador, e só quem tem WhatsApp): novo agendamento, ou mudou o dia/hora.

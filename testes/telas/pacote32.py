@@ -40,7 +40,7 @@ with sync_playwright() as p:
 
     # serviço concluído e a receber (Ana, R$ 220): poucos botões
     ir(a, "/servico/s-c3")
-    ok(all(a.locator(f"[data-acao={x}]").count() == 1 for x in ["editar-menu", "corrigir-horarios", "excluir-concluido"]) and a.locator("a:has-text('Corrigir valor')").count() == 1, "tem Editar, Corrigir horários, Corrigir valor e Excluir")
+    ok(all(a.locator(f"[data-acao={x}]").count() == 1 for x in ["editar-menu", "excluir-concluido"]) and a.locator("[data-acao=corrigir-horarios]").count() == 0 and a.locator("a:has-text('Corrigir valor')").count() == 0, "concluído tem só Editar e Excluir (Pacote 39: horários e valor ficam no menu Editar)")
     for velho in ["alternar-pago", "corrigir-servico", "cobrar-servico"]:
         ok(a.locator(f"[data-acao={velho}]").count() == 0, f"sem o botão antigo {velho}")
     ok(a.locator("[data-acao=navegar]").count() == 0, "visita concluída não tem 'Ir até o cliente'")

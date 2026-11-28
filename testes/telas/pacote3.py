@@ -28,7 +28,7 @@ with sync_playwright() as p:
     ir("/")
     # Pacote 22: o cartão do Início é só resumo; Editar, Cancelar e Excluir ficam na página do agendamento.
     pag.locator("#conteudo .servico-cartao a.visita-cartao__corpo").first.click(); pag.wait_for_timeout(1000)
-    ok(pag.locator("#conteudo [data-acao=cancelar]").count() == 1 and pag.locator("#conteudo [data-acao=excluir]").count() == 1 and pag.locator("#conteudo a:has-text('Editar')").count() >= 1, "Início: a página da visita tem Editar, Cancelar e Excluir")
+    ok(pag.locator("#conteudo [data-acao=cancelar-servico]").count() == 1 and pag.locator("#conteudo [data-acao=excluir-servico]").count() == 1 and pag.locator("#conteudo a:has-text('Editar')").count() >= 1, "Início: a página da visita tem Editar, Cancelar e Excluir")
     ir("/")
     ok(pag.locator("#conteudo a:has-text('Reagendar'), #conteudo button:has-text('Reagendar')").count() == 0, "Início sem 'Reagendar'")
     ok(sem_rolagem(), "Início sem rolagem lateral")
@@ -38,19 +38,19 @@ with sync_playwright() as p:
 
     # ---- Cancelar e reagendar editando: vira Reagendado (roxo) ----
     pag.locator("#conteudo a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/reagendamentos")
     ok(pag.locator(".selo--amarelo:has-text('Cancelado')").count() >= 1, "cancelado: selo amarelo 'Cancelado'")
     pag.locator("#conteudo a[href^='#/servico/']").first.click(); pag.wait_for_timeout(900)
-    ok(pag.locator("[data-acao=excluir]").count() == 1 and pag.locator("a:has-text('Editar')").count() >= 1, "cancelado: Editar e Excluir")
-    ok(pag.locator("[data-acao=cancelar]").count() == 0, "cancelado não tem Cancelar")
-    pag.locator("a:has-text('Editar')").first.click(); pag.wait_for_timeout(1000)
+    ok(pag.locator("[data-acao=excluir-cancelado]").count() == 1 and pag.locator("a:has-text('Reagendar')").count() >= 1, "cancelado: Reagendar e Excluir (Pacote 39)")
+    ok(pag.locator("[data-acao=cancelar-servico]").count() == 0, "cancelado não tem Cancelar")
+    pag.locator("a:has-text('Reagendar')").first.click(); pag.wait_for_timeout(1000)
     escolher_quando(pag, "2031-07-10", "11:00")
     pag.click("#botao-salvar"); pag.wait_for_timeout(1500)
     ok(pag.locator(".selo--roxo:has-text('Reagendado')").count() >= 1, "novo horário: selo roxo 'Reagendado'")
-    ok(pag.locator("[data-acao=cancelar]").count() == 1 and pag.locator("[data-acao=excluir]").count() == 1, "reagendado: Editar, Cancelar e Excluir")
-    pag.click("[data-acao=excluir]"); pag.wait_for_timeout(400)
+    ok(pag.locator("[data-acao=cancelar-servico]").count() == 1 and pag.locator("[data-acao=excluir-servico]").count() == 1, "reagendado: Editar, Cancelar e Excluir")
+    pag.click("[data-acao=excluir-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1500)
 
     # ---- Concluído: admin corrige e exclui com dupla confirmação ----

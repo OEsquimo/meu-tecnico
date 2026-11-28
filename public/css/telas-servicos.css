@@ -729,3 +729,7 @@
 
 /* Pacote 38: mais espaço entre os blocos da tela de concluir */
 .editor-valores { gap: 20px; }
+
+/* Pacote 39: linha "Todo o agendamento" (Reagendar / Cancelar / Excluir) no cartão de cima. */
+.agendamento-todo { margin-top: 12px; padding-top: 8px; border-top: 1px dashed var(--cor-borda); }
+.agendamento-todo__rotulo { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--cor-texto-suave); margin-bottom: 4px; }

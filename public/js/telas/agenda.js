@@ -133,7 +133,7 @@ export default async function montar(ctx) {
           </div>
           ${calendarioDoMes({
     ano, mes, hoje, escolhido: diaEscolhido, acao: 'dia', pontos: pontosDoCalendario(), passado: (iso) => iso < hoje,
-    complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} visita(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
+    complemento: (iso, ponto) => `${grupos[iso] ? `, ${agruparAgendamentos(grupos[iso]).length} agendamento(s)` : ''}${ponto === 'vermelho' ? ', dia lotado' : ''}`,
   })}
           ${usuario.admin && diaEscolhido >= hoje && botao({ texto: diaEscolhido === hoje ? 'Agendar hoje' : `Agendar em ${diaEscolhido.slice(8, 10)}/${diaEscolhido.slice(5, 7)}`, iconeNome: 'mais', acao: 'agendar-dia', bloco: true, id: 'botao-agendar' })}
         </section>

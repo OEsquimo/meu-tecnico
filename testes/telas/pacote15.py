@@ -79,7 +79,7 @@ with sync_playwright() as p:
     ok(pag.url == primeiro_url, "'Abrir agendamento' leva ao agendamento que já existe")
 
     # cancelar libera o aparelho
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     novo_agendamento("Maria Souza")
     pag.click("[data-acao=adicionar-aparelho]"); pag.wait_for_timeout(300)

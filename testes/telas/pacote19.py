@@ -125,7 +125,7 @@ with sync_playwright() as p:
     fechar_aviso()
 
     # ---------------- Cancelar: aviso de cancelamento (texto da empresa) ----------------
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.locator("dialog[open] [data-resposta=sim]").click(); pag.wait_for_timeout(1500)
     ok(aviso_aberto() and "Avisar sobre o cancelamento" in texto_aviso(), "depois de cancelar, oferece o aviso de cancelamento")
     ok("Oi Maria, cancelamos o" in msg_cliente() and "11:00" in msg_cliente(), f"usa o texto editado em Configurações: {msg_cliente()[:120]!r}")

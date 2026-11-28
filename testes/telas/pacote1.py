@@ -60,13 +60,13 @@ with sync_playwright() as p:
     cab = pag.locator("#conteudo .cabecalho, #conteudo header").first.inner_text()
     nome_cli = texto().split("Cliente")[1].strip().split("\n")[0].strip() if "Cliente" in texto() else ""
     ok(nome_cli != "" and cab.count(nome_cli) == 0, f"nome do cliente não repete no cabeçalho ({nome_cli})")
-    ok(pag.locator("[data-acao=excluir]").count() == 1 and "Excluir" in texto(), "tem 'Excluir'")
-    ok(pag.locator("[data-acao=cancelar]").count() == 1, "tem 'Cancelar'")
+    ok(pag.locator("[data-acao=excluir-servico]").count() == 1 and "Excluir" in texto(), "tem 'Excluir'")
+    ok(pag.locator("[data-acao=cancelar-servico]").count() == 1, "tem 'Cancelar'")
     ok(pag.locator("a[href*='/concluir/']").count() >= 1, "tem 'Concluir'")
     url_servico = pag.url
 
     # ---- Cancelar -> aguardando reagendamento ----
-    pag.click("[data-acao=cancelar]"); pag.wait_for_timeout(400)
+    pag.click("[data-acao=cancelar-servico]"); pag.wait_for_timeout(400)
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1200)
     ir("/reagendamentos")
     ok("Cancelado" in texto(), "cancelado aparece em Reagendamentos")
@@ -83,10 +83,10 @@ with sync_playwright() as p:
     ok("Reagendado" in texto() and "aguardando" not in texto().lower(), "ficou 'Reagendado'")
 
     # ---- Excluir agendamento (admin) ----
-    pag.click("[data-acao=excluir]"); pag.wait_for_timeout(400)
-    ok("Não apaga o cliente" in pag.inner_text("dialog"), "aviso diz que não apaga cliente nem concluídos")
+    pag.click("[data-acao=excluir-servico]"); pag.wait_for_timeout(400)
+    ok("será apagado inteiro" in pag.inner_text("dialog"), "aviso diz que o último serviço apaga o agendamento")
     pag.click("dialog [data-resposta=sim]"); pag.wait_for_timeout(1500)
-    ok(pag.url.endswith("#/") or pag.url.endswith("/"), "excluir (sem sobrar serviço) vai para o Início")
+    ok(pag.url.endswith("#/agenda"), "excluir (sem sobrar serviço) vai para a Agenda (Pacote 39)")
 
     # ---- Sem aparelho nem serviço repetido no agendamento ----
     ir("/agenda"); ir("/agendar")

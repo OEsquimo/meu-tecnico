@@ -104,7 +104,7 @@ export default async function montar(ctx) {
             <h2 class="titulo-secao">Motivos dos atrasos</h2>
             ${t.motivos.map((m) => html`<div class="linha linha--entre"><span>${m.motivo}</span><strong>${m.total}</strong></div>`)}
           </div>` : ''}
-        ${aviso({ texto: 'Deslocamento é o tempo entre concluir uma visita e iniciar a próxima no mesmo dia, sem o almoço. Intervalos de mais de 2 horas ficam fora.' })}
+        ${aviso({ texto: 'Deslocamento é o tempo entre concluir um agendamento e iniciar o próximo no mesmo dia, sem o almoço. Intervalos de mais de 2 horas ficam fora.' })}
       </div>`;
   }
 

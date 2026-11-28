@@ -151,13 +151,14 @@ function minutosPorTecnico(linhas) {
 }
 
 /** Confere, no banco, se cada técnico escolhido está livre. Lança ErroApp com o nome de quem não está. */
-export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null, regras = null }) {
+export async function verificarDisponibilidade({ empresaId, inicio, linhas, ignorarAgendamento = null, ignorarLinhas = [], regras = null }) {
   const minutos = minutosPorTecnico(linhas);
   if (minutos.size === 0) return;
   // Serviços agendados do dia anterior ao seguinte (cobre quem começou antes e passa do horário).
   const de = new Date(inicio.getTime() - 24 * 3600000);
   const ate = new Date(inicio.getTime() + 24 * 3600000);
-  const agendados = await listarAgendados({ empresaId, de, ate });
+  // `ignorarLinhas`: serviços que estão sendo movidos agora (o horário antigo deles não conta como ocupado).
+  const agendados = (await listarAgendados({ empresaId, de, ate })).filter((l) => !ignorarLinhas.includes(l.id));
   for (const [uid, total] of minutos) {
     const motivo = motivoDeIndisponibilidade(uid, inicio, total, agendados, ignorarAgendamento, regras);
     if (motivo) {
@@ -218,7 +219,9 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
   }
   // Pendentes de uma visita que já teve serviços concluídos viram um agendamento NOVO:
   // a visita original fica só com o que foi feito (registro e garantia).
-  const separar = reagendando && (separarPedido || fechadas.some((l) => l.status === STATUS.CONCLUIDO));
+  // Pacote 39: mudar o dia/hora/técnicos de UM serviço agendado também o separa (ele ganha um agendamento próprio).
+  const separar = separarPedido || (reagendando && fechadas.some((l) => l.status === STATUS.CONCLUIDO));
+  const separaSemReagendar = separar && !reagendando && editando;
   const id = (agendamentoId && !separar) ? agendamentoId : novoId(caminho(empresaId));
   const limpaPendencia = reagendando ? { pendente: false, motivoPendencia: '', reagendado: true } : {};
   const herdaReagendado = abertas.some((l) => l.reagendado === true);
@@ -235,7 +238,8 @@ export async function salvarAgendamento({ empresaId, agendamentoId = null, exist
     }
   }
 
-  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: editando ? (agendamentoId || id) : null, regras });
+  // Separando um serviço agendado: os outros serviços do agendamento antigo continuam ocupando os técnicos deles.
+  await verificarDisponibilidade({ empresaId, inicio, linhas: todas, ignorarAgendamento: (editando && !separaSemReagendar) ? (agendamentoId || id) : null, ignorarLinhas: separaSemReagendar ? abertas.map((a) => a.id) : [], regras });
   await verificarAparelhosLivres({ empresaId, aparelhoIds: todas.map((l) => l.aparelho?.id), ignorarAgendamento: editando ? (agendamentoId || id) : null });
   const minutos = minutosPorTecnico(todas);
 
@@ -319,7 +323,7 @@ export async function acharVisitaParaJuntar({ empresaId, clienteId, enderecoId =
 export async function juntarServicoNaVisita({ empresaId, linha, visita, tecnicos, regras = null }) {
   const abertas = visita.filter((l) => l.status === STATUS.AGENDADO);
   if (abertas.length === 0 || linha.status !== STATUS.CANCELADO) {
-    throw new ErroApp('Não dá para juntar: a visita já não está mais agendada.', 'visita-fechada');
+    throw new ErroApp('Não dá para juntar: o agendamento já não está mais agendado.', 'visita-fechada');
   }
   const chave = chaveDoAgendamento(abertas[0]);
   const inicio = abertas[0].dataAgendada;
@@ -377,13 +381,30 @@ export async function listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid
   return lista.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 }
 
-/** Cancela todas as linhas ainda agendadas de um agendamento. */
-export async function cancelarAgendamentoCompleto(empresaId, linhas) {
+/**
+ * Depois de tirar serviços de um agendamento (cancelar ou excluir), os que continuam agendados passam a ocupar os técnicos
+ * só pelo tempo deles (a soma mudou).
+ */
+function operacoesDeOcupacao(empresaId, restantes) {
+  const abertas = restantes.filter((l) => l.status === STATUS.AGENDADO);
+  const minutos = minutosPorTecnico(abertas);
+  return abertas.map((l) => op.atualizar(`${caminho(empresaId)}/${l.id}`, { ...ocupacaoDaLinha({ ...l, duracaoMin: l.duracaoMin || DURACAO_PADRAO_MIN }, minutos), atualizadoEm: AGORA }));
+}
+
+/**
+ * Cancela as linhas ainda agendadas de `linhas` (o agendamento inteiro, ou um serviço só).
+ * `motivo` (opcional) fica guardado e aparece no cartão do serviço cancelado.
+ * `todas`: se vier, os serviços dela que continuam agendados têm a ocupação dos técnicos recalculada.
+ */
+export async function cancelarAgendamentoCompleto(empresaId, linhas, motivo = '', todas = null) {
   const operacoes = [];
-  for (const l of linhas.filter((x) => x.status === STATUS.AGENDADO)) {
-    operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, { status: STATUS.CANCELADO, reagendado: false, atualizadoEm: AGORA }));
+  const alvos = linhas.filter((x) => x.status === STATUS.AGENDADO);
+  const texto = String(motivo || '').trim().slice(0, 300);
+  for (const l of alvos) {
+    operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.id}`, { status: STATUS.CANCELADO, reagendado: false, ...(texto ? { motivoPendencia: texto } : {}), atualizadoEm: AGORA }));
     if (l.origemRetornoId) operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
   }
+  if (todas) operacoes.push(...operacoesDeOcupacao(empresaId, todas.filter((l) => !alvos.some((a) => a.id === l.id))));
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
 }
@@ -394,7 +415,7 @@ export async function cancelarAgendamentoCompleto(empresaId, linhas) {
  * guardados. Também não mexe no cliente nem nos aparelhos dele.
  * @returns {Promise<number>} quantas linhas foram excluídas
  */
-export async function excluirAgendamentoCompleto(empresaId, linhas) {
+export async function excluirAgendamentoCompleto(empresaId, linhas, todas = null) {
   const operacoes = [];
   const excluiveis = linhas.filter((l) => l.status !== STATUS.CONCLUIDO);
   if (excluiveis.length === 0) {
@@ -406,6 +427,7 @@ export async function excluirAgendamentoCompleto(empresaId, linhas) {
       operacoes.push(op.atualizar(`${caminho(empresaId)}/${l.origemRetornoId}`, { retornoSituacao: 'pendente', atualizadoEm: AGORA }));
     }
   }
+  if (todas) operacoes.push(...operacoesDeOcupacao(empresaId, todas.filter((l) => !excluiveis.some((e) => e.id === l.id))));
   await gravar(operacoes);
   invalidarCache(`${empresaId}:servicos`);
   return excluiveis.length;
@@ -498,7 +520,7 @@ export async function informarAparelhosEServicos({ empresaId, servico, itens, te
   const linhas = await listarLinhasDoAgendamento(empresaId, servico, { tecnicoUid: tecnico?.uid || null });
   const pares = itens.flatMap((i) => i.tipos.map((tipo) => ({ aparelho: i.aparelho, tipo })));
   const novos = pares.filter((p) => !linhas.some((l) => l.id !== servico.id && l.status === STATUS.AGENDADO && l.aparelhoId === p.aparelho.id && l.tipoServicoId === p.tipo.id));
-  if (novos.length === 0) throw new ErroApp('Esses serviços já estão nesta visita.', 'servico-repetido');
+  if (novos.length === 0) throw new ErroApp('Esses serviços já estão neste agendamento.', 'servico-repetido');
   const [primeiro, ...resto] = novos;
   for (const p of resto) {
     await adicionarServicoNaVisita({ empresaId, base: servico, aparelho: p.aparelho, tipo: p.tipo, tecnico, linhasDaVisita: linhas });
@@ -528,7 +550,7 @@ export async function informarServicoNaVisita({ empresaId, linhasDaVisita, apare
   const abertas = linhasDaVisita.filter((l) => l.status === STATUS.AGENDADO);
   if (abertas.length === 0) throw new ErroApp('Este agendamento já foi fechado.', 'servico-fechado');
   if (abertas.some((l) => l.aparelhoId === aparelho.id && l.tipoServicoId === tipo.id)) {
-    throw new ErroApp('Este serviço já está neste aparelho, nesta visita.', 'servico-repetido');
+    throw new ErroApp('Este serviço já está neste aparelho, neste agendamento.', 'servico-repetido');
   }
   // A linha "a definir" que recebe o serviço: a do mesmo aparelho, senão a sem aparelho, senão qualquer uma.
   const semServico = abertas.filter(ehLinhaSemServico);
@@ -575,7 +597,7 @@ export async function informarAparelhoNaLinha({ empresaId, linhasDaVisita, linha
   const abertas = linhasDaVisita.filter((l) => l.status === STATUS.AGENDADO);
   if (linha?.status !== STATUS.AGENDADO || !abertas.some((l) => l.id === linha.id)) throw new ErroApp('Este agendamento já foi fechado.', 'servico-fechado');
   if (abertas.some((l) => l.id !== linha.id && l.aparelhoId === aparelho.id && l.tipoServicoId === linha.tipoServicoId)) {
-    throw new ErroApp('Este serviço já está neste aparelho, nesta visita.', 'servico-repetido');
+    throw new ErroApp('Este serviço já está neste aparelho, neste agendamento.', 'servico-repetido');
   }
   if (!tecnico) await conferirAparelhoAoInformar({ empresaId, abertas, aparelho });
   await gravar([op.atualizar(`${caminho(empresaId)}/${linha.id}`, {
